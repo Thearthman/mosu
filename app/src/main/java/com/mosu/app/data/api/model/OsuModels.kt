@@ -32,3 +32,8 @@ data class Covers(
     @SerializedName("cover") val coverUrl: String,
     @SerializedName("list") val listUrl: String
 )
+
+data class SearchResponse(
+    @SerializedName("beatmapsets") val beatmapsets: List<BeatmapsetCompact>,
+    @SerializedName("total") val total: Int
+)

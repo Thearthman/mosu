@@ -2,6 +2,7 @@ package com.mosu.app.data.repository
 
 import com.mosu.app.data.api.RetrofitClient
 import com.mosu.app.data.api.model.BeatmapPlaycount
+import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.OsuTokenResponse
 
 import com.mosu.app.data.api.model.OsuUserCompact
@@ -32,6 +33,15 @@ class OsuRepository {
 
     suspend fun getUserMostPlayed(accessToken: String, userId: String): List<BeatmapPlaycount> {
         return api.getUserMostPlayed("Bearer $accessToken", userId)
+    }
+
+    suspend fun getPlayedBeatmaps(accessToken: String): List<BeatmapsetCompact> {
+        // Try to filter by 'played' status
+        val response = api.searchBeatmapsets(
+            authHeader = "Bearer $accessToken",
+            played = "played"
+        )
+        return response.beatmapsets
     }
 }
 

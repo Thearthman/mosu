@@ -147,8 +147,15 @@ fun LoginScreen(
                                         statusText = "Success! Extracted to:\n${outputDir.absolutePath}"
                                         
                                         // Save to DB
-                                        val audioFile = File(outputDir, "audio.mp3") // Simplified assumption from extractor
-                                        val coverFile = File(outputDir, "cover.jpg") 
+                                        // Detect if audio.mp3 or audio.ogg exists
+                                        val mp3File = File(outputDir, "audio.mp3")
+                                        val oggFile = File(outputDir, "audio.ogg")
+                                        val audioFile = if (mp3File.exists()) mp3File else oggFile
+                                        
+                                        // Detect cover extension (jpg/png) - ZipExtractor uses cover.ext based on source
+                                        // We need to find what was extracted.
+                                        val coverFile = outputDir.listFiles()?.find { it.name.startsWith("cover.") } 
+                                            ?: File(outputDir, "cover.jpg") // Fallback
                                         
                                         val entity = BeatmapEntity(
                                             id = firstBeatmapId!!,
@@ -218,13 +225,13 @@ fun LoginScreen(
                     val me = repository.getMe(tokenResponse.accessToken)
                     statusText += "\nLogged in as: ${me.username} (ID: ${me.id})"
                     
-                    // Fetch User's Beatmaps
-                    val beatmaps = repository.getUserMostPlayed(tokenResponse.accessToken, me.id.toString())
-                    statusText += "\nFound ${beatmaps.size} most played maps."
+                    // Fetch "Played" Beatmaps (Search with filter)
+                    val beatmaps = repository.getPlayedBeatmaps(tokenResponse.accessToken)
+                    statusText += "\nFound ${beatmaps.size} 'Played' mapsets."
                     
                     // Save the first ID for testing
                     if (beatmaps.isNotEmpty()) {
-                        val map = beatmaps[0].beatmapset
+                        val map = beatmaps[0]
                         firstBeatmapId = map.id
                         firstBeatmapTitle = map.title
                         firstBeatmapArtist = map.artist

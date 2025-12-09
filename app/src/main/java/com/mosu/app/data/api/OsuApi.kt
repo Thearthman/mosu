@@ -3,6 +3,7 @@ package com.mosu.app.data.api
 import com.mosu.app.data.api.model.BeatmapPlaycount
 import com.mosu.app.data.api.model.OsuTokenResponse
 import com.mosu.app.data.api.model.OsuUserCompact
+import com.mosu.app.data.api.model.SearchResponse
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -38,5 +39,13 @@ interface OsuApi {
         @Query("limit") limit: Int = 10,
         @Query("offset") offset: Int = 0
     ): List<BeatmapPlaycount>
+
+    @GET("api/v2/beatmapsets/search")
+    suspend fun searchBeatmapsets(
+        @Header("Authorization") authHeader: String,
+        @Query("played") played: String? = null,
+        @Query("q") query: String? = null,
+        @Query("s") status: String? = "any"
+    ): SearchResponse
 }
 

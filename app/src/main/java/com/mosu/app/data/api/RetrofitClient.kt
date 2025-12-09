@@ -14,6 +14,12 @@ object RetrofitClient {
 
     private val client = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+                .header("User-Agent", "MosuAndroid/1.0 (com.mosu.app)")
+                .build()
+            chain.proceed(request)
+        }
         .build()
 
     val api: OsuApi by lazy {

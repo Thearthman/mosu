@@ -35,11 +35,12 @@ class OsuRepository {
         return api.getUserMostPlayed("Bearer $accessToken", userId)
     }
 
-    suspend fun getPlayedBeatmaps(accessToken: String): List<BeatmapsetCompact> {
+    suspend fun getPlayedBeatmaps(accessToken: String, genreId: Int? = null): List<BeatmapsetCompact> {
         // Try to filter by 'played' status
         val response = api.searchBeatmapsets(
             authHeader = "Bearer $accessToken",
-            played = "played"
+            played = "played",
+            genre = genreId
         )
         return response.beatmapsets
     }

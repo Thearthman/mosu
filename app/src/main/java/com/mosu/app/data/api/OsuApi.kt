@@ -45,6 +45,7 @@ interface OsuApi {
         @Header("Authorization") authHeader: String,
         @Query("played") played: String? = null,
         @Query("q") query: String? = null,
+        @Query("g") genre: Int? = null,
         @Query("s") status: String? = "any"
     ): SearchResponse
 }

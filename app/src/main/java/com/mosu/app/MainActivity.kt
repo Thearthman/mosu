@@ -5,22 +5,24 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +103,15 @@ fun LoginScreen(
     var firstBeatmapArtist by remember { mutableStateOf("") }
     var firstBeatmapCreator by remember { mutableStateOf("") }
     
+    // Genre Filter State
+    var selectedGenreId by remember { mutableStateOf<Int?>(null) }
+    
+    val genres = listOf(
+        10 to "Electronic", 3 to "Anime", 4 to "Rock", 5 to "Pop",
+        2 to "Game", 9 to "Hip Hop", 11 to "Metal", 12 to "Classical",
+        13 to "Folk", 14 to "Jazz", 7 to "Novelty", 6 to "Other"
+    )
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val downloader = remember { BeatmapDownloader(context) }
@@ -127,6 +138,49 @@ fun LoginScreen(
             modifier = Modifier.padding(top = 16.dp)
         ) {
             Text("Login with osu!")
+        }
+        
+        // Genre Filter Row (Only visible if logged in)
+        if (accessToken != null) {
+            Text(text = "Filter by Genre:", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+            LazyRow(modifier = Modifier.padding(vertical = 8.dp)) {
+                items(genres) { (id, name) ->
+                    Button(
+                        onClick = {
+                            selectedGenreId = if (selectedGenreId == id) null else id
+                            // Refresh list
+                            scope.launch {
+                                try {
+                                    statusText = "Filtering by $name..."
+                                    val beatmaps = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId)
+                                    statusText = "Found ${beatmaps.size} '$name' maps."
+                                    
+                                    if (beatmaps.isNotEmpty()) {
+                                        val map = beatmaps[0]
+                                        firstBeatmapId = map.id
+                                        firstBeatmapTitle = map.title
+                                        firstBeatmapArtist = map.artist
+                                        firstBeatmapCreator = map.creator
+                                        statusText += "\nSelected: ${map.title}"
+                                    } else {
+                                        firstBeatmapId = null
+                                        statusText += "\nNo maps found for this genre."
+                                    }
+                                } catch(e: Exception) {
+                                    statusText = "Error: ${e.message}"
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(end = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedGenreId == id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = if (selectedGenreId == id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Text(name)
+                    }
+                }
+            }
         }
 
         // Test Download Button (Only visible if we have an ID)

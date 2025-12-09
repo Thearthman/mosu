@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -25,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -54,6 +56,11 @@ import com.mosu.app.domain.download.ZipExtractor
 import kotlinx.coroutines.launch
 import java.io.File
 
+data class DownloadProgress(
+    val progress: Int, // 0-100
+    val status: String // "Downloading", "Extracting", "Done", "Error"
+)
+
 @Composable
 fun SearchScreen(
     authCode: String?,
@@ -75,10 +82,18 @@ fun SearchScreen(
     var currentCursor by remember { mutableStateOf<String?>(null) }
     var isLoadingMore by remember { mutableStateOf(false) }
     
-    // Download State Map (SetID -> State)
-    // We use a simplified single download state for MVP, or map for multiple.
-    // Let's stick to single active download for simplicity first.
-    var activeDownloadState by remember { mutableStateOf<String?>(null) }
+    // Download States Map (BeatmapSetId -> DownloadProgress)
+    var downloadStates by remember { mutableStateOf<Map<Long, DownloadProgress>>(emptyMap()) }
+    
+    // Downloaded BeatmapSet IDs (from database)
+    var downloadedBeatmapSetIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    
+    // Load downloaded beatmap IDs from database
+    LaunchedEffect(Unit) {
+        db.beatmapDao().getAllBeatmaps().collect { beatmaps ->
+            downloadedBeatmapSetIds = beatmaps.map { it.beatmapSetId }.toSet()
+        }
+    }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -192,6 +207,9 @@ fun SearchScreen(
             // Search Results List
             LazyColumn {
                 items(searchResults) { map ->
+                    val downloadProgress = downloadStates[map.id]
+                    val isDownloaded = downloadedBeatmapSetIds.contains(map.id)
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -208,52 +226,93 @@ fun SearchScreen(
                             contentScale = ContentScale.Crop
                         )
                         
-                        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                        Column(
+                            modifier = Modifier
+                                .padding(start = 16.dp)
+                                .weight(1f)
+                        ) {
                             Text(text = map.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                             Text(text = map.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, maxLines = 1)
+                            
+                            // Download Progress Bar
+                            if (downloadProgress != null) {
+                                Column(modifier = Modifier.padding(top = 4.dp)) {
+                                    if (downloadProgress.status == "Downloading" && downloadProgress.progress < 100) {
+                                        LinearProgressIndicator(
+                                            progress = downloadProgress.progress / 100f,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    } else {
+                                        LinearProgressIndicator(
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    Text(
+                                        text = downloadProgress.status,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                         
                         // Download Button
                         IconButton(
                             onClick = {
-                                scope.launch {
-                                    activeDownloadState = "Downloading..."
-                                    downloader.downloadBeatmap(map.id, accessToken).collect { state ->
-                                        when (state) {
-                                            is DownloadState.Downloading -> {
-                                                activeDownloadState = "${state.progress}%"
-                                            }
-                                            is DownloadState.Downloaded -> {
-                                                activeDownloadState = "Extracting..."
-                                                try {
-                                                    val extractedTracks = extractor.extractBeatmap(state.file, map.id)
-                                                    extractedTracks.forEach { track ->
-                                                        val entity = BeatmapEntity(
-                                                            beatmapSetId = map.id,
-                                                            title = track.title,
-                                                            artist = track.artist,
-                                                            creator = map.creator,
-                                                            difficultyName = track.difficultyName,
-                                                            audioPath = track.audioFile.absolutePath,
-                                                            coverPath = track.coverFile?.absolutePath ?: ""
-                                                        )
-                                                        db.beatmapDao().insertBeatmap(entity)
-                                                    }
-                                                    activeDownloadState = "Done"
-                                                } catch (e: Exception) {
-                                                    activeDownloadState = "Error"
+                                if (!isDownloaded) {
+                                    scope.launch {
+                                        downloadStates = downloadStates + (map.id to DownloadProgress(0, "Starting..."))
+                                        downloader.downloadBeatmap(map.id, accessToken).collect { state ->
+                                            when (state) {
+                                                is DownloadState.Downloading -> {
+                                                    downloadStates = downloadStates + (map.id to DownloadProgress(state.progress, "Downloading"))
                                                 }
+                                                is DownloadState.Downloaded -> {
+                                                    downloadStates = downloadStates + (map.id to DownloadProgress(100, "Extracting..."))
+                                                    try {
+                                                        val extractedTracks = extractor.extractBeatmap(state.file, map.id)
+                                                        extractedTracks.forEach { track ->
+                                                            val entity = BeatmapEntity(
+                                                                beatmapSetId = map.id,
+                                                                title = track.title,
+                                                                artist = track.artist,
+                                                                creator = map.creator,
+                                                                difficultyName = track.difficultyName,
+                                                                audioPath = track.audioFile.absolutePath,
+                                                                coverPath = track.coverFile?.absolutePath ?: ""
+                                                            )
+                                                            db.beatmapDao().insertBeatmap(entity)
+                                                        }
+                                                        downloadStates = downloadStates + (map.id to DownloadProgress(100, "Done ✓"))
+                                                        // Remove from download states after 2 seconds
+                                                        kotlinx.coroutines.delay(2000)
+                                                        downloadStates = downloadStates - map.id
+                                                    } catch (e: Exception) {
+                                                        downloadStates = downloadStates + (map.id to DownloadProgress(0, "Error: ${e.message}"))
+                                                    }
+                                                }
+                                                is DownloadState.Error -> {
+                                                    downloadStates = downloadStates + (map.id to DownloadProgress(0, "Failed"))
+                                                }
+                                                else -> {}
                                             }
-                                            is DownloadState.Error -> {
-                                                activeDownloadState = "Failed"
-                                            }
-                                            else -> {}
                                         }
                                     }
                                 }
-                            }
+                            },
+                            enabled = !isDownloaded && downloadProgress == null // Disable if already downloaded or downloading
                         ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = "Download")
+                            Icon(
+                                imageVector = if (isDownloaded) Icons.Default.CheckCircle else Icons.Default.Add,
+                                contentDescription = if (isDownloaded) "Downloaded" else "Download",
+                                tint = if (isDownloaded) {
+                                    MaterialTheme.colorScheme.primary
+                                } else if (downloadProgress != null) {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                            )
                         }
                     }
                     Divider(modifier = Modifier.padding(start = 64.dp))
@@ -291,10 +350,6 @@ fun SearchScreen(
                         }
                     }
                 }
-            }
-            
-            if (activeDownloadState != null) {
-                Text(text = "Status: $activeDownloadState", modifier = Modifier.padding(8.dp))
             }
         }
 

@@ -11,6 +11,8 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.mosu.app.data.db.BeatmapEntity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 class MusicController(context: Context) {
@@ -19,10 +21,30 @@ class MusicController(context: Context) {
     private val controller: MediaController?
         get() = if (controllerFuture.isDone) controllerFuture.get() else null
 
+    private val _nowPlaying = MutableStateFlow<MediaMetadata?>(null)
+    val nowPlaying = _nowPlaying.asStateFlow()
+
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying = _isPlaying.asStateFlow()
+
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
         controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
-        controllerFuture.addListener({}, MoreExecutors.directExecutor())
+        controllerFuture.addListener({
+            val controller = controllerFuture.get()
+            controller.addListener(object : Player.Listener {
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    _nowPlaying.value = mediaItem?.mediaMetadata
+                }
+
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    _isPlaying.value = isPlaying
+                }
+            })
+            // Initialize state
+            _nowPlaying.value = controller.currentMediaItem?.mediaMetadata
+            _isPlaying.value = controller.isPlaying
+        }, MoreExecutors.directExecutor())
     }
 
     fun playSong(beatmap: BeatmapEntity) {

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -37,6 +38,7 @@ import com.mosu.app.data.TokenManager
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.player.MusicController
+import com.mosu.app.ui.components.MiniPlayer
 import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.profile.ProfileScreen
 import com.mosu.app.ui.search.SearchScreen
@@ -113,8 +115,10 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
+            Column {
+                MiniPlayer(musicController = musicController)
+                NavigationBar {
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination?.route
 
                 NavigationBarItem(
@@ -168,6 +172,7 @@ fun MainScreen(
                 )
             }
         }
+    }
     ) { innerPadding ->
         NavHost(
             navController = navController,

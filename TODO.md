@@ -5,10 +5,10 @@
 
 
 # UI improvement (implement 3 first)
-1. the "top bar" which is where the status bar of the phone sits, is now colored grey for some reason. Make it blend in.
+```1. the "top bar" which is where the status bar of the phone sits, is now colored grey for some reason. Make it blend in.```
 ```2. Add dark mode.```
 ```3. remove black line below search bar. Also make genre bar sit closer to search bar and song list below, and make the genre buttons slightly smaller.```
-4. add most-played view also to support support's search page defaults to contain all 4 search methods.
+4. add most-played view also to support. Support's search page should be able to contain all 4 search methods. We need to rethink about the ordering of these modes, maybe change the UX for switching between 4 modes because one button is too much for 4 modes.
 
 # New Feature 
 1. Settings page update
@@ -18,7 +18,8 @@
 2. Add player view 
     ```1. Add thin `collapsed player view` (like apple music) to the bottom of the page on top of the `navigation bar`. It should have `play/pause`, `next` and `previous` song buttons on the right side of it and a small cover on the left of it and the title of the song in the middle (can be clipped off by the play button if title too long)```
     ```2. When area outside of the buttons are click in the `collapsed play view`, it expands upward to fill the screen while the `navigation bar` retract downwards and hides. The cover photo expand, move upwards smoothly following the scroll motion, and fade into the background of the page (at lower brightness and with a subtle blur). The controls are centered and at the lower 50% of the display. It should have `progress bar` that can be dragged, `play/pause`, `next`, `previous`, `single`/`loop`/`random`(they are a single button just like `played`/`all` button) and `mod`(see feature 5 below) buttons. When the area is slide vertically (be careful not to cause unintended motion when sliding the play progress bar) downwards, the playview collaps downward back into the mini player. The cover photo should shrink and becomes solid back again with a smooth motion returning to the left side of the mini player following the motion of the scroll.```
-    3. Add `DT (double time)` and `NC (Night core)` sound effect `mod`. It is activated in player view. double time basically plays the song at 1.5 speed multiplier but keep the pitch of the song unchanged. Night core is double time but pitch is not processed, i.e., it is changed because the song is played at 1.5 times the original speed.
+    ```3. Add `DT (double time)` and `NC (Night core)` sound effect `mod`. It is activated in player view. double time basically plays the song at 1.5 speed multiplier but keep the pitch of the song unchanged. Night core is double time but pitch is not processed, i.e., it is changed because the song is played at 1.5 times the original speed.```
+    4. Add HT(Half Time) similar to DT that doesn't change pitch.
 3. Playlist feature
     ```1. Implement `single`/`loop`/`random`(that loops) feature. As of current, the playlist is the whole library, i.e., loop/random applies to the whole library. The library genre feature should work here to change the playlist.```
 4. Search page updates

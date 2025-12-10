@@ -30,7 +30,8 @@
     ~~2. Implement filter by `favorite`(extracted from user's osu account data) (it should be a part of the `played`/`all` button). So now it alternates between `played`, `all`, `favorite`.`~~
     3. Add an manual query cache refresh action instead of refreshing every 5 mins. The action is: when you are at the top of the song list, dragging the song list downwards reveals a refresh icon and when dragged sufficiently and released, a new query request will be made. Do not remove cached query list every 5 min, store query list forever and when refreshed, compare new query result to existing list and only add new songs to the played query list database.
     ~~4. Sort played query list by data played, which is quite difficult to implement I'll have to think about how to use osu apis and mechanism to achieve this.~~
-    5. Merge songs with same title. works similar to the most played page.
+    5. In search page, when displaying the result query, merge songs with same title. for detail on how it works, please reference the merge method in favorite queries. Also we do not need to concern about beatmaps difficulty name here because they are not included in the data returned. You should use the album and song info from the very first song you got with that title. When load more is pressed, it should also skip newly returned songs that already has a song with exact same title present.
+    6. Avoid special character injections, and avoid directly adding special character to the http request.
 5. Library update
     ~~1. Implement library filter. Same as the search genre filter.~~
     ~~2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.~~

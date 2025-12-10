@@ -170,9 +170,40 @@ fun SearchScreen(
         }
     }
 
+    fun dedupeByTitle(list: List<BeatmapsetCompact>): List<BeatmapsetCompact> {
+        val seen = mutableSetOf<String>()
+        val merged = mutableListOf<BeatmapsetCompact>()
+        list.forEach { beatmap ->
+            val key = beatmap.title.trim().lowercase()
+            if (seen.add(key)) {
+                merged.add(beatmap)
+            }
+        }
+        return merged
+    }
+
+    fun mergeByTitle(existing: List<BeatmapsetCompact>, incoming: List<BeatmapsetCompact>): List<BeatmapsetCompact> {
+        if (incoming.isEmpty()) return existing
+        val seen = existing.map { it.title.trim().lowercase() }.toMutableSet()
+        val merged = existing.toMutableList()
+        incoming.forEach { beatmap ->
+            val key = beatmap.title.trim().lowercase()
+            if (seen.add(key)) {
+                merged.add(beatmap)
+            }
+        }
+        return merged
+    }
+
+    fun filterMetadataFor(list: List<BeatmapsetCompact>, metadata: Map<Long, Pair<Int, Int>>): Map<Long, Pair<Int, Int>> {
+        if (metadata.isEmpty()) return emptyMap()
+        val allowedIds = list.map { it.id }.toSet()
+        return metadata.filterKeys { it in allowedIds }
+    }
+
     suspend fun loadRecent() {
         val recent = db.recentPlayDao().getRecentPlays()
-        searchResults = applyLocalFilters(recent.map { it.toBeatmapset() })
+        searchResults = dedupeByTitle(applyLocalFilters(recent.map { it.toBeatmapset() }))
         currentCursor = null
         searchResultsMetadata = emptyMap()
         statusText = ""
@@ -249,9 +280,10 @@ fun SearchScreen(
                                         if (filterMode == "recent") {
                                         } else {
                                         val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, null, filterMode, playedFilterMode, userId, isSupporter)
-                                        searchResults = result.beatmaps
+                                        val deduped = dedupeByTitle(result.beatmaps)
+                                        searchResults = deduped
                                         currentCursor = result.cursor
-                                        searchResultsMetadata = result.metadata
+                                        searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                                         }
                                     } catch (e: Exception) {
                                         statusText = "Error: ${e.message}"
@@ -332,9 +364,10 @@ fun SearchScreen(
                                                 loadRecent()
                                             } else {
                                             val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, mode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
-                                                searchResults = result.beatmaps
+                                                val deduped = dedupeByTitle(result.beatmaps)
+                                                searchResults = deduped
                                                 currentCursor = result.cursor
-                                                searchResultsMetadata = result.metadata
+                                                searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                                             }
                                         }
                                     }
@@ -354,9 +387,10 @@ fun SearchScreen(
                                     loadRecent()
                                 } else {
                                     val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, searchQuery.trim(), filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
-                                searchResults = result.beatmaps
+                                val deduped = dedupeByTitle(result.beatmaps)
+                                searchResults = deduped
                                 currentCursor = result.cursor
-                                        searchResultsMetadata = result.metadata
+                                        searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                                 }
                             } catch (e: Exception) {
                                 statusText = "Search Error: ${e.message}"
@@ -389,9 +423,11 @@ fun SearchScreen(
                                                     if (filterMode == "recent") {
                                                         loadRecent()
                                                     } else {
-                                                        val (results, cursor) = repository.getPlayedBeatmaps(accessToken, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
-                                                    searchResults = results
-                                                    currentCursor = cursor
+                                                        val result = repository.getPlayedBeatmaps(accessToken, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
+                                                        val deduped = dedupeByTitle(result.beatmaps)
+                                                    searchResults = deduped
+                                                    currentCursor = result.cursor
+                                                    searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                                                     }
                                                 } catch(e: Exception) {
                                                     statusText = "Error: ${e.message}"
@@ -593,9 +629,11 @@ fun SearchScreen(
                                     try {
                                         val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, currentCursor, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
                                         if (result.beatmaps.isNotEmpty()) {
-                                            searchResults = searchResults + result.beatmaps
+                                            val merged = mergeByTitle(searchResults, result.beatmaps)
+                                            val mergedIds = merged.map { it.id }.toSet()
+                                            searchResults = merged
                                             currentCursor = result.cursor
-                                            searchResultsMetadata = searchResultsMetadata + result.metadata
+                                            searchResultsMetadata = (searchResultsMetadata + result.metadata).filterKeys { it in mergedIds }
                                             statusText = "Loaded ${result.beatmaps.size} more results"
                                         } else {
                                             statusText = "No more results available"
@@ -664,9 +702,10 @@ fun SearchScreen(
                         loadRecent()
                     } else {
                         val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
-                    searchResults = result.beatmaps
+                    val deduped = dedupeByTitle(result.beatmaps)
+                    searchResults = deduped
                     currentCursor = result.cursor
-                    searchResultsMetadata = result.metadata
+                    searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                     }
                 } catch (e: Exception) {
                     statusText = "Failed to load: ${e.message}"

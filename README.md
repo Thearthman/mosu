@@ -8,7 +8,8 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - Search beatmaps with played/all/favorite toggle, genre filters, fuzzy text search, collapsing header, and cursor-based pagination with 5‑minute cache.
 - Per-item download progress; already-downloaded items show a checkmark. Click downloaded items (Search or Library) to play immediately.
 - Library with albums (expandable by beatmap set), genre filter, and swipe-to-delete (polished red swipe background).
-- Media3 background playback via MusicService and MusicController.
+- Media3 playback with background service, fullscreen player, and MiniPlayer that hides when paused.
+- Playback mods: No Mod (default), Double Time (1.5x keep pitch), Night Core (1.5x with pitch up); selection persists across tracks until changed.
 - Profile page: user info, downloaded count, played-filter mode toggle (URL vs most-played), login/logout, OAuth settings placeholders for Equalizer/Heatmap.
 - UI polish: Apple Music-like bottom nav, double-tap Search tab to scroll to top, no divider lines, new app icon.
 
@@ -34,6 +35,7 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 3) Usage tips
 - Search tab: use Played/All/Favorite toggle and genre chips; Load More uses cursor-based pagination. Downloads show progress; checkmarks indicate downloaded.
 - Library tab: albums are expandable; swipe left to delete (removes files + DB).
+- Player: tap MiniPlayer to expand; use Mod label to pick DT/NC; chosen mod stays active for next songs until changed.
 - Profile tab: login/logout, view user info/downloaded count, toggle played-filter mode (URL vs most-played), edit OAuth creds.
 
 4) Notes

@@ -1,6 +1,7 @@
 package com.mosu.app.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +23,14 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.mosu.app.player.MusicController
+import com.mosu.app.player.PlaybackMod
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -68,10 +71,12 @@ fun FullPlayer(
     val currentPosition by musicController.currentPosition.collectAsState()
     val repeatMode by musicController.repeatMode.collectAsState()
     val shuffleModeEnabled by musicController.shuffleModeEnabled.collectAsState()
+    val playbackMod by musicController.playbackMod.collectAsState()
 
     // For smooth seeking
     var isDragging by remember { mutableStateOf(false) }
     var dragPosition by remember { mutableStateOf(0f) }
+    var modMenuExpanded by remember { mutableStateOf(false) }
 
     val sliderPosition = if (isDragging) dragPosition else currentPosition.toFloat()
     val sliderRange = 0f..duration.toFloat().coerceAtLeast(1f)
@@ -204,17 +209,47 @@ fun FullPlayer(
 
                 // Controls Row
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 20.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Mod Button (Placeholder)
-                    IconButton(onClick = { /* TODO: Feature 2.3 */ }) {
-                        Icon(
-                            imageVector = Icons.Default.Settings, // Placeholder icon
-                            contentDescription = "Mods",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
+                    // Mod Selector
+                    val modTint = if (playbackMod != PlaybackMod.NONE) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onBackground
+                    }
+                    Box {
+                        Column(
+                            modifier = Modifier.clickable { modMenuExpanded = true }
+                        ) {
+                            Text(
+                                text = "Mod",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = modLabel(playbackMod),
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = modTint
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = modMenuExpanded,
+                            onDismissRequest = { modMenuExpanded = false }
+                        ) {
+                            PlaybackMod.entries.forEach { mod ->
+                                DropdownMenuItem(
+                                    text = { Text(modMenuLabel(mod)) },
+                                    onClick = {
+                                        musicController.setPlaybackMod(mod)
+                                        modMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
 
                     // Previous
@@ -331,5 +366,17 @@ private fun formatTime(timeMs: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+}
+
+private fun modLabel(mod: PlaybackMod): String = when (mod) {
+    PlaybackMod.NONE -> "No Mod"
+    PlaybackMod.DOUBLE_TIME -> "DT"
+    PlaybackMod.NIGHT_CORE -> "NC"
+}
+
+private fun modMenuLabel(mod: PlaybackMod): String = when (mod) {
+    PlaybackMod.NONE -> "No Mod (1.0x)"
+    PlaybackMod.DOUBLE_TIME -> "DT · 1.5x speed, keep pitch"
+    PlaybackMod.NIGHT_CORE -> "NC · 1.5x speed, pitch up"
 }
 

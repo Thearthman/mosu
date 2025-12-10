@@ -196,8 +196,8 @@ fun MainScreen(
         val nowPlaying by musicController.nowPlaying.collectAsState()
         val isPlaying by musicController.isPlaying.collectAsState()
         // Move Nav Bar down as sheet expands. 200f is an arbitrary sufficient offset.
-        val navBarTranslationY = progress * 300f
-        val contentBottomPadding = if (nowPlaying != null) 144.dp else 80.dp
+        val navBarTranslationY = if (isPlaying) progress * 300f else 0f
+        val contentBottomPadding = if (nowPlaying != null && isPlaying) 144.dp else 80.dp
 
         Box(modifier = Modifier.fillMaxSize()) {
             
@@ -280,14 +280,14 @@ fun MainScreen(
             }
 
             // 3. MiniPlayer (Top Layer) - Moves UP with Sheet
-            if (nowPlaying != null) {
+            if (nowPlaying != null && isPlaying) {
                 Box(
                     modifier = Modifier
                         .zIndex(2f)
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 80.dp) // Initial position above NavBar
                         .offset { IntOffset(0, (sheetOffset.value - collapsedOffset).roundToInt()) }
-                        .graphicsLayer { alpha = if (isPlaying) miniPlayerAlpha else 0f }
+                        .graphicsLayer { alpha = miniPlayerAlpha }
                         .draggable(
                             state = draggableState,
                             orientation = Orientation.Vertical,

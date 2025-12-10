@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -47,9 +48,8 @@ class MusicController(context: Context) {
     private val _shuffleModeEnabled = MutableStateFlow(false)
     val shuffleModeEnabled = _shuffleModeEnabled.asStateFlow()
 
-    // Track whether the user has explicitly changed mode this session
-    private var userSetShuffle = false
-    private var userSetRepeat = false
+    private val _playbackMod = MutableStateFlow(PlaybackMod.NONE)
+    val playbackMod = _playbackMod.asStateFlow()
 
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -86,16 +86,7 @@ class MusicController(context: Context) {
             _repeatMode.value = controller.repeatMode
             _shuffleModeEnabled.value = controller.shuffleModeEnabled
             _duration.value = controller.duration.coerceAtLeast(0L)
-
-            // Apply initial defaults only if user hasn't overridden this session
-            if (!userSetShuffle) {
-                controller.shuffleModeEnabled = false
-                _shuffleModeEnabled.value = false
-            }
-            if (!userSetRepeat) {
-                controller.repeatMode = Player.REPEAT_MODE_ALL
-                _repeatMode.value = Player.REPEAT_MODE_ALL
-            }
+            applyPlaybackMod(_playbackMod.value)
             
             startProgressUpdater()
         }, MoreExecutors.directExecutor())
@@ -136,7 +127,10 @@ class MusicController(context: Context) {
         val startIndex = mediaItems.indexOfFirst { it.mediaId == selectedBeatmap.uid.toString() }.coerceAtLeast(0)
 
         controller.setMediaItems(mediaItems, startIndex, 0)
+        controller.shuffleModeEnabled = true // Default to shuffle/random
+        controller.repeatMode = Player.REPEAT_MODE_ALL // Infinite loop - never exhaust
         controller.prepare()
+        applyPlaybackMod(_playbackMod.value)
         controller.play()
     }
     
@@ -164,7 +158,6 @@ class MusicController(context: Context) {
     fun toggleShuffleMode() {
         val controller = this.controller ?: return
         controller.shuffleModeEnabled = !controller.shuffleModeEnabled
-        userSetShuffle = true
     }
     
     fun toggleRepeatMode() {
@@ -176,7 +169,16 @@ class MusicController(context: Context) {
             else -> Player.REPEAT_MODE_OFF
         }
         controller.repeatMode = newMode
-        userSetRepeat = true
+    }
+
+    fun setPlaybackMod(mod: PlaybackMod) {
+        _playbackMod.value = mod
+        applyPlaybackMod(mod)
+    }
+
+    private fun applyPlaybackMod(mod: PlaybackMod) {
+        val controller = this.controller ?: return
+        controller.playbackParameters = PlaybackParameters(mod.speed, mod.pitch)
     }
 
     fun release() {
@@ -184,3 +186,8 @@ class MusicController(context: Context) {
     }
 }
 
+enum class PlaybackMod(val speed: Float, val pitch: Float, val label: String) {
+    NONE(1f, 1f, "No Mod"),
+    DOUBLE_TIME(1.5f, 1f, "DT"),
+    NIGHT_CORE(1.5f, 1.5f, "NC")
+}

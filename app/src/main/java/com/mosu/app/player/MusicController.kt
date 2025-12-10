@@ -11,8 +11,14 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.mosu.app.data.db.BeatmapEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.io.File
 
 class MusicController(context: Context) {
@@ -21,11 +27,25 @@ class MusicController(context: Context) {
     private val controller: MediaController?
         get() = if (controllerFuture.isDone) controllerFuture.get() else null
 
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
+
     private val _nowPlaying = MutableStateFlow<MediaMetadata?>(null)
     val nowPlaying = _nowPlaying.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
+
+    private val _currentPosition = MutableStateFlow(0L)
+    val currentPosition = _currentPosition.asStateFlow()
+
+    private val _duration = MutableStateFlow(0L)
+    val duration = _duration.asStateFlow()
+
+    private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
+    val repeatMode = _repeatMode.asStateFlow()
+
+    private val _shuffleModeEnabled = MutableStateFlow(false)
+    val shuffleModeEnabled = _shuffleModeEnabled.asStateFlow()
 
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -35,16 +55,48 @@ class MusicController(context: Context) {
             controller.addListener(object : Player.Listener {
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     _nowPlaying.value = mediaItem?.mediaMetadata
+                    _duration.value = controller.duration.coerceAtLeast(0L)
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _isPlaying.value = isPlaying
                 }
+
+                override fun onRepeatModeChanged(repeatMode: Int) {
+                    _repeatMode.value = repeatMode
+                }
+
+                override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                    _shuffleModeEnabled.value = shuffleModeEnabled
+                }
+                
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        _duration.value = controller.duration.coerceAtLeast(0L)
+                    }
+                }
             })
             // Initialize state
             _nowPlaying.value = controller.currentMediaItem?.mediaMetadata
             _isPlaying.value = controller.isPlaying
+            _repeatMode.value = controller.repeatMode
+            _shuffleModeEnabled.value = controller.shuffleModeEnabled
+            _duration.value = controller.duration.coerceAtLeast(0L)
+            
+            startProgressUpdater()
         }, MoreExecutors.directExecutor())
+    }
+
+    private fun startProgressUpdater() {
+        scope.launch {
+            while (isActive) {
+                val controller = this@MusicController.controller
+                if (controller != null && controller.isPlaying) {
+                    _currentPosition.value = controller.currentPosition
+                }
+                delay(200) // Update 5 times per second for smooth slider
+            }
+        }
     }
 
     fun playSong(selectedBeatmap: BeatmapEntity, playlist: List<BeatmapEntity> = listOf(selectedBeatmap)) {
@@ -91,6 +143,26 @@ class MusicController(context: Context) {
 
     fun skipToPrevious() {
         controller?.seekToPrevious()
+    }
+    
+    fun seekTo(positionMs: Long) {
+        controller?.seekTo(positionMs)
+    }
+    
+    fun toggleShuffleMode() {
+        val controller = this.controller ?: return
+        controller.shuffleModeEnabled = !controller.shuffleModeEnabled
+    }
+    
+    fun toggleRepeatMode() {
+        val controller = this.controller ?: return
+        val newMode = when (controller.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF
+            else -> Player.REPEAT_MODE_OFF
+        }
+        controller.repeatMode = newMode
     }
 
     fun release() {

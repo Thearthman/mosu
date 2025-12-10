@@ -40,6 +40,7 @@ import com.mosu.app.player.MusicController
 @Composable
 fun MiniPlayer(
     musicController: MusicController,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val nowPlaying by musicController.nowPlaying.collectAsState()
@@ -50,7 +51,7 @@ fun MiniPlayer(
             modifier = modifier
                 .fillMaxWidth()
                 .height(64.dp)
-                .clickable { /* TODO: Expand to full player */ },
+                .clickable(onClick = onClick),
             color = MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 8.dp
         ) {

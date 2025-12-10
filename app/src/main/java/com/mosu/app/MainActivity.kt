@@ -5,8 +5,23 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.roundToInt
+import com.mosu.app.ui.player.FullPlayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -143,132 +158,184 @@ fun MainScreen(
         onDispose { musicController.release() }
     }
 
-    Scaffold(
-        bottomBar = {
-            Column {
-                MiniPlayer(musicController = musicController)
-                NavigationBar {
-                    val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination?.route
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val screenHeight = maxHeight
+        val screenHeightPx = with(LocalDensity.current) { screenHeight.toPx() }
 
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
-                    label = { Text("Library") },
-                    selected = currentDestination == "library",
-                    onClick = {
-                        navController.navigate("library") {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                    label = { Text("Search") },
-                    selected = currentDestination == "search",
-                    onClick = {
-                        val currentTime = System.currentTimeMillis()
-                        if (currentDestination == "search" && (currentTime - lastSearchTapTime) < 500) {
-                            // Double tap detected - scroll to top
-                            scrollSearchToTop = true
-                        } else {
-                            navController.navigate("search") {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                        lastSearchTapTime = currentTime
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile") },
-                    selected = currentDestination == "profile",
-                    onClick = {
-                        navController.navigate("profile") {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
+        // Sheet Offset: screenHeightPx (Collapsed) -> 0f (Expanded)
+        val sheetOffset = remember { Animatable(screenHeightPx) }
+        val scope = rememberCoroutineScope()
+
+        val draggableState = rememberDraggableState { delta ->
+            scope.launch {
+                val newOffset = (sheetOffset.value + delta).coerceIn(0f, screenHeightPx)
+                sheetOffset.snapTo(newOffset)
             }
         }
-    }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = "library",
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable("library") {
-                LibraryScreen(db, musicController)
+
+        fun snapToTarget(velocity: Float) {
+            scope.launch {
+                val target = if (velocity < -1000 || (velocity <= 1000 && sheetOffset.value < screenHeightPx / 2)) {
+                    0f // Expand
+                } else {
+                    screenHeightPx // Collapse
+                }
+                sheetOffset.animateTo(target, animationSpec = tween(300))
             }
-            composable("search") {
-                SearchScreen(
-                    authCode = initialAuthCode,
-                    repository = repository,
-                    db = db,
-                    accessToken = accessToken,
-                    clientId = clientId,
-                    clientSecret = clientSecret,
-                    settingsManager = settingsManager,
-                    musicController = musicController,
-                    onTokenReceived = { token ->
-                        scope.launch {
-                            accessToken = token
-                            tokenManager.saveToken(token)
-                        }
-                    },
-                    scrollToTop = scrollSearchToTop,
-                    onScrolledToTop = { scrollSearchToTop = false }
-                )
-            }
-            composable("profile") {
-                ProfileScreen(
-                    accessToken = accessToken,
-                    repository = repository,
-                    db = db,
-                    tokenManager = tokenManager,
-                    settingsManager = settingsManager,
-                    onLoginClick = {
-                        if (clientId.isNotEmpty()) {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://osu.ppy.sh/oauth/authorize?client_id=$clientId&redirect_uri=$redirectUri&response_type=code&scope=public+identify")
+        }
+
+        Scaffold(
+            bottomBar = {
+                Column {
+                    // Animation Progress: 0f (Collapsed) -> 1f (Expanded)
+                    val progress = 1f - (sheetOffset.value / screenHeightPx).coerceIn(0f, 1f)
+                    val miniPlayerAlpha = 1f - progress
+                    // Move Nav Bar down as sheet expands. 200f is an arbitrary sufficient offset.
+                    val navBarTranslationY = progress * 200f
+
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer { alpha = miniPlayerAlpha }
+                            .draggable(
+                                state = draggableState,
+                                orientation = Orientation.Vertical,
+                                onDragStopped = { velocity -> snapToTarget(velocity) }
                             )
-                            context.startActivity(intent)
-                        }
-                    },
-                    onLogout = {
-                        accessToken = null
+                    ) {
+                        MiniPlayer(
+                            musicController = musicController,
+                            onClick = {
+                                scope.launch { sheetOffset.animateTo(0f, tween(300)) }
+                            }
+                        )
                     }
-                )
-            }
-        }
-    }
-    
-    // Show login error dialog
-    if (loginError != null) {
-        AlertDialog(
-            onDismissRequest = { loginError = null },
-            title = { 
-                Text(if (loginError!!.contains("successful")) "Success" else "Login Error") 
-            },
-            text = { Text(loginError!!) },
-            confirmButton = {
-                TextButton(onClick = { loginError = null }) {
-                    Text("OK")
+                    NavigationBar(
+                        modifier = Modifier.graphicsLayer { translationY = navBarTranslationY }
+                    ) {
+                        val navBackStackEntry by navController.currentBackStackEntryAsState()
+                        val currentDestination = navBackStackEntry?.destination?.route
+
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
+                            label = { Text("Library") },
+                            selected = currentDestination == "library",
+                            onClick = {
+                                navController.navigate("library") {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                            label = { Text("Search") },
+                            selected = currentDestination == "search",
+                            onClick = {
+                                val currentTime = System.currentTimeMillis()
+                                if (currentDestination == "search" && (currentTime - lastSearchTapTime) < 500) {
+                                    scrollSearchToTop = true
+                                } else {
+                                    navController.navigate("search") {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                                lastSearchTapTime = currentTime
+                            }
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                            label = { Text("Profile") },
+                            selected = currentDestination == "profile",
+                            onClick = {
+                                navController.navigate("profile") {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
+                    }
                 }
             }
-        )
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = "library",
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable("library") {
+                    LibraryScreen(db, musicController)
+                }
+                composable("search") {
+                    SearchScreen(
+                        authCode = initialAuthCode,
+                        repository = repository,
+                        db = db,
+                        accessToken = accessToken,
+                        clientId = clientId,
+                        clientSecret = clientSecret,
+                        settingsManager = settingsManager,
+                        musicController = musicController,
+                        onTokenReceived = { token ->
+                            scope.launch {
+                                accessToken = token
+                                tokenManager.saveToken(token)
+                            }
+                        },
+                        scrollToTop = scrollSearchToTop,
+                        onScrolledToTop = { scrollSearchToTop = false }
+                    )
+                }
+                composable("profile") {
+                    ProfileScreen(
+                        accessToken = accessToken,
+                        repository = repository,
+                        db = db,
+                        tokenManager = tokenManager,
+                        settingsManager = settingsManager,
+                        onLoginClick = {
+                            if (clientId.isNotEmpty()) {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://osu.ppy.sh/oauth/authorize?client_id=$clientId&redirect_uri=$redirectUri&response_type=code&scope=public+identify")
+                                )
+                                context.startActivity(intent)
+                            }
+                        },
+                        onLogout = {
+                            accessToken = null
+                        }
+                    )
+                }
+            }
+        }
+
+        // Full Player Sheet
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
+                .fillMaxSize()
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical,
+                    onDragStopped = { velocity -> snapToTarget(velocity) }
+                )
+        ) {
+            FullPlayer(
+                musicController = musicController,
+                onCollapse = {
+                    scope.launch { sheetOffset.animateTo(screenHeightPx, tween(300)) }
+                }
+            )
+        }
     }
 }

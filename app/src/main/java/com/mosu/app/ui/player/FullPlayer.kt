@@ -88,10 +88,10 @@ fun FullPlayer(
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(0.6f)
+                    .alpha(0.8f)
                     .blur(
-                        radiusX = 16.dp, // Horizontal blur radius
-                        radiusY = 16.dp, // Vertical blur radius
+                        radiusX = 13.dp, // Horizontal blur radius
+                        radiusY = 13.dp, // Vertical blur radius
                         edgeTreatment = BlurredEdgeTreatment.Unbounded // Optional: Adjust how blur handles edges
                     ),
                 contentScale = ContentScale.Crop
@@ -113,7 +113,7 @@ fun FullPlayer(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(vertical=10.dp, horizontal=24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Collapse Handle / Arrow
@@ -126,7 +126,7 @@ fun FullPlayer(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Square Cover Art
                 AsyncImage(
@@ -162,7 +162,7 @@ fun FullPlayer(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(5.dp))
 
                 // Progress Bar
                 Slider(
@@ -204,7 +204,7 @@ fun FullPlayer(
 
                 // Controls Row
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

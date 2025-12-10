@@ -47,6 +47,10 @@ class MusicController(context: Context) {
     private val _shuffleModeEnabled = MutableStateFlow(false)
     val shuffleModeEnabled = _shuffleModeEnabled.asStateFlow()
 
+    // Track whether the user has explicitly changed mode this session
+    private var userSetShuffle = false
+    private var userSetRepeat = false
+
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
         controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
@@ -82,6 +86,16 @@ class MusicController(context: Context) {
             _repeatMode.value = controller.repeatMode
             _shuffleModeEnabled.value = controller.shuffleModeEnabled
             _duration.value = controller.duration.coerceAtLeast(0L)
+
+            // Apply initial defaults only if user hasn't overridden this session
+            if (!userSetShuffle) {
+                controller.shuffleModeEnabled = false
+                _shuffleModeEnabled.value = false
+            }
+            if (!userSetRepeat) {
+                controller.repeatMode = Player.REPEAT_MODE_ALL
+                _repeatMode.value = Player.REPEAT_MODE_ALL
+            }
             
             startProgressUpdater()
         }, MoreExecutors.directExecutor())
@@ -122,8 +136,6 @@ class MusicController(context: Context) {
         val startIndex = mediaItems.indexOfFirst { it.mediaId == selectedBeatmap.uid.toString() }.coerceAtLeast(0)
 
         controller.setMediaItems(mediaItems, startIndex, 0)
-        controller.shuffleModeEnabled = true // Default to shuffle/random
-        controller.repeatMode = Player.REPEAT_MODE_ALL // Infinite loop - never exhaust
         controller.prepare()
         controller.play()
     }
@@ -152,6 +164,7 @@ class MusicController(context: Context) {
     fun toggleShuffleMode() {
         val controller = this.controller ?: return
         controller.shuffleModeEnabled = !controller.shuffleModeEnabled
+        userSetShuffle = true
     }
     
     fun toggleRepeatMode() {
@@ -163,6 +176,7 @@ class MusicController(context: Context) {
             else -> Player.REPEAT_MODE_OFF
         }
         controller.repeatMode = newMode
+        userSetRepeat = true
     }
 
     fun release() {

@@ -53,6 +53,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.core.os.LocaleListCompat
+import androidx.appcompat.app.AppCompatDelegate
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.db.AppDatabase
@@ -123,6 +125,7 @@ fun MainScreen(
     // OAuth Credentials from Settings
     val clientId by settingsManager.clientId.collectAsState(initial = "")
     val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
+    val language by settingsManager.language.collectAsState(initial = "en")
     
     // Login error state
     var loginError by remember { mutableStateOf<String?>(null) }
@@ -162,6 +165,12 @@ fun MainScreen(
         onDispose { musicController.release() }
     }
 
+    // Apply app language globally when preference changes
+    LaunchedEffect(language) {
+        val tag = if (language.isBlank()) "en" else language
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val navbarHeightPx = 280f
         val screenHeight = maxHeight
@@ -195,9 +204,15 @@ fun MainScreen(
         val miniPlayerAlpha = (1f - progress*4f).coerceIn(0f,1f)
         val nowPlaying by musicController.nowPlaying.collectAsState()
         val isPlaying by musicController.isPlaying.collectAsState()
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route
         // Move Nav Bar down as sheet expands. 200f is an arbitrary sufficient offset.
-        val navBarTranslationY = if (isPlaying) progress * 300f else 0f
-        val contentBottomPadding = if (nowPlaying != null && isPlaying) 144.dp else 80.dp
+        val navBarTranslationY = progress * 300f
+        val contentBottomPadding = when {
+            currentRoute == "profile" -> 80.dp
+            nowPlaying != null -> 144.dp
+            else -> 80.dp
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             
@@ -280,7 +295,7 @@ fun MainScreen(
             }
 
             // 3. MiniPlayer (Top Layer) - Moves UP with Sheet
-            if (nowPlaying != null && isPlaying) {
+            if (nowPlaying != null && currentRoute != "profile") {
                 Box(
                     modifier = Modifier
                         .zIndex(2f)

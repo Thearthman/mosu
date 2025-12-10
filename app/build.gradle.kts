@@ -71,6 +71,12 @@ dependencies {
     // DataStore for Token Persistence
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     
+    // AppCompat for locale support (AppCompatDelegate.setApplicationLocales)
+    implementation("androidx.appcompat:appcompat:1.6.1")
+
+    // WorkManager for scheduled background tasks
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
     // Network
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")

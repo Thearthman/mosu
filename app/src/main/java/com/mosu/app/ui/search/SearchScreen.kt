@@ -38,6 +38,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,8 +58,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.db.AppDatabase
+import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.download.BeatmapDownloader
@@ -92,22 +96,25 @@ fun SearchScreen(
     var searchQuery by remember { mutableStateOf("") }
     
     // Played filter mode from settings
+    val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val playedFilterMode by settingsManager.playedFilterMode.collectAsState(initial = "url")
+    val searchAnyEnabled by settingsManager.searchAnyEnabled.collectAsState(initial = false)
+    var isSupporterKnown by remember { mutableStateOf(false) }
     
-    // Filter Mode: Default depends on playedFilterMode (url -> "played", most_played -> "favorite")
-    var filterMode by remember { mutableStateOf(if (playedFilterMode == "url") "played" else "favorite") }
+    var filterMode by remember { mutableStateOf(defaultSearchView) }
     var userId by remember { mutableStateOf<String?>(null) }
     var isSupporter by remember { mutableStateOf(false) } // Default to false (safer for non-supporters)
     
-    // Update filterMode when playedFilterMode changes (from Profile settings)
-    LaunchedEffect(playedFilterMode, isSupporter) {
-        // When switching to URL mode (supporter enabled it), default to "played"
-        // When switching to most_played mode (non-supporter or supporter disabled it), default to "favorite"
-        if (playedFilterMode == "url" && isSupporter) {
-            filterMode = "played"
-        } else if (playedFilterMode == "most_played" && !isSupporter) {
-            filterMode = "favorite"
+    // Sync filter with default view once user info is available
+    LaunchedEffect(defaultSearchView, isSupporter, isSupporterKnown) {
+        if (!isSupporterKnown) return@LaunchedEffect
+        val allowed = if (isSupporter) {
+            listOf("played", "recent", "favorite", "most_played", "all")
+        } else {
+            listOf("recent", "favorite", "most_played", "all")
         }
+        val target = if (defaultSearchView in allowed) defaultSearchView else if (isSupporter) "played" else "favorite"
+        filterMode = target
     }
     
     // Search Results
@@ -151,6 +158,25 @@ fun SearchScreen(
         2 to "Game", 9 to "Hip Hop", 11 to "Metal", 12 to "Classical",
         13 to "Folk", 14 to "Jazz", 7 to "Novelty", 6 to "Other"
     )
+
+    fun applyLocalFilters(list: List<BeatmapsetCompact>): List<BeatmapsetCompact> {
+        val query = searchQuery.trim()
+        return list.filter { beatmap ->
+            val genreOk = selectedGenreId?.let { beatmap.genreId == it } ?: true
+            val queryOk = if (query.isEmpty()) true else {
+                beatmap.title.contains(query, ignoreCase = true) || beatmap.artist.contains(query, ignoreCase = true)
+            }
+            genreOk && queryOk
+        }
+    }
+
+    suspend fun loadRecent() {
+        val recent = db.recentPlayDao().getRecentPlays()
+        searchResults = applyLocalFilters(recent.map { it.toBeatmapset() })
+        currentCursor = null
+        searchResultsMetadata = emptyMap()
+        statusText = ""
+    }
     
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -177,8 +203,8 @@ fun SearchScreen(
         } else {
             // Sort results by rank if using most_played mode
             // Force sort by rank to fix ordering issues
-            val sortedResults = remember(searchResults, searchResultsMetadata) {
-                if (searchResultsMetadata.isNotEmpty()) {
+            val sortedResults = remember(searchResults, searchResultsMetadata, filterMode) {
+                if (filterMode != "recent" && searchResultsMetadata.isNotEmpty()) {
                     searchResults.sortedBy { beatmap ->
                         searchResultsMetadata[beatmap.id]?.first ?: Int.MAX_VALUE
                     }
@@ -220,10 +246,13 @@ fun SearchScreen(
                                 // Refresh results without search query
                                 scope.launch {
                                     try {
+                                        if (filterMode == "recent") {
+                                        } else {
                                         val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, null, filterMode, playedFilterMode, userId, isSupporter)
                                         searchResults = result.beatmaps
                                         currentCursor = result.cursor
                                         searchResultsMetadata = result.metadata
+                                        }
                                     } catch (e: Exception) {
                                         statusText = "Error: ${e.message}"
                                     }
@@ -233,55 +262,84 @@ fun SearchScreen(
                             }
                         }
                         
-                        // Filter Mode Toggle Button
-                        Button(
-                            onClick = {
-                                filterMode = when (filterMode) {
-                                    "played" -> "all"
-                                    "all" -> "favorite"
-                                    else -> "played"
-                                }
-                                // Refresh results with new filter
-                                scope.launch {
-                                    try {
-                                        currentCursor = null
-                                        val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter)
-                                        searchResults = result.beatmaps
-                                        currentCursor = result.cursor
-                                        searchResultsMetadata = result.metadata
-                                    } catch (e: Exception) {
-                                        statusText = "Error: ${e.message}"
-                                    }
-                                }
-                            },
+                        // Filter Mode Dropdown
+                        var filterMenuExpanded by remember { mutableStateOf(false) }
+                        val isSupporterAllowed = isSupporter
+                        val options = if (isSupporterAllowed) {
+                            listOf("played", "recent", "favorite", "most_played", "all")
+                        } else {
+                            listOf("recent", "favorite", "most_played", "all")
+                        }
+                        val optionLabels = mapOf(
+                            "played" to "Played",
+                            "recent" to "Recent",
+                            "favorite" to "Favorite",
+                            "most_played" to "Most Play",
+                            "all" to "All"
+                        )
+                        val optionColors = mapOf(
+                            "played" to MaterialTheme.colorScheme.primary,
+                            "recent" to androidx.compose.ui.graphics.Color(0xFF7E57C2),
+                            "favorite" to androidx.compose.ui.graphics.Color(0xFFFFD059),
+                            "most_played" to androidx.compose.ui.graphics.Color(0xFF483AC2),
+                            "all" to androidx.compose.ui.graphics.Color(0xFFF748AE)
+                        )
+
+                        val contentColors = mapOf(
+                            "played" to MaterialTheme.colorScheme.onPrimary,
+                            "recent" to androidx.compose.ui.graphics.Color(0xFFFFFFFF),
+                            "favorite" to androidx.compose.ui.graphics.Color(0xFF000000),
+                            "most_played" to androidx.compose.ui.graphics.Color(0xFFFFFFFF),
+                            "all" to androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+                        )
+                        val currentColor = optionColors[filterMode] ?: MaterialTheme.colorScheme.primary
+                        val currentContentColor = contentColors[filterMode] ?: MaterialTheme.colorScheme.primary
+
+                        OutlinedButton(
+                            onClick = { filterMenuExpanded = true },
                             modifier = Modifier
-                                .width(85.dp)
+                                .width(98.dp)
                                 .height(40.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = when (filterMode) {
-                                    "all" -> MaterialTheme.colorScheme.secondaryContainer
-                                    "favorite" -> androidx.compose.ui.graphics.Color(0xFFFFD059) // Gold
-                                    else -> MaterialTheme.colorScheme.primary // "played"
-                                },
-                                contentColor = when (filterMode) {
-                                    "all" -> MaterialTheme.colorScheme.onSecondaryContainer
-                                    "favorite" -> androidx.compose.ui.graphics.Color.Black
-                                    else -> MaterialTheme.colorScheme.onPrimary
-                                }
+                                containerColor = currentColor,
+                                contentColor = currentContentColor
                             ),
-                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         ) {
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = when (filterMode) {
-                                    "played" -> "Played"
-                                    "all" -> "All"
-                                    else -> "Favorite"
-                                },
+                                text = optionLabels[filterMode] ?: "Select",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                                textAlign = TextAlign.Center,
                                 maxLines = 1
                             )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Filter")
+                        }
+                        DropdownMenu(
+                            expanded = filterMenuExpanded,
+                            onDismissRequest = { filterMenuExpanded = false }
+                        ) {
+                            options.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(optionLabels[mode] ?: mode) },
+                                    onClick = {
+                                        filterMenuExpanded = false
+                                        filterMode = mode
+                                        scope.launch {
+                                            settingsManager.saveDefaultSearchView(mode)
+                                            currentCursor = null
+                                            if (mode == "recent") {
+                                                loadRecent()
+                                            } else {
+                                            val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, mode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
+                                                searchResults = result.beatmaps
+                                                currentCursor = result.cursor
+                                                searchResultsMetadata = result.metadata
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 },
@@ -292,10 +350,14 @@ fun SearchScreen(
                         scope.launch {
                             try {
                                 currentCursor = null
-                                val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, searchQuery.trim(), filterMode, playedFilterMode, userId, isSupporter)
+                                if (filterMode == "recent") {
+                                    loadRecent()
+                                } else {
+                                    val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, null, searchQuery.trim(), filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
                                 searchResults = result.beatmaps
                                 currentCursor = result.cursor
                                         searchResultsMetadata = result.metadata
+                                }
                             } catch (e: Exception) {
                                 statusText = "Search Error: ${e.message}"
                             }
@@ -324,9 +386,13 @@ fun SearchScreen(
                                             currentCursor = null // Reset cursor when changing genre
                                             scope.launch {
                                                 try {
-                                                    val (results, cursor) = repository.getPlayedBeatmaps(accessToken, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId)
+                                                    if (filterMode == "recent") {
+                                                        loadRecent()
+                                                    } else {
+                                                        val (results, cursor) = repository.getPlayedBeatmaps(accessToken, selectedGenreId, null, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
                                                     searchResults = results
                                                     currentCursor = cursor
+                                                    }
                                                 } catch(e: Exception) {
                                                     statusText = "Error: ${e.message}"
                                                 }
@@ -517,7 +583,7 @@ fun SearchScreen(
                 }
                 
                 // Pagination / Load More
-                if (searchResults.isNotEmpty() && currentCursor != null) {
+                if (filterMode != "recent" && searchResults.isNotEmpty() && currentCursor != null) {
                     item {
                         Button(
                             onClick = {
@@ -525,7 +591,7 @@ fun SearchScreen(
                                     isLoadingMore = true
                                     statusText = "Loading more..."
                                     try {
-                                        val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, currentCursor, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter)
+                                        val result = repository.getPlayedBeatmaps(accessToken!!, selectedGenreId, currentCursor, searchQuery.trim().ifEmpty { null }, filterMode, playedFilterMode, userId, isSupporter, searchAnyEnabled)
                                         if (result.beatmaps.isNotEmpty()) {
                                             searchResults = searchResults + result.beatmaps
                                             currentCursor = result.cursor
@@ -573,14 +639,17 @@ fun SearchScreen(
                     val user = repository.getMe(accessToken)
                     userId = user.id.toString()
                     isSupporter = user.isSupporter ?: false
+                    isSupporterKnown = true
                 } catch (e: Exception) {
                     statusText = "Failed to fetch user info: ${e.message}"
                     isSupporter = false // Default to non-supporter on error
+                    isSupporterKnown = true
                 }
             } else {
                 // Reset state on logout
                 userId = null
                 isSupporter = false
+                isSupporterKnown = false
                 searchResults = emptyList()
                 searchResultsMetadata = emptyMap()
             }
@@ -589,11 +658,16 @@ fun SearchScreen(
         // Initial Load - Fetch results when logged in
         LaunchedEffect(accessToken, filterMode, userId) {
             if (accessToken != null && userId != null) {
+                val uid = userId ?: return@LaunchedEffect
                 try {
-                    val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, userId, isSupporter)
+                    if (filterMode == "recent") {
+                        loadRecent()
+                    } else {
+                        val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
                     searchResults = result.beatmaps
                     currentCursor = result.cursor
                     searchResultsMetadata = result.metadata
+                    }
                 } catch (e: Exception) {
                     statusText = "Failed to load: ${e.message}"
                 }
@@ -603,4 +677,14 @@ fun SearchScreen(
 }
 }
 
-
+private fun RecentPlayEntity.toBeatmapset(): BeatmapsetCompact {
+    val cover = coverUrl ?: ""
+    return BeatmapsetCompact(
+        id = beatmapSetId,
+        title = title,
+        artist = artist,
+        creator = creator,
+        covers = Covers(coverUrl = cover, listUrl = cover),
+        genreId = null
+    )
+}

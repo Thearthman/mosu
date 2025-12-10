@@ -127,8 +127,6 @@ class MusicController(context: Context) {
         val startIndex = mediaItems.indexOfFirst { it.mediaId == selectedBeatmap.uid.toString() }.coerceAtLeast(0)
 
         controller.setMediaItems(mediaItems, startIndex, 0)
-        controller.shuffleModeEnabled = true // Default to shuffle/random
-        controller.repeatMode = Player.REPEAT_MODE_ALL // Infinite loop - never exhaust
         controller.prepare()
         applyPlaybackMod(_playbackMod.value)
         controller.play()
@@ -159,6 +157,11 @@ class MusicController(context: Context) {
         val controller = this.controller ?: return
         controller.shuffleModeEnabled = !controller.shuffleModeEnabled
     }
+
+    fun setShuffleMode(enabled: Boolean) {
+        val controller = this.controller ?: return
+        controller.shuffleModeEnabled = enabled
+    }
     
     fun toggleRepeatMode() {
         val controller = this.controller ?: return
@@ -169,6 +172,11 @@ class MusicController(context: Context) {
             else -> Player.REPEAT_MODE_OFF
         }
         controller.repeatMode = newMode
+    }
+
+    fun setRepeatMode(mode: Int) {
+        val controller = this.controller ?: return
+        controller.repeatMode = mode
     }
 
     fun setPlaybackMod(mod: PlaybackMod) {

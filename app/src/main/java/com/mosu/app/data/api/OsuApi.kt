@@ -40,6 +40,14 @@ interface OsuApi {
         @Query("offset") offset: Int = 0
     ): List<BeatmapPlaycount>
 
+    @GET("api/v2/users/{user_id}/scores/recent")
+    suspend fun getUserRecentScores(
+        @Header("Authorization") authHeader: String,
+        @Path("user_id") userId: String,
+        @Query("limit") limit: Int = 100,
+        @Query("include_fails") includeFails: Boolean = true
+    ): List<com.mosu.app.data.api.model.RecentScore>
+
     @GET("api/v2/beatmapsets/search")
     suspend fun searchBeatmapsets(
         @Header("Authorization") authHeader: String,

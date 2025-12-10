@@ -12,12 +12,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
@@ -43,7 +47,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.IconButton
+import kotlinx.coroutines.delay
 import coil.compose.AsyncImage
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
@@ -58,6 +66,11 @@ fun LibraryScreen(
 ) {
     val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    var highlightSetId by remember { mutableStateOf<Long?>(null) }
+    var buttonBlink by remember { mutableStateOf(false) }
+    val nowPlaying by musicController.nowPlaying.collectAsState()
+    val playingTitle = nowPlaying?.title?.toString()?.trim()?.lowercase()
     
     // Genre Filter State
     var selectedGenreId by remember { mutableStateOf<Int?>(null) }
@@ -78,6 +91,7 @@ fun LibraryScreen(
     // Group maps by Set ID
     val groupedMaps = filteredMaps.groupBy { it.beatmapSetId }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text(
             text = "Library",
@@ -105,7 +119,7 @@ fun LibraryScreen(
             }
         }
 
-        LazyColumn {
+            LazyColumn(state = listState) {
             items(
                 items = groupedMaps.keys.toList(),
                 key = { setId -> setId } // Add unique key for proper state management
@@ -118,17 +132,14 @@ fun LibraryScreen(
                     AlbumGroupItem(
                         tracks = tracks,
                         musicController = musicController,
+                        highlight = highlightSetId == setId && nowPlaying != null,
                         onPlay = { selectedTrack ->
-                            // Play selected track with the album as context (or all filtered maps?)
-                            // Standard behavior: Play track, queue rest of library (filtered)
                             musicController.playSong(selectedTrack, filteredMaps)
                         },
                         onDelete = {
                             scope.launch {
                                 tracks.forEach { track ->
-                                    // Delete from database
                                     db.beatmapDao().deleteBeatmap(track)
-                                    // Delete audio and cover files
                                     File(track.audioPath).delete()
                                     File(track.coverPath).delete()
                                 }
@@ -140,6 +151,7 @@ fun LibraryScreen(
                     SingleTrackItem(
                         map = tracks[0],
                         musicController = musicController,
+                        highlight = highlightSetId == setId && nowPlaying != null,
                         onPlay = {
                             musicController.playSong(tracks[0], filteredMaps)
                         },
@@ -158,12 +170,70 @@ fun LibraryScreen(
                 Divider(modifier = Modifier.padding(start = 64.dp)) // Apple style separator
             }
         }
+        }
+
+        if (nowPlaying != null) {
+            val isLight = androidx.compose.foundation.isSystemInDarkTheme().not()
+            val flickerColor = if (isLight) MaterialTheme.colorScheme.onPrimary else Color.Black
+            val buttonBg = if (buttonBlink) flickerColor.copy(alpha = 0.35f) else Color.Transparent
+            IconButton(
+                onClick = {
+                    val keyList = groupedMaps.keys.toList()
+                    val match = filteredMaps.firstOrNull { it.title.trim().lowercase() == playingTitle }
+                    if (match != null) {
+                        val targetIndex = keyList.indexOf(match.beatmapSetId)
+                        if (targetIndex >= 0) {
+                            scope.launch {
+                                listState.animateScrollToItem(targetIndex)
+                                repeat(3) {
+                                    highlightSetId = match.beatmapSetId
+                                    delay(150)
+                                    highlightSetId = null
+                                    delay(150)
+                                }
+                                highlightSetId = match.beatmapSetId
+                                delay(700)
+                                highlightSetId = null
+                            }
+                        }
+                    } else {
+                        scope.launch {
+                            repeat(3) {
+                                buttonBlink = true
+                                delay(150)
+                                buttonBlink = false
+                                delay(150)
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 14.dp)
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(buttonBg)
+//                    .zIndex(2f)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MyLocation,
+                    contentDescription = "Find current song",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlbumGroupItem(tracks: List<BeatmapEntity>, musicController: MusicController, onPlay: (BeatmapEntity) -> Unit, onDelete: () -> Unit) {
+fun AlbumGroupItem(
+    tracks: List<BeatmapEntity>,
+    musicController: MusicController,
+    onPlay: (BeatmapEntity) -> Unit,
+    onDelete: () -> Unit,
+    highlight: Boolean = false
+) {
     var expanded by remember { mutableStateOf(false) }
     val firstTrack = tracks[0]
     val dismissState = rememberDismissState(
@@ -181,32 +251,33 @@ fun AlbumGroupItem(tracks: List<BeatmapEntity>, musicController: MusicController
         state = dismissState,
         directions = setOf(DismissDirection.EndToStart),
         background = {
+            val flickerColor = if (isSystemInDarkTheme()) Color.Black else Color.LightGray
+            val bgColor = if (highlight) flickerColor else MaterialTheme.colorScheme.error
+            val iconTint = if (highlight) Color.Transparent else MaterialTheme.colorScheme.onError
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(bgColor)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                // Red delete area on the right side only
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.error)
-                        .padding(horizontal = 20.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onError,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = iconTint,
+                    modifier = Modifier.size(32.dp)
+                )
             }
+
         },
         dismissContent = {
+            val flickerColor = if (isSystemInDarkTheme()) Color.Black else Color.LightGray
+            val bg = if (highlight) flickerColor else MaterialTheme.colorScheme.surface
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
+                    .background(bg)
             ) {
                 Row(
                     modifier = Modifier
@@ -259,7 +330,13 @@ fun AlbumGroupItem(tracks: List<BeatmapEntity>, musicController: MusicController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SingleTrackItem(map: BeatmapEntity, musicController: MusicController, onPlay: () -> Unit, onDelete: () -> Unit) {
+fun SingleTrackItem(
+    map: BeatmapEntity,
+    musicController: MusicController,
+    highlight: Boolean = false,
+    onPlay: () -> Unit,
+    onDelete: () -> Unit
+) {
     val dismissState = rememberDismissState(
         confirmValueChange = {
             if (it == DismissValue.DismissedToStart) {
@@ -275,32 +352,31 @@ fun SingleTrackItem(map: BeatmapEntity, musicController: MusicController, onPlay
         state = dismissState,
         directions = setOf(DismissDirection.EndToStart),
         background = {
+            val flickerColor = if (isSystemInDarkTheme()) Color.Black else Color.LightGray
+            val bgColor = if (highlight) flickerColor else MaterialTheme.colorScheme.error
+            val iconTint = if (highlight) Color.Transparent else MaterialTheme.colorScheme.onError
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(bgColor)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                // Red delete area on the right side only
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.error)
-                        .padding(horizontal = 20.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onError,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = iconTint,
+                    modifier = Modifier.size(32.dp)
+                )
             }
         },
         dismissContent = {
+            val flickerColor = if (isSystemInDarkTheme()) Color.Black else Color.LightGray
+            val bg = if (highlight) flickerColor else MaterialTheme.colorScheme.surface            
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
+                    .background(bg)
                     .clickable { onPlay() }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically

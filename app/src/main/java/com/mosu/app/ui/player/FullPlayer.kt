@@ -1,5 +1,7 @@
 package com.mosu.app.ui.player
 
+import android.graphics.Paint
+import android.graphics.fonts.FontStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.magnifier
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,7 +52,9 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -212,60 +218,82 @@ fun FullPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Mod Selector
-                    val modTint = if (playbackMod != PlaybackMod.NONE) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onBackground
-                    }
-                    Box {
-                        Column(
-                            modifier = Modifier.clickable { modMenuExpanded = true }
-                        ) {
-                            Text(
-                                text = "Mod",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = modLabel(playbackMod),
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = modTint
-                            )
+                    // Left cluster: Mod + Previous
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        val modTint = if (playbackMod == PlaybackMod.NIGHT_CORE) {
+                            MaterialTheme.colorScheme.primary
+                        } else if (playbackMod == PlaybackMod.DOUBLE_TIME) {
+                            Color(0xFFFFD059)
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
                         }
-                        DropdownMenu(
-                            expanded = modMenuExpanded,
-                            onDismissRequest = { modMenuExpanded = false }
-                        ) {
-                            PlaybackMod.entries.forEach { mod ->
-                                DropdownMenuItem(
-                                    text = { Text(modMenuLabel(mod)) },
-                                    onClick = {
-                                        musicController.setPlaybackMod(mod)
-                                        modMenuExpanded = false
-                                    }
+                        Box {
+                            Column(
+                                modifier = Modifier
+                                    .widthIn(min = 47.dp)
+                                    .clickable { modMenuExpanded = true }
+                            ) {
+                                Text(
+                                    text = "Mod",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                                )
+                                Text(
+                                    text = modLabel(playbackMod),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = modTint
                                 )
                             }
+                            DropdownMenu(
+                                expanded = modMenuExpanded,
+                                onDismissRequest = { modMenuExpanded = false },
+                            ) {
+                                PlaybackMod.entries.forEach { mod ->
+                                    DropdownMenuItem(
+                                        modifier = Modifier.alpha(0.9f).fillMaxSize(),
+                                        text = { Text(
+                                            text = modMenuLabel(mod),
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                            color = when (mod) {
+                                                PlaybackMod.NIGHT_CORE -> {
+                                                    MaterialTheme.colorScheme.primary
+                                                }
+                                                PlaybackMod.DOUBLE_TIME -> {
+                                                    Color(0xFFFFD059)
+                                                }
+                                                else -> {
+                                                    MaterialTheme.colorScheme.onBackground
+                                                }
+                                            },
+                                        ) },
+                                        onClick = {
+                                            musicController.setPlaybackMod(mod)
+                                            modMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { musicController.skipToPrevious() },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipPrevious,
+                                contentDescription = "Previous",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
 
-                    // Previous
-                    IconButton(
-                        onClick = { musicController.skipToPrevious() },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SkipPrevious,
-                            contentDescription = "Previous",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    // Play/Pause
+                    // Play/Pause centered
                     IconButton(
                         onClick = { musicController.togglePlayPause() },
                         modifier = Modifier
@@ -281,78 +309,58 @@ fun FullPlayer(
                         )
                     }
 
-                    // Next
-                    IconButton(
-                        onClick = { musicController.skipToNext() },
-                        modifier = Modifier.size(48.dp)
+                    // Right cluster: Next + Mode
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.SkipNext,
-                            contentDescription = "Next",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    // Loop/Shuffle Toggle (Cycle)
-                    IconButton(onClick = {
-                        // Cycle Logic: Sequence -> Random -> Single -> Sequence...
-                        // Current state logic:
-                        // Random = Shuffle ON
-                        // Single = Repeat ONE
-                        // Sequence = Shuffle OFF, Repeat ALL (default)
-                        
-                        if (shuffleModeEnabled) {
-                            // Random -> Single
-                            musicController.toggleShuffleMode() // Turn off shuffle
-                            // Toggle repeat to ONE? No, toggleRepeatMode cycles OFF->ALL->ONE.
-                            // We need specific setters. But MusicController has toggles.
-                            // Let's assume user cycles via UI interaction.
-                            // To get to Single (RepeatOne), we need to toggle repeat.
-                            // This unified button is tricky with separate toggles.
-                            // Let's implement the logic:
-                            // If Shuffle -> Turn Shuffle Off, Set Repeat One
-                            // If Repeat One -> Set Repeat All
-                            // Else (Sequence) -> Turn Shuffle On
-                            
-                            // Implementation using existing toggles might be messy.
-                            // Ideally MusicController should expose setMode methods.
-                            // Using toggles:
-                            musicController.toggleRepeatMode() // ALL -> ONE (assuming we were in ALL)
-                        } else if (repeatMode == Player.REPEAT_MODE_ONE) {
-                            // Single -> Sequence
-                            musicController.toggleRepeatMode() // ONE -> OFF -> ALL (wait, toggle cycle is OFF->ALL->ONE->OFF)
-                            // Actually my toggle logic was OFF->ALL->ONE->OFF.
-                            // Sequence is ALL.
-                            // Single is ONE.
-                            // So ONE -> OFF. We want ALL. So call twice?
-                            // Or just add setRepeatMode to controller.
-                            // Let's rely on standard toggles for now, simpler.
-                            // Actually, I'll just make this button toggle SHUFFLE for now, and have a separate repeat button if needed,
-                            // OR I'll update MusicController to have explicit setters later.
-                            // For now, let's just make it toggle Shuffle.
-                            musicController.toggleShuffleMode()
-                        } else {
-                            // Sequence -> Random
-                            musicController.toggleShuffleMode()
+                        IconButton(
+                            onClick = { musicController.skipToNext() },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipNext,
+                                contentDescription = "Next",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
-                    }) {
-                        // Icon selection
-                        val icon = when {
-                            shuffleModeEnabled -> Icons.Default.Shuffle
-                            repeatMode == Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
-                            else -> Icons.Default.Repeat // Sequence
+                        IconButton(onClick = {
+                            when {
+                                shuffleModeEnabled -> {
+                                    // Random -> Single
+                                    musicController.setShuffleMode(false)
+                                    musicController.setRepeatMode(Player.REPEAT_MODE_ONE)
+                                }
+                                repeatMode == Player.REPEAT_MODE_ONE -> {
+                                    // Single -> Sequence (repeat all, shuffle off)
+                                    musicController.setShuffleMode(false)
+                                    musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
+                                }
+                                else -> {
+                                    // Sequence -> Random (shuffle on, repeat all)
+                                    musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
+                                    musicController.setShuffleMode(true)
+                                }
+                            }
+                        }) {
+                            val icon = when {
+                                shuffleModeEnabled -> Icons.Default.Shuffle
+                                repeatMode == Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
+                                else -> Icons.Default.Repeat // Sequence
+                            }
+                            val tint = if (shuffleModeEnabled || repeatMode == Player.REPEAT_MODE_ONE) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onBackground
+                                
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = "Mode",
+                                tint = tint
+                            )
                         }
-                        val tint = if (shuffleModeEnabled || repeatMode == Player.REPEAT_MODE_ONE) 
-                            MaterialTheme.colorScheme.primary 
-                        else 
-                            MaterialTheme.colorScheme.onBackground
-                            
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = "Mode",
-                            tint = tint
-                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(48.dp))
@@ -369,14 +377,14 @@ private fun formatTime(timeMs: Long): String {
 }
 
 private fun modLabel(mod: PlaybackMod): String = when (mod) {
-    PlaybackMod.NONE -> "No Mod"
+    PlaybackMod.NONE -> "NM"
     PlaybackMod.DOUBLE_TIME -> "DT"
     PlaybackMod.NIGHT_CORE -> "NC"
 }
 
 private fun modMenuLabel(mod: PlaybackMod): String = when (mod) {
-    PlaybackMod.NONE -> "No Mod (1.0x)"
-    PlaybackMod.DOUBLE_TIME -> "DT · 1.5x speed, keep pitch"
-    PlaybackMod.NIGHT_CORE -> "NC · 1.5x speed, pitch up"
+    PlaybackMod.NONE -> "NO MOD"
+    PlaybackMod.DOUBLE_TIME -> "DOUBLE TIME"
+    PlaybackMod.NIGHT_CORE -> "NIGHT CORE"
 }
 

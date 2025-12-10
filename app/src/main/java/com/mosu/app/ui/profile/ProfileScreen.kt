@@ -6,12 +6,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.data.SettingsManager
@@ -40,6 +42,15 @@ fun ProfileScreen(
     val clientId by settingsManager.clientId.collectAsState(initial = "")
     val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
     val playedFilterMode by settingsManager.playedFilterMode.collectAsState(initial = "url")
+    val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
+    val searchAnyEnabled by settingsManager.searchAnyEnabled.collectAsState(initial = false)
+    val language by settingsManager.language.collectAsState(initial = "en")
+    var languageMenuExpanded by remember { mutableStateOf(false) }
+    val languageOptions = listOf(
+        "en" to "English",
+        "zh-CN" to "简体中文",
+        "zh-TW" to "繁体中文"
+    )
     
     val scope = rememberCoroutineScope()
 
@@ -96,6 +107,37 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { showSettingsDialog = true }) {
                         Text("Configure Credentials")
+                    }
+                }
+            }
+
+            // Language
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Language", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box {
+                        OutlinedButton(onClick = { languageMenuExpanded = true }) {
+                            Text(languageLabel(language))
+                        }
+                        DropdownMenu(
+                            expanded = languageMenuExpanded,
+                            onDismissRequest = { languageMenuExpanded = false }
+                        ) {
+                            languageOptions.forEach { (code, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        scope.launch { settingsManager.saveLanguage(code) }
+                                        languageMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -179,59 +221,130 @@ fun ProfileScreen(
                 }
             }
             
-            // Played Filter Mode Setting
+            // Default Search View
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Played Filter Mode", style = MaterialTheme.typography.titleMedium)
+                    Text("Default Search View", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     val isSupporter = userInfo?.isSupporter ?: false
-                    val isLocked = !isSupporter
-                    
-                    // Auto-set to most_played for non-supporters (only when user info is loaded)
-                    LaunchedEffect(userInfo) {
-                        if (userInfo != null && !isSupporter && playedFilterMode == "url") {
-                            settingsManager.savePlayedFilterMode("most_played")
+                    val options = if (isSupporter) {
+                        listOf("played", "recent", "favorite", "most_played", "all")
+                    } else {
+                        listOf("recent", "favorite", "most_played", "all")
+                    }
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    val label = when (defaultSearchView) {
+                        "played" -> "Played"
+                        "recent" -> "Recent"
+                        "favorite" -> "Favorite"
+                        "most_played" -> "Most Played"
+                        else -> "All"
+                    }
+                    OutlinedButton(onClick = { menuExpanded = true }) {
+                        Text(label)
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Select default")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        options.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(
+                                    when (option) {
+                                        "played" -> "Played"
+                                        "recent" -> "Recent"
+                                        "favorite" -> "Favorite"
+                                        "most_played" -> "Most Played"
+                                        else -> "All"
+                                    }
+                                ) },
+                                onClick = {
+                                    menuExpanded = false
+                                    scope.launch { settingsManager.saveDefaultSearchView(option) }
+                                }
+                            )
                         }
                     }
-                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "This controls which view Search opens with.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+
+            // Include Unranked/Loved/Any Status
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Include unranked maps", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Use URL-based filtering", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                if (isLocked) "Locked: Requires osu! supporter" else "Recommended for supporters",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isLocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
-                            )
-                        }
                         Switch(
-                            checked = if (isLocked) false else playedFilterMode == "url", // Force OFF position for non-supporters
-                            onCheckedChange = { checked ->
-                                if (!isLocked) {
-                                    scope.launch {
-                                        settingsManager.savePlayedFilterMode(if (checked) "url" else "most_played")
-                                    }
-                                }
-                            },
-                            enabled = !isLocked
+                            checked = searchAnyEnabled,
+                            onCheckedChange = { enabled ->
+                                scope.launch { settingsManager.saveSearchAnyEnabled(enabled) }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(15.dp))
+                        Text(
+                            text = "Allow searching all statuses (may conflict with Favorite).",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
                     }
-                    
-                    if (isLocked) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Currently using: Most Played data",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Favorite filter takes priority if both apply.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+
+            // Language
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Language", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box {
+                        OutlinedButton(onClick = { languageMenuExpanded = true }) {
+                            Text(languageLabel(language))
+                        }
+                        DropdownMenu(
+                            expanded = languageMenuExpanded,
+                            onDismissRequest = { languageMenuExpanded = false }
+                        ) {
+                            languageOptions.forEach { (code, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        scope.launch { settingsManager.saveLanguage(code) }
+                                        languageMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -330,5 +443,11 @@ fun ProfileScreen(
             }
         )
     }
+}
+
+private fun languageLabel(code: String): String = when (code) {
+    "zh-CN" -> "简体中文"
+    "zh-TW" -> "繁体中文"
+    else -> "English"
 }
 

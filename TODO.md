@@ -1,5 +1,6 @@
 # Bug Fix
 1. The album cover displayed in the miniplayer & fullplayer is different from phone's music player. This only happens when downloading processing merged beatmaps data. See if there is any logical mistake in merging that would cause this.
+2. In search page info popup, when there is only one diff, do not show range, instead, show a single star diff. 
 
 # UI improvement (implement 3 first)
 ~~1. the "top bar" which is where the status bar of the phone sits, is now colored grey for some reason. Make it blend in.~~

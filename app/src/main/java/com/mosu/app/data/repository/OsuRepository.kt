@@ -16,9 +16,6 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
     
     private val redirectUri = "mosu://callback"
     
-    // Cache TTL: 5 minutes
-    private val CACHE_TTL_MS = 5 * 60 * 1000L
-
     suspend fun exchangeCodeForToken(code: String, clientId: String, clientSecret: String): OsuTokenResponse {
         return api.getToken(
             clientId = clientId,
@@ -73,8 +70,11 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         playedFilterMode: String = "url", 
         userId: String? = null,
         isSupporter: Boolean = true, // Assume supporter unless specified
-        searchAny: Boolean = false
+        searchAny: Boolean = false,
+        forceRefresh: Boolean = false
     ): PlayedBeatmapsResult {
+        val safeQuery = sanitizeQuery(searchQuery)
+
         // Explicit most_played view
         if (filterMode == "most_played" && userId != null && cursorString == null) {
             val mostPlayedData = api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100)
@@ -98,8 +98,9 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             val beatmaps = sortedData.map { it.beatmapset }
             val searchFiltered = if (!searchQuery.isNullOrEmpty()) {
                 beatmaps.filter {
-                    it.title.contains(searchQuery, ignoreCase = true) ||
-                        it.artist.contains(searchQuery, ignoreCase = true)
+                    val query = safeQuery ?: return@filter true
+                    it.title.contains(query, ignoreCase = true) ||
+                        it.artist.contains(query, ignoreCase = true)
                 }
             } else {
                 beatmaps
@@ -146,8 +147,9 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             // Apply search query filter if specified
             val searchFiltered = if (!searchQuery.isNullOrEmpty()) {
                 beatmaps.filter { 
-                    it.title.contains(searchQuery, ignoreCase = true) || 
-                    it.artist.contains(searchQuery, ignoreCase = true)
+                    val query = safeQuery ?: return@filter true
+                    it.title.contains(query, ignoreCase = true) || 
+                    it.artist.contains(query, ignoreCase = true)
                 }
             } else {
                 beatmaps
@@ -158,12 +160,12 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         
         // Otherwise use URL-based filtering (original logic)
         // Generate cache key (only cache first page without search query)
-        val cacheKey = "played_genre_${genreId ?: "all"}_query_${searchQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_initial"
+        val cacheKey = "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_initial"
         
         // Only use cache for initial load (no cursor) without search query
-        if (cursorString == null && searchQuery.isNullOrEmpty()) {
+        if (cursorString == null && safeQuery.isNullOrEmpty() && !forceRefresh) {
             val cached = searchCacheDao?.getCachedResult(cacheKey)
-            if (cached != null && (System.currentTimeMillis() - cached.cachedAt) < CACHE_TTL_MS) {
+            if (cached != null) {
                 // Cache hit and fresh
                 val type = object : TypeToken<List<BeatmapsetCompact>>() {}.type
                 val results: List<BeatmapsetCompact> = gson.fromJson(cached.resultsJson, type)
@@ -178,7 +180,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             played = if (filterMode == "played") "played" else null,
             genre = genreId,
             cursorString = cursorString,
-            query = searchQuery,
+            query = safeQuery,
             status = when {
                 filterMode == "favorite" -> "favourites"
                 searchAny -> "any"
@@ -187,20 +189,53 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         )
         
         // Save to cache only for initial load without search
-        if (cursorString == null && searchQuery.isNullOrEmpty()) {
+        if (cursorString == null && safeQuery.isNullOrEmpty()) {
             searchCacheDao?.let {
-                val json = gson.toJson(response.beatmapsets)
+                val existing = it.getCachedResult(cacheKey)
+                val existingList = existing?.resultsJson?.let { json ->
+                    val type = object : TypeToken<List<BeatmapsetCompact>>() {}.type
+                    runCatching { gson.fromJson<List<BeatmapsetCompact>>(json, type) }.getOrDefault(emptyList())
+                } ?: emptyList()
+                val toStore = if (filterMode == "played") {
+                    // Merge while keeping existing order, appending only new ids
+                    val seenIds = existingList.map { bm -> bm.id }.toMutableSet()
+                    val merged = existingList.toMutableList()
+                    response.beatmapsets.forEach { bm ->
+                        if (seenIds.add(bm.id)) merged.add(bm)
+                    }
+                    merged
+                } else {
+                    // Preserve API order for other modes (e.g., favorite)
+                    response.beatmapsets
+                }
+
                 it.insertCache(SearchCacheEntity(
                     queryKey = cacheKey,
-                    resultsJson = json,
+                    resultsJson = gson.toJson(toStore),
                     cursorString = response.cursorString // Cache the cursor too!
                 ))
-                // Clean up old cache entries
-                it.clearExpired(System.currentTimeMillis() - CACHE_TTL_MS)
             }
         }
         
         return PlayedBeatmapsResult(response.beatmapsets, response.cursorString)
+    }
+
+    private fun sanitizeQuery(query: String?): String? {
+        val trimmed = query?.trim() ?: return null
+        if (trimmed.isEmpty()) return null
+        val noControl = trimmed.replace(Regex("[\\p{Cntrl}]"), "")
+        val cleaned = buildString {
+            noControl.forEach { ch ->
+                when {
+                    ch.isLetterOrDigit() -> append(ch)
+                    ch.isWhitespace() -> append(' ')
+                    ch in listOf('-', '_', '.', ',', '\'', '"', '/', ':', ';', '!', '?', '(', ')', '[', ']', '{', '}', '+', '@', '#') -> append(ch)
+                    else -> append(' ')
+                }
+            }
+        }
+        val collapsedSpaces = cleaned.replace(Regex("\\s+"), " ").trim()
+        return collapsedSpaces.ifEmpty { null }
     }
 }
 

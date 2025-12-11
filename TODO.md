@@ -1,5 +1,5 @@
 # Bug Fix
-
+1. Order of beatmaps displayed in Favorite view is not order to the chronological order that the user favorites the map, which is supposed to be the default ordering of the returned data.
 
 # UI improvement (implement 3 first)
 ~~1. the "top bar" which is where the status bar of the phone sits, is now colored grey for some reason. Make it blend in.~~
@@ -27,11 +27,11 @@
     ~~1. Implement `single`/`loop`/`random`(that loops) feature. As of current, the playlist is the whole library, i.e., loop/random applies to the whole library. The library genre feature should work here to change the playlist.~~
 4. Search page updates
     ~~1. When a song is downloaded is clicked in search page, it is played.~~
-    ~~2. Implement filter by `favorite`(extracted from user's osu account data) (it should be a part of the `played`/`all` button). So now it alternates between `played`, `all`, `favorite`.`~~
-    3. Add an manual query cache refresh action instead of refreshing every 5 mins. The action is: when you are at the top of the song list, dragging the song list downwards reveals a refresh icon and when dragged sufficiently and released, a new query request will be made. Do not remove cached query list every 5 min, store query list forever and when refreshed, compare new query result to existing list and only add new songs to the played query list database.
+    ~~2. Implement filter by `favorite`(extracted from user's osu account data) (it should be a part of the `played`/`all` button). So now it alternates between `played`, `all`, `favorite`.`~~    
+    ~~3. Add an manual query cache refresh action instead of refreshing every 5 mins. The action is: when you are at the top of the song list, dragging the song list downwards reveals a refresh icon and when dragged sufficiently and released, a new query request will be made. Do not remove cached query list every 5 min, store query list forever and when refreshed, compare new query result to existing list and only add new songs to the played query list database.~~
     ~~4. Sort played query list by data played, which is quite difficult to implement I'll have to think about how to use osu apis and mechanism to achieve this.~~
-    5. In search page, when displaying the result query, merge songs with same title. for detail on how it works, please reference the merge method in favorite queries. Also we do not need to concern about beatmaps difficulty name here because they are not included in the data returned. You should use the album and song info from the very first song you got with that title. When load more is pressed, it should also skip newly returned songs that already has a song with exact same title present.
-    6. Avoid special character injections, and avoid directly adding special character to the http request.
+    ~~5. In search page, when displaying the result query, merge songs with same title. for detail on how it works, please reference the merge method in favorite queries. Also we do not need to concern about beatmaps difficulty name here because they are not included in the data returned. You should use the album and song info from the very first song you got with that title. When load more is pressed, it should also skip newly returned songs that already has a song with exact same title present.~~
+    ~~6. Avoid special character injections, and avoid directly adding special character to the http request.~~
 5. Library update
     ~~1. Implement library filter. Same as the search genre filter.~~
     ~~2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.~~
@@ -43,13 +43,13 @@
 
 
 # Bugs fixed
-```
-1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
+<!--
+ 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
 2. fix `load more` button not shown when exiting search page and coming back quickly. I suggest that we keep the load more data to cache so it's easier when searching intensively. Also check if this caching change fixes this problem, because the button eventually comes back, and I'm suspecting it is the caching check every 5mins that fixes the missing button.
 3. lock played filter to search from user's most play song data when user is not supporter feature from new feature No.9. (implement feature 1.2 to fix this bug)
 4. beatmaps have cover images in subdirectories (like sb/bg.jpg), but the extractor isn't handling these paths correctly.
 1. the mod button still has will change the previous button's position when it is changed. 
 2. the miniplay would disppear for a sec before showing again when a new song is clicked.
 3. the nav bar would show when song is paused in player view
-1. Fix dragging progressbar does not update its position immediately. It waits for the music to play to update the pos.
-```
+1. Fix dragging progressbar does not update its position immediately. It waits for the music to play to update the pos. 
+-->

@@ -1,9 +1,15 @@
 package com.mosu.app.ui.search
 
+import android.content.Context
+import android.os.Vibrator
+import android.os.Build
+import android.os.VibrationEffect
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +23,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -99,7 +109,7 @@ data class DownloadProgress(
     val status: String // "Downloading", "Extracting", "Done", "Error"
 )
 
-@OptIn(ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     authCode: String?,
@@ -296,6 +306,33 @@ fun SearchScreen(
         if (downloadedBeatmapSetIds.isEmpty()) return merged
         val (downloaded, others) = merged.partition { it.id in downloadedBeatmapSetIds }
         return downloaded + others
+    }
+
+    // Vibration helper function
+    fun vibrate() {
+        try {
+            Log.d("SearchScreen", "Attempting to vibrate")
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            if (vibrator == null) {
+                Log.d("SearchScreen", "Vibrator service not available")
+                return
+            }
+            if (!vibrator.hasVibrator()) {
+                Log.d("SearchScreen", "Device has no vibrator")
+                return
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                Log.d("SearchScreen", "Vibrated with VibrationEffect")
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(50)
+                Log.d("SearchScreen", "Vibrated with deprecated API")
+            }
+        } catch (e: Exception) {
+            // Log error or ignore if vibration fails
+            Log.e("SearchScreen", "Vibration failed", e)
+        }
     }
 
     fun filterMetadataFor(list: List<BeatmapsetCompact>, metadata: Map<Long, Pair<Int, Int>>): Map<Long, Pair<Int, Int>> {
@@ -753,49 +790,83 @@ fun SearchScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                            .graphicsLayer { alpha = rowAlpha }
-                                .clickable {
-                                    infoDialogVisible = true
-                                    infoLoading = true
-                                    infoError = null
-                                    infoTarget = map
-                                    infoBeatmaps = emptyList()
-                                    val key = mergeKey(map)
-                                    infoMergedSetIds = mergeGroups[key]?.toList() ?: listOf(map.id)
-                                    infoSetCreators = emptyMap()
-                                    val token = accessToken
-                                    if (token == null) {
-                                        infoError = context.getString(R.string.search_info_login_required)
-                                        infoLoading = false
-                                    } else {
-                                        scope.launch {
-                                            try {
-                                                val allBeatmaps = mutableListOf<BeatmapDetail>()
-                                                val creators = mutableMapOf<Long, String>()
-                                                val ids = infoMergedSetIds.ifEmpty { listOf(map.id) }
-                                                ids.forEach { setId ->
-                                                    try {
-                                                        val detail = repository.getBeatmapsetDetail(
-                                                            accessToken = token,
-                                                            beatmapsetId = setId
-                                                        )
-                                                        allBeatmaps += detail.beatmaps
-                                                        creators[detail.id] = detail.creator
-                                                    } catch (e: Exception) {
-                                                        // keep going, surface error at end
-                                                        infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
-                                                    }
+                                .graphicsLayer { alpha = rowAlpha }
+                                .combinedClickable(
+                                    onClick = {
+                                        // Short press: play if downloaded
+                                        if (isDownloaded) {
+                                            scope.launch {
+                                                // Get the beatmap entities for this set from database
+                                                val beatmaps = withContext(Dispatchers.IO) {
+                                                    db.beatmapDao().getTracksForSet(map.id)
                                                 }
-                                                infoBeatmaps = allBeatmaps
-                                                infoSetCreators = creators
-                                            } catch (e: Exception) {
-                                                infoError = e.message ?: context.getString(R.string.search_info_load_error)
-                                            } finally {
-                                                infoLoading = false
+                                                if (beatmaps.isNotEmpty()) {
+                                                    // Play the first track and use the whole list as playlist
+                                                    musicController.playSong(beatmaps.first(), beatmaps)
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.search_play_not_downloaded),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.search_play_not_downloaded),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    onLongClick = {
+                                        // Long press: show info dialog with vibration
+                                        Log.d("SearchScreen", "Long press detected, showing info dialog")
+                                        // Temporarily remove vibration to test if it's the cause of crash
+                                        // vibrate()
+                                        infoDialogVisible = true
+                                        infoLoading = true
+                                        infoError = null
+                                        infoTarget = map
+                                        infoBeatmaps = emptyList()
+                                        val key = mergeKey(map)
+                                        infoMergedSetIds = mergeGroups[key]?.toList() ?: listOf(map.id)
+                                        infoSetCreators = emptyMap()
+                                        val token = accessToken
+                                        if (token == null) {
+                                            infoError = context.getString(R.string.search_info_login_required)
+                                            infoLoading = false
+                                        } else {
+                                            scope.launch {
+                                                try {
+                                                    val allBeatmaps = mutableListOf<BeatmapDetail>()
+                                                    val creators = mutableMapOf<Long, String>()
+                                                    val ids = infoMergedSetIds.ifEmpty { listOf(map.id) }
+                                                    ids.forEach { setId ->
+                                                        try {
+                                                            val detail = repository.getBeatmapsetDetail(
+                                                                accessToken = token,
+                                                                beatmapsetId = setId
+                                                            )
+                                                            allBeatmaps += detail.beatmaps
+                                                            creators[detail.id] = detail.creator
+                                                        } catch (e: Exception) {
+                                                            // keep going, surface error at end
+                                                            infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
+                                                        }
+                                                    }
+                                                    infoBeatmaps = allBeatmaps
+                                                    infoSetCreators = creators
+                                                } catch (e: Exception) {
+                                                    infoError = e.message ?: context.getString(R.string.search_info_load_error)
+                                                } finally {
+                                                    infoLoading = false
+                                                }
                                             }
                                         }
+                                        true // Consume the long click
                                     }
-                                }
+                                )
                                 .padding(vertical = 8.dp)
                                 // Apply horizontal padding: 0 for most_played (full width), 16dp for others
                                 .padding(horizontal = if (metadata != null) 0.dp else 16.dp)
@@ -1093,39 +1164,53 @@ fun SearchScreen(
                     }
                 },
                 text = {
-                    Column {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp),
+                        state = rememberLazyListState()
+                    ) {
                         if (infoCoverEnabled) {
-                            AsyncImage(
-                                model = target.covers.listUrl,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(160.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            item {
+                                AsyncImage(
+                                    model = target.covers.listUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(160.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
                         }
+                        
                         if (infoLoading) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                }
                             }
                         } else if (infoError != null) {
-                            Text(
-                                text = infoError ?: "",
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            item {
+                                Text(
+                                    text = infoError ?: "",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         } else if (grouped.isEmpty()) {
-                            Text(
-                                text = stringResource(id = R.string.info_no_details),
-                                color = MaterialTheme.colorScheme.secondary
-                            )
+                            item {
+                                Text(
+                                    text = stringResource(id = R.string.info_no_details),
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
                         } else {
                             val bySet = infoBeatmaps.groupBy { it.beatmapsetId }
-                            bySet.forEach { (setId, list) ->
+                            items(bySet.entries.toList()) { (setId, list) ->
                                 val modes = list.groupBy { it.mode }
                                 val modeLabels = modes.keys.joinToString { modeLabel(it) }
                                 val starMin = list.minOfOrNull { it.difficultyRating } ?: 0f
@@ -1155,7 +1240,11 @@ fun SearchScreen(
                                                 style = MaterialTheme.typography.bodySmall
                                             )
                                             Text(
-                                                text = stringResource(id = R.string.info_star_range, starMin, starMax),
+                                                text = if (list.size == 1) {
+                                                    stringResource(id = R.string.info_star_single, starMin)
+                                                } else {
+                                                    stringResource(id = R.string.info_star_range, starMin, starMax)
+                                                },
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.secondary
                                             )

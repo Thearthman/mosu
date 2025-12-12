@@ -4,6 +4,7 @@
     <string name="info_cover_desc">控制搜索信息弹窗是否显示谱面封面。</string>
     <string name="info_no_details">暂无难度详情。</string>
     <string name="info_star_range">星级范围：%1$.1f - %2$.1f</string>
+    <string name="info_star_single">星级：%1$.1f</string>
     <string name="info_diff_count">%1$d 个难度</string>
     <string name="info_modes">模式：%1$s</string>
     <string name="library_title">曲库</string>
@@ -62,9 +63,48 @@
     <string name="search_filter_played">已玩</string>
     <string name="search_filter_recent">最近</string>
     <string name="search_filter_favorite">收藏</string>
-    <string name="search_filter_most_played">最常播放</string>
+    <string name="search_filter_most_played">最多游玩</string>
     <string name="search_filter_all">全部</string>
     <string name="search_filter_select">选择</string>
     <string name="search_cd_filter">筛选</string>
+    <string name="search_play_not_downloaded">歌曲未下载</string>
+    <!-- Profile page strings -->
+    <string name="profile_title">个人</string>
+    <string name="profile_oauth_settings_title">osu! OAuth 设置</string>
+    <string name="profile_client_id_label">客户端 ID：%1$s</string>
+    <string name="profile_client_id_configured">已配置 ✓</string>
+    <string name="profile_client_id_not_set">未设置</string>
+    <string name="profile_client_secret_label">客户端密钥：%1$s</string>
+    <string name="profile_client_secret_configured">已配置 ✓</string>
+    <string name="profile_client_secret_not_set">未设置</string>
+    <string name="profile_configure_credentials">配置凭证</string>
+    <string name="profile_update_credentials">更新凭证</string>
+    <string name="profile_login_button">使用 osu! 登录</string>
+    <string name="profile_login_prompt">请在上方配置您的 OAuth 凭证以登录</string>
+    <string name="profile_statistics_title">统计数据</string>
+    <string name="profile_downloaded_songs_label">已下载歌曲：%1$d</string>
+    <string name="profile_id_prefix">ID：%1$s</string>
+    <string name="profile_default_search_view_title">默认搜索视图</string>
+    <string name="profile_default_search_view_desc">控制搜索页面打开时的默认视图。</string>
+    <string name="profile_include_unranked_title">包含未评级谱面</string>
+    <string name="profile_include_unranked_desc">允许搜索所有状态（可能与“收藏”筛选冲突。同时启用时，“收藏”筛选优先。）</string>
+    <string name="profile_language_title">语言</string>
+    <string name="profile_equalizer_title">均衡器</string>
+    <string name="profile_coming_soon">即将推出</string>
+    <string name="profile_recent_activity_heatmap_title">近期活动热力图</string>
+    <string name="profile_logout_button">退出登录</string>
+    <!-- OAuth Dialog strings -->
+    <string name="profile_oauth_dialog_title">OAuth 凭证</string>
+    <string name="profile_oauth_dialog_message">请输入您的 osu! OAuth 应用程序凭证：</string>
+    <string name="profile_oauth_dialog_client_id_hint">客户端 ID</string>
+    <string name="profile_oauth_dialog_client_secret_hint">客户端密钥</string>
+    <string name="profile_oauth_dialog_help">获取地址：osu.ppy.sh/home/account/edit</string>
+    <string name="profile_oauth_dialog_save">保存</string>
+    <string name="profile_oauth_dialog_cancel">取消</string>
+    <!-- Language names -->
+    <string name="language_english">English</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_traditional_chinese">繁体中文</string>
+    <string name="profile_language_desc">选择应用显示语言</string>
 </resources>
 

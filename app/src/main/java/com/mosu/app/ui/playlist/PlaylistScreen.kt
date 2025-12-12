@@ -400,7 +400,7 @@ private fun PlaylistTrackRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onPlay() }
-            .padding(8.dp),
+            .padding(vertical = 12.dp, horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -411,19 +411,22 @@ private fun PlaylistTrackRow(
                 .clip(RoundedCornerShape(6.dp)),
             contentScale = ContentScale.Crop
         )
-        Column(modifier = Modifier.padding(start = 12.dp)) {
-            Text(text = track.title, fontWeight = FontWeight.SemiBold)
+        Column(
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .weight(1f)
+        ) {
+            Text(
+                text = track.title, 
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
             Text(
                 text = track.artist,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 1
             )
-        }
-        Spacer(modifier = Modifier.weight(1f))
-        OutlinedButton(onClick = { onPlay() }) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Play")
         }
     }
 }

@@ -4,6 +4,7 @@
     <string name="info_cover_desc">Toggle beatmap cover visibility in Search info dialog.</string>
     <string name="info_no_details">No difficulty details available.</string>
     <string name="info_star_range">Star range: %1$.1f - %2$.1f</string>
+    <string name="info_star_single">Star diff: %1$.1f</string>
     <string name="info_diff_count">%1$d difficulties</string>
     <string name="info_modes">Modes: %1$s</string>
     <string name="library_title">Library</string>
@@ -66,6 +67,45 @@
     <string name="search_filter_all">All</string>
     <string name="search_filter_select">Select</string>
     <string name="search_cd_filter">Filter</string>
+    <string name="search_play_not_downloaded">Song not downloaded</string>
     <string name="app_name">Mosu</string>
+    <!-- Profile page strings -->
+    <string name="profile_title">Profile</string>
+    <string name="profile_oauth_settings_title">osu! OAuth Settings</string>
+    <string name="profile_client_id_label">Client ID: %1$s</string>
+    <string name="profile_client_id_configured">Configured ✓</string>
+    <string name="profile_client_id_not_set">Not Set</string>
+    <string name="profile_client_secret_label">Client Secret: %1$s</string>
+    <string name="profile_client_secret_configured">Configured ✓</string>
+    <string name="profile_client_secret_not_set">Not Set</string>
+    <string name="profile_configure_credentials">Configure Credentials</string>
+    <string name="profile_update_credentials">Update Credentials</string>
+    <string name="profile_login_button">Login with osu!</string>
+    <string name="profile_login_prompt">Please configure your OAuth credentials above to login</string>
+    <string name="profile_statistics_title">Statistics</string>
+    <string name="profile_downloaded_songs_label">Downloaded Songs: %1$d</string>
+    <string name="profile_id_prefix">ID: %1$s</string>
+    <string name="profile_default_search_view_title">Default Search View</string>
+    <string name="profile_default_search_view_desc">This controls which view Search opens with.</string>
+    <string name="profile_include_unranked_title">Include unranked maps</string>
+    <string name="profile_include_unranked_desc">Allow searching all statuses (may conflict with Favorite. Favorite filter takes priority if both apply).</string>
+    <string name="profile_language_title">Language</string>
+    <string name="profile_equalizer_title">Equalizer</string>
+    <string name="profile_coming_soon">Coming Soon</string>
+    <string name="profile_recent_activity_heatmap_title">Recent Activity Heatmap</string>
+    <string name="profile_logout_button">Logout</string>
+    <!-- OAuth Dialog strings -->
+    <string name="profile_oauth_dialog_title">OAuth Credentials</string>
+    <string name="profile_oauth_dialog_message">Enter your osu! OAuth Application credentials:</string>
+    <string name="profile_oauth_dialog_client_id_hint">Client ID</string>
+    <string name="profile_oauth_dialog_client_secret_hint">Client Secret</string>
+    <string name="profile_oauth_dialog_help">Get these from: osu.ppy.sh/home/account/edit</string>
+    <string name="profile_oauth_dialog_save">Save</string>
+    <string name="profile_oauth_dialog_cancel">Cancel</string>
+    <!-- Language names -->
+    <string name="language_english">English</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_traditional_chinese">繁体中文</string>
+    <string name="profile_language_desc">Choose application display language</string>
 </resources>
 

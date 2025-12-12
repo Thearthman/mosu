@@ -1,6 +1,7 @@
 # Bug Fix
-1. The album cover displayed in the miniplayer & fullplayer is different from phone's music player. This only happens when downloading processing merged beatmaps data. See if there is any logical mistake in merging that would cause this.
-2. In search page info popup, when there is only one diff, do not show range, instead, show a single star diff. 
+1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
+2. Cannot download music in favorite page because proper mapping to beatmap link was not made. 
+
 
 # UI improvement (implement 3 first)
 ~~1. the "top bar" which is where the status bar of the phone sits, is now colored grey for some reason. Make it blend in.~~
@@ -10,6 +11,7 @@
 ~~5. Slider reshape into AM style.~~
 6. In Search page, Add a game mode label at the end of the composer's name's line. 
 7. Add playcount to info popup in search page.
+~~8. Removed Language settings, as this is now following Android system settings.~~
 
 # New Feature 
 1. Settings page update
@@ -37,7 +39,8 @@
     ~~6. Avoid special character injections, and avoid directly adding special character to the http request.~~
     ~~7. add info popup in search page when clicking beatmaps, should account for the following factors: merged song, not merged song. Account for the fact that beatmaps could be merged and also have multiple difficulties at the same time. The popup should contain difficulties for all merged beatmaps in this situation. Regarding the UIUX of individual song boxes: For each beatmap, it's box simply shows beatmap author,  game mode, star rating range(not displaying individual difficulties now). They can have multiple game mode and corresponding star rating range. When the box is clicked, it brings you to the beatmap's osu website ~~
     ~~8. Change merge algorithm: prioritize to display songs already in the library when merging. Also, when merging, the condition changes to not only should the title match exactly, the author has to match as well.~~
-    9. Add a preferred game mode setting in profile page and only show the preferred game mode if one beatmap has multiple game modes
+    ~~9. Change search page info popup to long press to trigger and reassign short press to play~~. 
+    10. Long press should trigger vibration when the menu pops up. 
 5. Library update
     ~~1. Implement library filter. Same as the search genre filter.~~
     ~~2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.~~
@@ -46,6 +49,7 @@
     ~~5. add right swipe to add to playlist action for every song that enter a menu displaying a list of playlist to add to. Should also be able to remove songs from playlists from here.~~
 6. Add Playlist page 
     ~~1. Add `Playlist` page which you can create album and put music into it. has a create album button on the top right. page view default to all album spreading out. Two albums per row and extends downwards. You can click into albums and the view changes to the album title on top with a play button next to it, with song list below. You can add song here, base on the add button on the top right. or play the album which when using loop/random will only loop the songs in the album.~~
+    2. Implement Playlist management system allowing for rearrangement(placement) of playlist and deletion of playlists.
 
 
 
@@ -61,4 +65,7 @@
 3. the nav bar would show when song is paused in player view
 1. Fix dragging progressbar does not update its position immediately. It waits for the music to play to update the pos. 
 1. Order of beatmaps displayed in Favorite view is not order to the chronological order that the user favorites the map, which is supposed to be the default ordering of the returned data.
+4. Search page info popups should be able to be scrolled.
+2. In search page info popup, when there is only one diff, do not show range, instead, show a single star diff. 
+4. Inside each playlist, there are some songs that have their play button squished probably because of a long title. Remove the Play button because clicking the song itself will lead to play.
 -->

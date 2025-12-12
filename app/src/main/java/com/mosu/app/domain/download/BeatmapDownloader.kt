@@ -29,7 +29,7 @@ class BeatmapDownloader(private val context: Context) {
         .followRedirects(true)
         .build()
 
-    private val nerinyanQueryParams = "?noVideo=true&noBg=false&NoHitsound=true&NoStoryboard=true"
+    private val nerinyanQueryParams = "?noVideo=true&noBg=false&NoHitsound=true&NoStoryboard=false"
 
     // Mirrors - Using well-known public mirrors
     private val mirrors = listOf(

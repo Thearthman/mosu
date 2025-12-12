@@ -87,7 +87,7 @@
     <string name="profile_default_search_view_title">默认搜索视图</string>
     <string name="profile_default_search_view_desc">控制搜索页面打开时的默认视图。</string>
     <string name="profile_include_unranked_title">包含未评级谱面</string>
-    <string name="profile_include_unranked_desc">允许搜索所有状态（可能与“收藏”筛选冲突。同时启用时，“收藏”筛选优先。）</string>
+    <string name="profile_include_unranked_desc">允许搜索所有状态（与“收藏”筛选同时启用时，“收藏”筛选优先。）</string>
     <string name="profile_language_title">语言</string>
     <string name="profile_equalizer_title">均衡器</string>
     <string name="profile_coming_soon">即将推出</string>

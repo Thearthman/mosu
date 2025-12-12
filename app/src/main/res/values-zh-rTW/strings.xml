@@ -87,7 +87,7 @@
     <string name="profile_default_search_view_title">預設搜尋檢視</string>
     <string name="profile_default_search_view_desc">控制搜尋頁面開啟時的預設檢視。</string>
     <string name="profile_include_unranked_title">包含未評級譜面</string>
-    <string name="profile_include_unranked_desc">允許搜尋所有狀態（可能與「最愛」篩選衝突。同時啟用時，「最愛」篩選優先。）</string>
+    <string name="profile_include_unranked_desc">允許搜尋所有狀態（與「最愛」同時啟用時，「最愛」篩選優先。）</string>
     <string name="profile_language_title">語言</string>
     <string name="profile_equalizer_title">均衡器</string>
     <string name="profile_coming_soon">即將推出</string>

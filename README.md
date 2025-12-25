@@ -3,12 +3,16 @@
 ## Introduction
 Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps, download them as songs, and play them offline with Media3/ExoPlayer. It uses mirrors for `.osz` downloads, extracts audio/cover art, and stores metadata in Room with cached search results for speed.
 
-## Features & Use Cases
-### Concise three page layout + apple music style player
-+- **Search**: OAuth-authenticated beatmap search with selectable views (Played, Recent, Favorite, Most Played, All) plus global include-unranked toggle; genre chips, collapsing header, cursor-based pagination, per-item download progress, checkmarks for downloaded, tap downloaded to play.
-+- **Library**: Albums expandable by beatmap set, genre filter, swipe-to-delete (removes files + DB), plays downloaded items, “Find current song” button to scroll/highlight the playing track.
-+- **Profile**: osu! login/logout, user info and downloaded count, default search view selector, include-unranked (s=any) toggle, enter/edit OAuth client ID/secret (stored via DataStore), language selector.
-+- **Player** (Full & Mini): Media3 playback with background service, MiniPlayer hides on Profile, tap MiniPlayer to expand, mod selector (NM/DT/NC with persistent choice), deterministic shuffle/repeat cycle.
+## UI and Page design
+<p align="center">
+  <img src="icons/player_view.jpg" width="300" alt="player view">
+  <img src="icons/search_page_1.jpg" width="300" alt="search page showing only played maps">
+  <img src="icons/library_page_2.jpg" width="300" alt="library page">
+</p>
+<p align="center">
+  <img src="icons/playlist_page.jpg" width="300" alt="playlist page">
+  <img src="icons/search_page_2.jpg" width="300" alt="search page showing all maps in osu">
+</p>
 
 
 ### Features

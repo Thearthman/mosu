@@ -24,12 +24,13 @@ data class BeatmapPlaycount(
 data class RecentScore(
     @SerializedName("id") val scoreId: Long? = null,
     @SerializedName("created_at") val createdAt: String?,
-    @SerializedName("beatmap") val beatmap: RecentBeatmap?
+    @SerializedName("beatmap") val beatmap: RecentBeatmap?,
+    @SerializedName("beatmapset") val beatmapset: BeatmapsetCompact?  // Primary source: beatmapset at score level
 )
 
 data class RecentBeatmap(
     @SerializedName("id") val id: Long,
-    @SerializedName("beatmapset") val beatmapset: BeatmapsetCompact
+    @SerializedName("beatmapset_id") val beatmapsetId: Long?  // Just the ID, not the full object
 )
 
 data class BeatmapsetCompact(

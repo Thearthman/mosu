@@ -341,7 +341,18 @@ fun SearchScreen(
         return metadata.filterKeys { it in allowedIds }
     }
 
-    suspend fun loadRecent() {
+    suspend fun loadRecent(forceRefresh: Boolean = false) {
+        // If database is empty or forceRefresh is true, fetch from API
+        val recentFromDb = db.recentPlayDao().getRecentPlays()
+        if ((recentFromDb.isEmpty() || forceRefresh) && accessToken != null && userId != null) {
+            try {
+                val recentEntities = repository.fetchRecentPlays(accessToken!!, userId!!, 100)
+                db.recentPlayDao().mergeNewPlays(recentEntities)
+            } catch (e: Exception) {
+                // Silently fail for now, will use existing data
+            }
+        }
+        
         val recent = db.recentPlayDao().getRecentPlays()
         val applied = applyLocalFilters(recent.map { it.toBeatmapset() })
         mergeGroups = buildMergeGroups(applied)
@@ -402,7 +413,7 @@ fun SearchScreen(
                                     accessToken = accessToken!!,
                                     userId = uid
                                 )
-                                db.recentPlayDao().replaceAll(fresh)
+                                db.recentPlayDao().mergeNewPlays(fresh)
                                 loadRecent()
                             } else {
                                 val result = repository.getPlayedBeatmaps(
@@ -1311,14 +1322,14 @@ fun SearchScreen(
                 val uid = userId ?: return@LaunchedEffect
                 try {
                     if (filterMode == "recent") {
-                        loadRecent()
+                        loadRecent(forceRefresh = true) // Force fetch from API on initial load
                     } else {
                         val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
-                    val deduped = dedupeByTitle(result.beatmaps)
-                    mergeGroups = buildMergeGroups(result.beatmaps)
-                    searchResults = deduped
-                    currentCursor = result.cursor
-                    searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
+                        val deduped = dedupeByTitle(result.beatmaps)
+                        mergeGroups = buildMergeGroups(result.beatmaps)
+                        searchResults = deduped
+                        currentCursor = result.cursor
+                        searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                     }
                 } catch (e: Exception) {
                     statusText = context.getString(R.string.search_error_prefix, e.message ?: "")

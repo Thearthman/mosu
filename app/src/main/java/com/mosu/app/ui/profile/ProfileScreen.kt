@@ -1,5 +1,9 @@
 package com.mosu.app.ui.profile
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -7,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -24,6 +31,7 @@ import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 @Composable
@@ -55,6 +63,10 @@ fun ProfileScreen(
         "zh-CN" to stringResource(R.string.language_simplified_chinese),
         "zh-TW" to stringResource(R.string.language_traditional_chinese)
     )
+    
+    // Token debug dialog state
+    var showTokenDialog by remember { mutableStateOf(false) }
+    var currentToken by remember { mutableStateOf<String?>(null) }
     
     val scope = rememberCoroutineScope()
 
@@ -97,7 +109,7 @@ fun ProfileScreen(
         if (accessToken == null) {
             // Not logged in - Show Settings and Login
             
-            // OAuth Settings Card - 重新设计为文本在左，按钮在右
+            // OAuth Settings Card - Fixed layout with consistent max width for text
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -107,10 +119,13 @@ fun ProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
+                    ) {
                         Text(stringResource(R.string.profile_oauth_settings_title), style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(4.dp))
                         val clientIdStatus = if (clientId.isNotEmpty()) stringResource(R.string.profile_client_id_configured) else stringResource(R.string.profile_client_id_not_set)
@@ -121,9 +136,15 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Button(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier.width(140.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
                     ) {
-                        Text(stringResource(R.string.profile_configure_credentials))
+                        Text(
+                            stringResource(R.string.profile_configure_credentials),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -133,7 +154,7 @@ fun ProfileScreen(
                 scope.launch { settingsManager.saveInfoCoverEnabled(checked) }
             }
 
-            // Language Card - 重新设计为文本在左，下拉菜单在右
+            // Language Card - Fixed layout with consistent max width for text
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -143,10 +164,13 @@ fun ProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
+                    ) {
                         Text(stringResource(R.string.profile_language_title), style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -156,12 +180,16 @@ fun ProfileScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(16.dp))
-                    Box {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
                         OutlinedButton(
                             onClick = { languageMenuExpanded = true },
-                            modifier = Modifier.width(120.dp)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(languageLabel(language), maxLines = 1)
+                            Text(languageLabel(language), maxLines = 1, modifier = Modifier.weight(1f))
                             Icon(Icons.Default.ArrowDropDown, contentDescription = "Select language")
                         }
                         DropdownMenu(
@@ -203,12 +231,18 @@ fun ProfileScreen(
                 }
             }
         } else {
-            // User Info Card (保持不变)
+            // User Info Card (clickable for token debug)
             userInfo?.let { user ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp)
+                        .clickable {
+                            scope.launch {
+                                currentToken = tokenManager.accessToken.firstOrNull()
+                                showTokenDialog = true
+                            }
+                        }
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp),
@@ -243,7 +277,7 @@ fun ProfileScreen(
                 }
             }
 
-            // Settings Card (Logged in version) - 重新设计为文本在左，按钮在右
+            // Settings Card (Logged in version) - Fixed layout with consistent max width for text
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -253,10 +287,13 @@ fun ProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
+                    ) {
                         Text(stringResource(R.string.profile_oauth_settings_title), style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(4.dp))
                         val clientIdDisplay = if (clientId.isNotEmpty()) "${clientId.take(8)}..." else stringResource(R.string.profile_client_id_not_set)
@@ -267,9 +304,15 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Button(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier.width(140.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
                     ) {
-                        Text(stringResource(R.string.profile_update_credentials))
+                        Text(
+                            stringResource(R.string.profile_update_credentials),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -279,7 +322,7 @@ fun ProfileScreen(
                 scope.launch { settingsManager.saveInfoCoverEnabled(checked) }
             }
             
-            // Default Search View - 重新设计为文本在左，交互元素在右
+            // Default Search View - Fixed layout with consistent max width for text
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -289,10 +332,13 @@ fun ProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
+                    ) {
                         Text(
                             stringResource(R.string.profile_default_search_view_title), 
                             style = MaterialTheme.typography.titleMedium
@@ -320,12 +366,16 @@ fun ProfileScreen(
                         else -> stringResource(R.string.search_filter_all)
                     }
                     
-                    Box {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
                         OutlinedButton(
                             onClick = { menuExpanded = true },
-                            modifier = Modifier.width(120.dp)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(label, maxLines = 1)
+                            Text(label, maxLines = 1, modifier = Modifier.weight(1f))
                             Icon(Icons.Default.ArrowDropDown, contentDescription = "Select default")
                         }
                         DropdownMenu(
@@ -354,91 +404,45 @@ fun ProfileScreen(
                 }
             }
 
-            // Include Unranked/Loved/Any Status - 重新设计为文本在左，开关在右
+            // Include Unranked/Loved/Any Status - Fixed layout with consistent max width for text
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                stringResource(R.string.profile_include_unranked_title), 
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.profile_include_unranked_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Switch(
-                            checked = searchAnyEnabled,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsManager.saveSearchAnyEnabled(enabled) }
-                            }
+                        Text(
+                            stringResource(R.string.profile_include_unranked_title), 
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.profile_include_unranked_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Switch(
+                        checked = searchAnyEnabled,
+                        onCheckedChange = { enabled ->
+                            scope.launch { settingsManager.saveSearchAnyEnabled(enabled) }
+                        }
+                    )
                 }
             }
-
-            // Language Card - 重新设计为文本在左，下拉菜单在右
-//            Card(
-//                modifier = Modifier
-//                    .fillMaxWidth()
-//                    .padding(bottom = 16.dp),
-//            ) {
-//                Row(
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .padding(16.dp),
-//                    horizontalArrangement = Arrangement.SpaceBetween,
-//                    verticalAlignment = Alignment.CenterVertically
-//                ) {
-//                    Column(modifier = Modifier.weight(1f)) {
-//                        Text(stringResource(R.string.profile_language_title), style = MaterialTheme.typography.titleMedium)
-//                        Spacer(modifier = Modifier.height(4.dp))
-//                        Text(
-//                            stringResource(R.string.profile_language_desc),
-//                            style = MaterialTheme.typography.bodySmall,
-//                            color = MaterialTheme.colorScheme.secondary
-//                        )
-//                    }
-//                    Spacer(modifier = Modifier.width(16.dp))
-//                    Box {
-//                        OutlinedButton(
-//                            onClick = { languageMenuExpanded = true },
-//                            modifier = Modifier.width(120.dp)
-//                        ) {
-//                            Text(languageLabel(language), maxLines = 1)
-//                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Select language")
-//                        }
-//                        DropdownMenu(
-//                            expanded = languageMenuExpanded,
-//                            onDismissRequest = { languageMenuExpanded = false }
-//                        ) {
-//                            languageOptions.forEach { (code, label) ->
-//                                DropdownMenuItem(
-//                                    text = { Text(label) },
-//                                    onClick = {
-//                                        scope.launch { settingsManager.saveLanguage(code) }
-//                                        languageMenuExpanded = false
-//                                    }
-//                                )
-//                            }
-//                        }
-//                    }
-//                }
-//            }
 
             // Placeholder Cards
             Card(
@@ -534,6 +538,71 @@ fun ProfileScreen(
             }
         )
     }
+    
+    // Token Debug Dialog
+    if (showTokenDialog) {
+        val context = LocalContext.current
+        
+        AlertDialog(
+            onDismissRequest = { showTokenDialog = false },
+            title = { Text(stringResource(R.string.profile_token_dialog_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.profile_token_dialog_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = currentToken ?: stringResource(R.string.profile_token_dialog_no_token),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            ),
+                            modifier = Modifier.padding(12.dp),
+                            maxLines = 5,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (currentToken != null) {
+                    Button(
+                        onClick = {
+                            // Copy token to clipboard
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Bearer Token", currentToken)
+                            clipboard.setPrimaryClip(clip)
+                            
+                            // Show toast (simplest feedback)
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(R.string.profile_token_dialog_copied),
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            
+                            showTokenDialog = false
+                        }
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.profile_token_dialog_copy))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTokenDialog = false }) {
+                    Text(stringResource(R.string.profile_token_dialog_close))
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -550,10 +619,13 @@ private fun InfoCoverToggleCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(0.7f)
+            ) {
                 Text(stringResource(id = R.string.info_cover_title), style = MaterialTheme.typography.titleMedium)
                 Text(
                     stringResource(id = R.string.info_cover_desc),
@@ -561,6 +633,7 @@ private fun InfoCoverToggleCard(
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
+            Spacer(modifier = Modifier.width(16.dp))
             Switch(
                 checked = infoCoverEnabled,
                 onCheckedChange = onToggle

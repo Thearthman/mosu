@@ -37,16 +37,14 @@ class RecentPlaysSyncWorker(
             val recentScores = RetrofitClient.api.getUserRecentScores(
                 authHeader = "Bearer $token",
                 userId = user.id.toString(),
-                limit = 100,
-                includeFails = true
+                includeFails = 1
+                // TODO: Implement paging through cursor
             )
 
-            val cutoff = OffsetDateTime.now().minusDays(7)
             val seen = mutableSetOf<Long>()
             val entities = recentScores.mapNotNull { score ->
                 val playedAt = score.createdAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() } ?: return@mapNotNull null
-                if (playedAt.isBefore(cutoff)) return@mapNotNull null
-                val beatmapset = score.beatmap?.beatmapset ?: return@mapNotNull null
+                val beatmapset = score.beatmapset ?: return@mapNotNull null
                 if (!seen.add(beatmapset.id)) return@mapNotNull null
                 RecentPlayEntity(
                     scoreId = score.scoreId,
@@ -59,7 +57,7 @@ class RecentPlaysSyncWorker(
                 )
             }
 
-            db.recentPlayDao().replaceAll(entities)
+            db.recentPlayDao().mergeNewPlays(entities)
             Result.success()
         }.getOrElse {
             Result.retry()

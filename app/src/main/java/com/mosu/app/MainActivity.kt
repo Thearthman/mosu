@@ -56,10 +56,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
+import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
 import com.mosu.app.ui.library.LibraryScreen
@@ -67,6 +70,7 @@ import com.mosu.app.ui.playlist.PlaylistScreen
 import com.mosu.app.ui.profile.ProfileScreen
 import com.mosu.app.ui.search.SearchScreen
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
     
@@ -96,6 +100,9 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        
+        // Schedule the daily recent plays sync worker
+        RecentPlaysSyncWorker.scheduleDaily(this)
     }
 }
 

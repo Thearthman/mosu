@@ -48,6 +48,14 @@
     <string name="search_loading">Loading...</string>
     <string name="search_download_starting">Starting...</string>
     <string name="search_download_downloading">Downloading</string>
+    
+    <!-- Token Debug Dialog Strings -->
+    <string name="profile_token_dialog_title">Bearer Token (Debug)</string>
+    <string name="profile_token_dialog_description">Your current bearer token for API testing:</string>
+    <string name="profile_token_dialog_no_token">No token available</string>
+    <string name="profile_token_dialog_copy">Copy</string>
+    <string name="profile_token_dialog_copied">Token copied to clipboard</string>
+    <string name="profile_token_dialog_close">Close</string>
     <string name="search_download_extracting">Extracting...</string>
     <string name="search_download_done">Done ✓</string>
     <string name="search_download_failed">Failed</string>

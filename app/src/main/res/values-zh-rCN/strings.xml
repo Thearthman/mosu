@@ -48,6 +48,14 @@
     <string name="search_loading">加载中…</string>
     <string name="search_download_starting">开始…</string>
     <string name="search_download_downloading">下载中</string>
+    
+    <!-- Token Debug Dialog Strings -->
+    <string name="profile_token_dialog_title">Bearer Token (调试)</string>
+    <string name="profile_token_dialog_description">您当前的 API 测试用 bearer token：</string>
+    <string name="profile_token_dialog_no_token">无可用 token</string>
+    <string name="profile_token_dialog_copy">复制</string>
+    <string name="profile_token_dialog_copied">Token 已复制到剪贴板</string>
+    <string name="profile_token_dialog_close">关闭</string>
     <string name="search_download_extracting">解压中…</string>
     <string name="search_download_done">完成 ✓</string>
     <string name="search_download_failed">失败</string>

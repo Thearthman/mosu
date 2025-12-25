@@ -1,6 +1,7 @@
 # Bug Fix
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Cannot download music in favorite page because proper mapping to beatmap link was not made. 
+3. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
 
 
 # UI improvement (implement 3 first)
@@ -41,12 +42,14 @@
     ~~8. Change merge algorithm: prioritize to display songs already in the library when merging. Also, when merging, the condition changes to not only should the title match exactly, the author has to match as well.~~
     ~~9. Change search page info popup to long press to trigger and reassign short press to play~~. 
     10. Long press should trigger vibration when the menu pops up. 
+    11. Add mode selection for recent play filter
 5. Library update
     ~~1. Implement library filter. Same as the search genre filter.~~
     ~~2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.~~
     ~~3. implement a find current song button in library. It should be a button (with a locate icon and transparent background) floating on the bottom left of the song list (still above the miniplayer). When clicked, the song list scrolls to the song that's playing. For now use title for matching. Then briefly make the background of the song that's found blink for one second. It should dissappear when using full player and make sure its button functionality is disabled so it won't cause mistouch in full player. It should not appear when no music is in miniplayer. Also, if there is no matching music, don't move at all, just blink the button itself for a second to indicate error. If the music is already in current view, just blink it. ~~
     4. add search page search bar to library.
     ~~5. add right swipe to add to playlist action for every song that enter a menu displaying a list of playlist to add to. Should also be able to remove songs from playlists from here.~~
+    6. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. 
 6. Add Playlist page 
     ~~1. Add `Playlist` page which you can create album and put music into it. has a create album button on the top right. page view default to all album spreading out. Two albums per row and extends downwards. You can click into albums and the view changes to the album title on top with a play button next to it, with song list below. You can add song here, base on the add button on the top right. or play the album which when using loop/random will only loop the songs in the album.~~
     2. Implement Playlist management system allowing for rearrangement(placement) of playlist and deletion of playlists.
@@ -68,4 +71,6 @@
 4. Search page info popups should be able to be scrolled.
 2. In search page info popup, when there is only one diff, do not show range, instead, show a single star diff. 
 4. Inside each playlist, there are some songs that have their play button squished probably because of a long title. Remove the Play button because clicking the song itself will lead to play.
+4. Recent filter mode doesn't work
+5. UI in profile page is bugged because the button being pushed to the right by the text that's too wide. All buttons in profile page should align to the right instead of aligning to the text, and text here should align have a common max width. Update Credential button should have its text centered. Default search view drop down menu button should be much wider because it shows text inside. 
 -->

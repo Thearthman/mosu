@@ -44,9 +44,13 @@ interface OsuApi {
     suspend fun getUserRecentScores(
         @Header("Authorization") authHeader: String,
         @Path("user_id") userId: String,
-        @Query("limit") limit: Int = 100,
-        @Query("include_fails") includeFails: Boolean = true
+        @Query("limit") limit: Int = 50,
+        // Do NOT use Boolean here directly unless you have a custom converter.
+        @Query("include_fails") includeFails: Int = 1,
+        @Query("mode") mode: String = "osu"
+        // Curosr for scrolling behavior should be implemented in the fetching method in future
     ): List<com.mosu.app.data.api.model.RecentScore>
+
 
     @GET("api/v2/users/{user_id}/beatmapsets/favourite")
     suspend fun getUserFavoriteBeatmapsets(

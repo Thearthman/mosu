@@ -46,14 +46,11 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         limit: Int = 100
     ): List<BeatmapsetCompact> {
         val recentScores = api.getUserRecentScores("Bearer $accessToken", userId, limit)
-        val cutoff = java.time.OffsetDateTime.now().minusDays(7)
         // Keep order as returned (newest first), de-dup by beatmapset id, filter last 7 days
         val seen = mutableSetOf<Long>()
         val ordered = mutableListOf<BeatmapsetCompact>()
         for (score in recentScores) {
-            val playedAt = score.createdAt?.let { runCatching { java.time.OffsetDateTime.parse(it) }.getOrNull() }
-            if (playedAt != null && playedAt.isBefore(cutoff)) continue
-            val beatmapset = score.beatmap?.beatmapset ?: continue
+            val beatmapset = score.beatmapset ?: continue
             if (seen.add(beatmapset.id)) {
                 ordered.add(beatmapset)
             }
@@ -66,14 +63,12 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         userId: String,
         limit: Int = 100
     ): List<RecentPlayEntity> {
-        val recentScores = api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = true)
-        val cutoff = OffsetDateTime.now().minusDays(7)
+        val recentScores = api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1)
         val seen = mutableSetOf<Long>()
         val entities = mutableListOf<RecentPlayEntity>()
         for (score in recentScores) {
             val playedAt = score.createdAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() } ?: continue
-            if (playedAt.isBefore(cutoff)) continue
-            val beatmapset = score.beatmap?.beatmapset ?: continue
+            val beatmapset = score.beatmapset ?: continue
             if (!seen.add(beatmapset.id)) continue
             entities.add(
                 RecentPlayEntity(

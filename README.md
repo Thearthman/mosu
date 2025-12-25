@@ -1,4 +1,8 @@
-# Mosu — osu!-powered offline music player (Android)
+<p align="center">
+<img src="icons/icon(new).png" width="200" alt="icon">
+</p>
+
+# Mosu — osu!-powered offline music player (Android) 
 
 ## Introduction
 Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps, download them as songs, and play them offline with Media3/ExoPlayer. It uses mirrors for `.osz` downloads, extracts audio/cover art, and stores metadata in Room with cached search results for speed.

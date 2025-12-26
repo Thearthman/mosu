@@ -62,8 +62,14 @@ import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
 import com.mosu.app.player.MusicController
-import com.mosu.app.ui.library.SingleTrackItem
-import com.mosu.app.ui.library.AlbumGroupItem
+import com.mosu.app.ui.components.AlbumGroup
+import com.mosu.app.ui.components.AlbumGroupActions
+import com.mosu.app.ui.components.AlbumGroupData
+import com.mosu.app.ui.components.PlaylistOption
+import com.mosu.app.ui.components.PlaylistSelectorDialog
+import com.mosu.app.ui.components.SongItemData
+import com.mosu.app.ui.components.SwipeActions
+import com.mosu.app.ui.components.SwipeToDismissSongItem
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -242,14 +248,32 @@ fun PlaylistScreen(
 
                         if (multiSongBeatmapSets.contains(setId)) {
                             // Album Group
-                            AlbumGroupItem(
-                                tracks = tracks,
-                                musicController = musicController,
-                                db = db,
-                                scope = scope,
-                                highlight = false,
-                                onPlay = { selectedTrack ->
-                                    musicController.playSong(selectedTrack, playlistTracks)
+                            val albumData = AlbumGroupData(
+                                title = tracks[0].title,
+                                artist = tracks[0].artist,
+                                coverPath = tracks[0].coverPath,
+                                trackCount = tracks.size,
+                                songs = tracks.map { track ->
+                                    SongItemData(
+                                        title = track.difficultyName,
+                                        artist = track.creator,
+                                        coverPath = track.coverPath,
+                                        difficultyName = track.difficultyName,
+                                        id = track.uid
+                                    )
+                                },
+                                id = setId
+                            )
+
+                            val albumActions = AlbumGroupActions(
+                                onAlbumPlay = {
+                                    musicController.playSong(tracks.first(), playlistTracks)
+                                },
+                                onTrackPlay = { songData ->
+                                    val track = tracks.find { it.uid == songData.id }
+                                    if (track != null) {
+                                        musicController.playSong(track, playlistTracks)
+                                    }
                                 },
                                 onDelete = {
                                     scope.launch {
@@ -261,26 +285,50 @@ fun PlaylistScreen(
                                         }
                                     }
                                 },
-                                onAddToPlaylist = { openPlaylistDialog(tracks.first()) }
+                                onAddToPlaylist = { openPlaylistDialog(tracks.first() as BeatmapEntity) },
+                                onTrackDelete = { songData ->
+                                    scope.launch {
+                                        db.playlistDao().removeTrack(
+                                            playlistId = selectedPlaylistId!!,
+                                            beatmapUid = (songData as SongItemData).id
+                                        )
+                                    }
+                                }
+                            )
+
+                            AlbumGroup(
+                                album = albumData,
+                                actions = albumActions,
+                                highlight = false
                             )
                         } else {
                             // Single Track
-                            SingleTrackItem(
-                                map = tracks[0],
-                                musicController = musicController,
-                                highlight = false,
-                                onPlay = {
-                                    musicController.playSong(tracks[0], playlistTracks)
-                                },
+                            val track = tracks[0]
+                            val songData = SongItemData(
+                                title = track.title,
+                                artist = track.artist,
+                                coverPath = track.coverPath,
+                                difficultyName = track.difficultyName,
+                                id = track.uid
+                            )
+
+                            val swipeActions = SwipeActions(
                                 onDelete = {
                                     scope.launch {
                                         db.playlistDao().removeTrack(
                                             playlistId = selectedPlaylistId!!,
-                                            beatmapUid = tracks[0].uid
+                                            beatmapUid = track.uid
                                         )
                                     }
                                 },
-                                onAddToPlaylist = { openPlaylistDialog(tracks[0]) }
+                                onAddToPlaylist = { openPlaylistDialog(track) }
+                            )
+
+                            SwipeToDismissSongItem(
+                                song = songData,
+                                onClick = { musicController.playSong(track, playlistTracks) },
+                                swipeActions = swipeActions,
+                                highlight = false
                             )
                         }
                     }
@@ -411,74 +459,35 @@ fun PlaylistScreen(
 
     if (showPlaylistDialog && dialogTrack != null) {
         val track = dialogTrack!!
-        AlertDialog(
-            onDismissRequest = { showPlaylistDialog = false },
-            title = { Text("Add to playlist") },
-            text = {
-                Column {
-                    playlists.forEach { playlist ->
-                        val checked = dialogSelection.contains(playlist.id)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val newChecked = !checked
-                                    dialogSelection = if (newChecked) dialogSelection + playlist.id else dialogSelection - playlist.id
-                                    dialogSelectionCache[track.uid] = dialogSelection
-                                    scope.launch {
-                                        if (newChecked) {
-                                            db.playlistDao().addTrack(
-                                                PlaylistTrackEntity(
-                                                    playlistId = playlist.id,
-                                                    beatmapUid = track.uid
-                                                )
-                                            )
-                                        } else {
-                                            db.playlistDao().removeTrack(
-                                                playlistId = playlist.id,
-                                                beatmapUid = track.uid
-                                            )
-                                        }
-                                    }
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = { newChecked ->
-                                    dialogSelection = if (newChecked) dialogSelection + playlist.id else dialogSelection - playlist.id
-                                    dialogSelectionCache[track.uid] = dialogSelection
-                                    scope.launch {
-                                        if (newChecked) {
-                                            db.playlistDao().addTrack(
-                                                PlaylistTrackEntity(
-                                                    playlistId = playlist.id,
-                                                    beatmapUid = track.uid
-                                                )
-                                            )
-                                        } else {
-                                            db.playlistDao().removeTrack(
-                                                playlistId = playlist.id,
-                                                beatmapUid = track.uid
-                                            )
-                                        }
-                                    }
-                                }
-                            )
-                            Text(text = playlist.name, modifier = Modifier.padding(start = 8.dp))
-                        }
-                    }
-                    if (playlists.isEmpty()) {
-                        Text(
-                            text = "No playlists yet",
-                            color = MaterialTheme.colorScheme.secondary
+        val playlistOptions = playlists.map { PlaylistOption(it.id, it.name) }
+
+        PlaylistSelectorDialog(
+            playlists = playlistOptions,
+            selectedPlaylistIds = dialogSelection,
+            onSelectionChanged = { newSelection ->
+                dialogSelection = newSelection
+                dialogSelectionCache[track.uid] = newSelection
+            },
+            onAddToPlaylist = { playlistId, beatmapUid ->
+                scope.launch {
+                    db.playlistDao().addTrack(
+                        PlaylistTrackEntity(
+                            playlistId = playlistId,
+                            beatmapUid = beatmapUid
                         )
-                    }
+                    )
                 }
             },
-            confirmButton = {},
-            dismissButton = {}
+            onRemoveFromPlaylist = { playlistId, beatmapUid ->
+                scope.launch {
+                    db.playlistDao().removeTrack(
+                        playlistId = playlistId,
+                        beatmapUid = beatmapUid
+                    )
+                }
+            },
+            beatmapUid = track.uid,
+            onDismiss = { showPlaylistDialog = false }
         )
     }
 }

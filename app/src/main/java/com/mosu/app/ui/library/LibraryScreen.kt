@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,33 +13,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DismissDirection
-import androidx.compose.material3.DismissValue
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.SwipeToDismiss
-import androidx.compose.material3.SwipeToDismissDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,23 +34,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
-import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.IconButton
 import kotlinx.coroutines.delay
-import coil.compose.AsyncImage
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
 import com.mosu.app.player.MusicController
+import com.mosu.app.ui.components.AlbumGroup
+import com.mosu.app.ui.components.AlbumGroupActions
+import com.mosu.app.ui.components.AlbumGroupData
+import com.mosu.app.ui.components.GenreFilter
+import com.mosu.app.ui.components.PlaylistOption
+import com.mosu.app.ui.components.PlaylistSelectorDialog
+import com.mosu.app.ui.components.SongItemData
+import com.mosu.app.ui.components.SwipeActions
+import com.mosu.app.ui.components.SwipeToDismissSongItem
 import kotlinx.coroutines.launch
-import java.io.File
 import androidx.compose.ui.res.stringResource
 import com.mosu.app.R
 
@@ -87,24 +74,9 @@ fun LibraryScreen(
     var buttonBlink by remember { mutableStateOf(false) }
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val playingTitle = nowPlaying?.title?.toString()?.trim()?.lowercase()
-    
+
     // Genre Filter State
     var selectedGenreId by remember { mutableStateOf<Int?>(null) }
-    
-    val genres = listOf(
-        10 to stringResource(id = R.string.genre_electronic),
-        3 to stringResource(id = R.string.genre_anime),
-        4 to stringResource(id = R.string.genre_rock),
-        5 to stringResource(id = R.string.genre_pop),
-        2 to stringResource(id = R.string.genre_game),
-        9 to stringResource(id = R.string.genre_hiphop),
-        11 to stringResource(id = R.string.genre_metal),
-        12 to stringResource(id = R.string.genre_classical),
-        13 to stringResource(id = R.string.genre_folk),
-        14 to stringResource(id = R.string.genre_jazz),
-        7 to stringResource(id = R.string.genre_novelty),
-        6 to stringResource(id = R.string.genre_other)
-    )
     
     // Filter maps by selected genre
     val filteredMaps = if (selectedGenreId != null) {
@@ -152,23 +124,11 @@ fun LibraryScreen(
         
         // Genre Filter
         Text(text = stringResource(id = R.string.library_filter_genre), style = MaterialTheme.typography.labelMedium)
-        LazyRow(modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
-            items(genres) { (id, name) ->
-                Button(
-                    onClick = {
-                        selectedGenreId = if (selectedGenreId == id) null else id
-                    },
-                    modifier = Modifier.padding(end = 8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedGenreId == id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = if (selectedGenreId == id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                ) {
-                    Text(name, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
+        GenreFilter(
+            selectedGenreId = selectedGenreId,
+            onGenreSelected = { selectedGenreId = it },
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
 
             LazyColumn(state = listState) {
             items(
@@ -179,51 +139,100 @@ fun LibraryScreen(
                 if (tracks.isEmpty()) return@items
 
                 if (tracks.size > 1) {
-                            // Album Group
-                    AlbumGroupItem(
-                        tracks = tracks,
-                        musicController = musicController,
-                        db = db,
-                        scope = scope,
-                        highlight = highlightSetId == setId && nowPlaying != null,
-                        onPlay = { selectedTrack ->
-                            musicController.playSong(selectedTrack, filteredMaps)
+                    // Album Group
+                    val albumData = AlbumGroupData(
+                        title = tracks[0].title,
+                        artist = tracks[0].artist,
+                        coverPath = tracks[0].coverPath,
+                        trackCount = tracks.size,
+                        songs = tracks.map { track ->
+                            SongItemData(
+                                title = track.difficultyName,
+                                artist = track.creator,
+                                coverPath = track.coverPath,
+                                difficultyName = track.difficultyName,
+                                id = track.uid
+                            )
+                        },
+                        id = setId
+                    )
+
+                    val albumActions = AlbumGroupActions(
+                        onAlbumPlay = {
+                            // Play the first track of the album
+                            musicController.playSong(tracks.first(), filteredMaps)
+                        },
+                        onTrackPlay = { songData ->
+                            // Find the actual BeatmapEntity and play it
+                            val track = tracks.find { it.uid == songData.id }
+                            if (track != null) {
+                                musicController.playSong(track, filteredMaps)
+                            }
                         },
                         onDelete = {
                             scope.launch {
                                 tracks.forEach { track ->
                                     db.beatmapDao().deleteBeatmap(track)
-                                    File(track.audioPath).delete()
-                                    File(track.coverPath).delete()
+                                    java.io.File(track.audioPath).delete()
+                                    java.io.File(track.coverPath).delete()
                                 }
                             }
                         },
-                        onAddToPlaylist = { track ->
-                            openPlaylistDialog(track)
+                        onAddToPlaylist = {
+                            openPlaylistDialog(tracks.first())
+                        },
+                        onTrackDelete = { songData ->
+                            scope.launch {
+                                val track = tracks.find { it.uid == songData.id }
+                                if (track != null) {
+                                    db.beatmapDao().deleteBeatmap(track)
+                                    java.io.File(track.audioPath).delete()
+                                    // Don't delete cover photo for individual songs - only when entire beatmapset is deleted
+                                }
+                            }
+                        },
+                        onTrackAddToPlaylist = { songData ->
+                            val track = tracks.find { it.uid == songData.id }
+                            if (track != null) {
+                                openPlaylistDialog(track)
+                            }
                         }
+                    )
+
+                    AlbumGroup(
+                        album = albumData,
+                        actions = albumActions,
+                        highlight = highlightSetId == setId && nowPlaying != null
                     )
                 } else {
                     // Single Track
-                    SingleTrackItem(
-                        map = tracks[0],
-                        musicController = musicController,
-                        highlight = highlightSetId == setId && nowPlaying != null,
-                        onPlay = {
-                            musicController.playSong(tracks[0], filteredMaps)
-                        },
+                    val track = tracks[0]
+                    val songData = SongItemData(
+                        title = track.title,
+                        artist = track.artist,
+                        coverPath = track.coverPath,
+                        difficultyName = track.difficultyName,
+                        id = track.uid
+                    )
+
+                    val swipeActions = SwipeActions(
                         onDelete = {
                             scope.launch {
-                                val track = tracks[0]
                                 // Delete from database
                                 db.beatmapDao().deleteBeatmap(track)
                                 // Delete audio and cover files
-                                File(track.audioPath).delete()
-                                File(track.coverPath).delete()
+                                java.io.File(track.audioPath).delete()
+                                java.io.File(track.coverPath).delete()
                             }
                         },
-                        onAddToPlaylist = { track ->
-                            openPlaylistDialog(track)
-                        }
+                        onAddToPlaylist = { openPlaylistDialog(track) }
+                    )
+
+                    SwipeToDismissSongItem(
+                        song = songData,
+                        onClick = { musicController.playSong(track, filteredMaps) },
+                        swipeActions = swipeActions,
+                        highlight = highlightSetId == setId && nowPlaying != null
                     )
                 }
                 Divider(modifier = Modifier.padding(start = 64.dp)) // Apple style separator
@@ -233,74 +242,35 @@ fun LibraryScreen(
 
         if (showPlaylistDialog && dialogTrack != null) {
             val track = dialogTrack!!
-            AlertDialog(
-                onDismissRequest = { showPlaylistDialog = false },
-                title = { Text(stringResource(id = R.string.playlist_dialog_title)) },
-                text = {
-                    Column {
-                        playlists.forEach { playlist ->
-                            val checked = dialogSelection.contains(playlist.id)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val newChecked = !checked
-                                        dialogSelection = if (newChecked) dialogSelection + playlist.id else dialogSelection - playlist.id
-                                        dialogSelectionCache[track.uid] = dialogSelection
-                                        scope.launch {
-                                            if (newChecked) {
-                                                db.playlistDao().addTrack(
-                                                    PlaylistTrackEntity(
-                                                        playlistId = playlist.id,
-                                                        beatmapUid = track.uid
-                                                    )
-                                                )
-                                            } else {
-                                                db.playlistDao().removeTrack(
-                                                    playlistId = playlist.id,
-                                                    beatmapUid = track.uid
-                                                )
-                                            }
-                                        }
-                                    }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { newChecked ->
-                                        dialogSelection = if (newChecked) dialogSelection + playlist.id else dialogSelection - playlist.id
-                                        dialogSelectionCache[track.uid] = dialogSelection
-                                        scope.launch {
-                                            if (newChecked) {
-                                                db.playlistDao().addTrack(
-                                                    PlaylistTrackEntity(
-                                                        playlistId = playlist.id,
-                                                        beatmapUid = track.uid
-                                                    )
-                                                )
-                                            } else {
-                                                db.playlistDao().removeTrack(
-                                                    playlistId = playlist.id,
-                                                    beatmapUid = track.uid
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                                Text(text = playlist.name, modifier = Modifier.padding(start = 8.dp))
-                            }
-                        }
-                        if (playlists.isEmpty()) {
-                            Text(
-                                text = stringResource(id = R.string.library_no_playlists),
-                                color = MaterialTheme.colorScheme.secondary
+            val playlistOptions = playlists.map { PlaylistOption(it.id, it.name) }
+
+            PlaylistSelectorDialog(
+                playlists = playlistOptions,
+                selectedPlaylistIds = dialogSelection,
+                onSelectionChanged = { newSelection ->
+                    dialogSelection = newSelection
+                    dialogSelectionCache[track.uid] = newSelection
+                },
+                onAddToPlaylist = { playlistId, beatmapUid ->
+                    scope.launch {
+                        db.playlistDao().addTrack(
+                            PlaylistTrackEntity(
+                                playlistId = playlistId,
+                                beatmapUid = beatmapUid
                             )
-                        }
+                        )
                     }
                 },
-                confirmButton = {},
-                dismissButton = {}
+                onRemoveFromPlaylist = { playlistId, beatmapUid ->
+                    scope.launch {
+                        db.playlistDao().removeTrack(
+                            playlistId = playlistId,
+                            beatmapUid = beatmapUid
+                        )
+                    }
+                },
+                beatmapUid = track.uid,
+                onDismiss = { showPlaylistDialog = false }
             )
         }
 
@@ -357,306 +327,4 @@ fun LibraryScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AlbumGroupItem(
-    tracks: List<BeatmapEntity>,
-    musicController: MusicController,
-    db: AppDatabase,
-    scope: CoroutineScope,
-    onPlay: (BeatmapEntity) -> Unit,
-    onDelete: () -> Unit,
-    onAddToPlaylist: (BeatmapEntity) -> Unit,
-    highlight: Boolean = false
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val firstTrack = tracks[0]
-    val dismissState = rememberDismissState(
-        confirmValueChange = { value ->
-            when (value) {
-                DismissValue.DismissedToStart -> {
-                    onDelete()
-                    false
-                }
-                DismissValue.DismissedToEnd -> {
-                    onAddToPlaylist(firstTrack)
-                    false
-                }
-                else -> false
-            }
-        }
-    )
-
-    SwipeToDismiss(
-        state = dismissState,
-        directions = setOf(DismissDirection.EndToStart, DismissDirection.StartToEnd),
-        background = {
-            val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
-            val bgColor = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.primary
-                else -> if (highlight) flickerColor else MaterialTheme.colorScheme.error
-            }
-            val icon = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> Icons.Default.Add
-                else -> Icons.Default.Delete
-            }
-            val iconTint = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.onPrimary
-                else -> if (highlight) Color.Transparent else MaterialTheme.colorScheme.onError
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(bgColor)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (dismissState.dismissDirection == DismissDirection.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (dismissState.dismissDirection == DismissDirection.StartToEnd)
-                        stringResource(id = R.string.library_cd_add_playlist)
-                    else
-                        stringResource(id = R.string.library_cd_delete),
-                    tint = iconTint,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-
-        },
-        dismissContent = {
-            val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
-            val bg = if (highlight) flickerColor else MaterialTheme.colorScheme.surface
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(bg)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = !expanded }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Cover Art
-                    AsyncImage(
-                        model = File(firstTrack.coverPath),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    
-                    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp).weight(1f)) {
-                        Text(text = firstTrack.title, style = MaterialTheme.typography.titleMedium)
-                        Text(text = firstTrack.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                        Text(text = stringResource(id = R.string.library_track_count, tracks.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                    }
-                    
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, 
-                        contentDescription = stringResource(id = R.string.library_cd_expand)
-                    )
-                }
-                
-                if (expanded) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                    ) {
-                        tracks.forEachIndexed { index, map ->
-                            TrackRowWithSwipe(
-                                map = map,
-                                scope = scope,
-                                onPlay = { onPlay(map) },
-                                onAddToPlaylist = { onAddToPlaylist(map) },
-                                onDelete = {
-                                    db.beatmapDao().deleteBeatmap(map)
-                                    File(map.audioPath).delete()
-                                    // Don't delete cover photo for individual songs - only when entire beatmapset is deleted
-                                },
-                                modifier = Modifier,
-                                backgroundColor = if (index % 2 == 0) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SingleTrackItem(
-    map: BeatmapEntity,
-    musicController: MusicController,
-    highlight: Boolean = false,
-    onPlay: () -> Unit,
-    onDelete: () -> Unit,
-    onAddToPlaylist: (BeatmapEntity) -> Unit
-) {
-    val dismissState = rememberDismissState(
-        confirmValueChange = { value ->
-            when (value) {
-                DismissValue.DismissedToStart -> {
-                    onDelete()
-                    false
-                }
-                DismissValue.DismissedToEnd -> {
-                    onAddToPlaylist(map)
-                    false
-                }
-                else -> false
-            }
-        }
-    )
-
-    SwipeToDismiss(
-        state = dismissState,
-        directions = setOf(DismissDirection.EndToStart, DismissDirection.StartToEnd),
-        background = {
-            val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
-            val bgColor = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.primary
-                else -> if (highlight) flickerColor else MaterialTheme.colorScheme.error
-            }
-            val icon = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> Icons.Default.Add
-                else -> Icons.Default.Delete
-            }
-            val iconTint = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.onPrimary
-                else -> if (highlight) Color.Transparent else MaterialTheme.colorScheme.onError
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(bgColor)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (dismissState.dismissDirection == DismissDirection.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (dismissState.dismissDirection == DismissDirection.StartToEnd)
-                        stringResource(id = R.string.library_cd_add_playlist)
-                    else
-                        stringResource(id = R.string.library_cd_delete),
-                    tint = iconTint,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        },
-        dismissContent = {
-            val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
-            val bg = if (highlight) flickerColor else MaterialTheme.colorScheme.surface            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(bg)
-                    .clickable { onPlay() }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = File(map.coverPath),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                
-                Column(modifier = Modifier.padding(start = 16.dp)) {
-                    Text(text = map.title, style = MaterialTheme.typography.titleMedium)
-                    Text(text = map.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                }
-            }
-        }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TrackRowWithSwipe(
-    map: BeatmapEntity,
-    scope: CoroutineScope,
-    onPlay: () -> Unit,
-    onAddToPlaylist: (BeatmapEntity) -> Unit,
-    onDelete: suspend () -> Unit,
-    modifier: Modifier = Modifier,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface
-) {
-    val dismissState = rememberDismissState(
-        confirmValueChange = { value ->
-            when (value) {
-                DismissValue.DismissedToEnd -> {
-                    onAddToPlaylist(map)
-                    false
-                }
-                DismissValue.DismissedToStart -> {
-                    scope.launch {
-                        onDelete()
-                    }
-                    false
-                }
-                else -> false
-            }
-        }
-    )
-
-    SwipeToDismiss(
-        state = dismissState,
-        directions = setOf(DismissDirection.StartToEnd, DismissDirection.EndToStart),
-        background = {
-            val bgColor = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.error
-            }
-            val icon = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> Icons.Default.Add
-                else -> Icons.Default.Delete
-            }
-            val iconTint = when (dismissState.dismissDirection) {
-                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.onPrimary
-                else -> MaterialTheme.colorScheme.onError
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(bgColor)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (dismissState.dismissDirection == DismissDirection.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (dismissState.dismissDirection == DismissDirection.StartToEnd)
-                        stringResource(id = R.string.library_cd_add_playlist)
-                    else
-                        stringResource(id = R.string.library_cd_delete),
-                    tint = iconTint,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        },
-        dismissContent = {
-            Row(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .background(backgroundColor)
-                    .clickable { onPlay() }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.padding(start = 8.dp)) {
-                    Text(text = map.difficultyName, style = MaterialTheme.typography.titleMedium)
-                    Text(text = map.creator, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                }
-            }
-        }
-    )
-}
 

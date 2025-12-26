@@ -26,6 +26,9 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND beatmapUid = :beatmapUid")
     suspend fun removeTrack(playlistId: Long, beatmapUid: Long)
 
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId")
+    suspend fun removeAllTracksFromPlaylist(playlistId: Long)
+
     @Query(
         """
         SELECT beatmaps.* FROM beatmaps

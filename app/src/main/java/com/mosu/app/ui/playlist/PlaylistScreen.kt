@@ -3,6 +3,7 @@ package com.mosu.app.ui.playlist
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -51,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
@@ -187,7 +190,15 @@ fun PlaylistScreen(
                             playlist = playlist,
                             trackCount = countsMap[playlist.id] ?: 0,
                             coverPaths = coverPaths,
-                            onClick = { selectedPlaylistId = playlist.id }
+                            onClick = { selectedPlaylistId = playlist.id },
+                            onDelete = {
+                                scope.launch {
+                                    // Delete all tracks from this playlist first
+                                    db.playlistDao().removeAllTracksFromPlaylist(playlist.id)
+                                    // Then delete the playlist itself
+                                    db.playlistDao().deletePlaylist(playlist.id)
+                                }
+                            }
                         )
                     }
                 }
@@ -203,11 +214,18 @@ fun PlaylistScreen(
                 IconButton(onClick = { selectedPlaylistId = null }) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                 }
-                Text(
-                    text = selectedPlaylist?.name ?: "Playlist",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = selectedPlaylist?.name ?: "Playlist",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${playlistTracks.size} songs",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
                 Spacer(modifier = Modifier.weight(1f))
                 IconButton(onClick = {
                     addSelection = emptySet()
@@ -292,6 +310,10 @@ fun PlaylistScreen(
                                             playlistId = selectedPlaylistId!!,
                                             beatmapUid = (songData as SongItemData).id
                                         )
+                                        // Force UI refresh by reassigning the selected playlist ID
+                                        val currentId = selectedPlaylistId
+                                        selectedPlaylistId = null
+                                        selectedPlaylistId = currentId
                                     }
                                 }
                             )
@@ -497,13 +519,29 @@ private fun PlaylistCard(
     playlist: PlaylistEntity,
     trackCount: Int,
     coverPaths: List<String>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit
 ) {
+    var showDeleteIcon by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(150.dp)
-            .clickable { onClick() },
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        if (showDeleteIcon) {
+                            // If delete icon is showing, hide it instead of opening playlist
+                            showDeleteIcon = false
+                        } else {
+                            onClick()
+                        }
+                    },
+                    onLongPress = {
+                        showDeleteIcon = true
+                    }
+                )
+            },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box(
@@ -520,6 +558,28 @@ private fun PlaylistCard(
                     .background(Color.Black.copy(alpha = 0.25f))
                     .padding(12.dp)
             ) {
+                // Delete icon overlay (top-right corner)
+                if (showDeleteIcon) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete playlist",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(24.dp)
+                            .background(
+                                color = Color.Black.copy(alpha = 0.7f),
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                            .padding(4.dp)
+                            .clickable(
+                                onClick = {
+                                    onDelete()
+                                    showDeleteIcon = false  // Hide icon after deletion
+                                }
+                            )
+                    )
+                }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart)
             ) {

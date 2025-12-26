@@ -110,9 +110,18 @@ class MusicController(context: Context) {
         // Convert playlist to MediaItems
         val mediaItems = playlist.map { beatmap ->
             val file = File(beatmap.audioPath)
+            // For individual tracks in beatmapsets, show difficulty name as title and beatmapset title as artist
+            // For standalone tracks or albums, use normal title/artist
+            val (displayTitle, displayArtist) = if (beatmap.difficultyName.isNotBlank() && beatmap.difficultyName != beatmap.title) {
+                // Individual difficulty: title = difficulty name, artist = beatmapset title
+                beatmap.difficultyName to beatmap.title
+            } else {
+                // Album or standalone track: use normal title/artist
+                beatmap.title to beatmap.artist
+            }
             val metadata = MediaMetadata.Builder()
-                .setTitle(beatmap.title)
-                .setArtist(beatmap.artist)
+                .setTitle(displayTitle)
+                .setArtist(displayArtist)
                 .setArtworkUri(Uri.fromFile(File(beatmap.coverPath)))
                 .build()
 

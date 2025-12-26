@@ -60,6 +60,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
+import com.mosu.app.data.api.RetrofitClient
+import com.mosu.app.data.api.TokenAuthenticator
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.work.RecentPlaysSyncWorker
@@ -70,10 +72,33 @@ import com.mosu.app.ui.playlist.PlaylistScreen
 import com.mosu.app.ui.profile.ProfileScreen
 import com.mosu.app.ui.search.SearchScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.lifecycleScope
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
-    
+
+    private fun scheduleCacheCleanup() {
+        // Run cache cleanup in background thread
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val db = AppDatabase.getDatabase(this@MainActivity)
+                val searchCacheDao = db.searchCacheDao()
+
+                // Clear cache entries older than 30 days
+                val thirtyDaysAgo = System.currentTimeMillis() - (30 * 24 * 60 * 60 * 1000L)
+                searchCacheDao.clearExpired(thirtyDaysAgo)
+
+                // Limit cache to 100 most recent entries to prevent unbounded growth
+                searchCacheDao.limitCacheSize(100)
+
+                android.util.Log.d("CacheCleanup", "Cleaned up expired and limited search cache entries")
+            } catch (e: Exception) {
+                android.util.Log.e("CacheCleanup", "Failed to clean cache", e)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -103,6 +128,9 @@ class MainActivity : ComponentActivity() {
         
         // Schedule the daily recent plays sync worker
         RecentPlaysSyncWorker.scheduleDaily(this)
+
+        // Schedule periodic cache cleanup
+        scheduleCacheCleanup()
     }
 }
 
@@ -120,6 +148,13 @@ fun MainScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
+    // Configure API authenticator for automatic token refresh
+    LaunchedEffect(Unit) {
+        RetrofitClient.configureAuthenticator(
+            TokenAuthenticator(context, tokenManager, settingsManager)
+        )
+    }
+
     // Music Controller stays alive at MainScreen level
     val musicController = remember { MusicController(context, settingsManager) }
     
@@ -158,7 +193,11 @@ fun MainScreen(
                     android.util.Log.d("MainActivity", "Processing OAuth callback with code: ${initialAuthCode.take(10)}...")
                     android.util.Log.d("MainActivity", "Client ID configured: ${clientId.isNotEmpty()}")
                     val tokenResponse = repository.exchangeCodeForToken(initialAuthCode, clientId, clientSecret)
-                    tokenManager.saveToken(tokenResponse.accessToken)
+                    tokenManager.saveTokens(
+                        tokenResponse.accessToken,
+                        tokenResponse.refreshToken ?: "",
+                        tokenResponse.expiresIn
+                    )
                     accessToken = tokenResponse.accessToken
                     loginError = "Login successful!"
                     android.util.Log.d("MainActivity", "Login successful!")
@@ -255,6 +294,8 @@ fun MainScreen(
                             onTokenReceived = { token ->
                                 scope.launch {
                                     accessToken = token
+                                    // For refresh token flow, we only have access token
+                                    // This is a fallback - ideally we'd get expires_in too
                                     tokenManager.saveToken(token)
                                 }
                             },

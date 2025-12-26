@@ -15,5 +15,8 @@ interface SearchCacheDao {
 
     @Query("DELETE FROM search_cache WHERE cachedAt < :expiryTime")
     suspend fun clearExpired(expiryTime: Long)
+
+    @Query("DELETE FROM search_cache WHERE queryKey NOT IN (SELECT queryKey FROM search_cache ORDER BY cachedAt DESC LIMIT :maxEntries)")
+    suspend fun limitCacheSize(maxEntries: Int)
 }
 

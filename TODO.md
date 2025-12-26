@@ -1,6 +1,8 @@
 # Bug Fix
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
-3. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?
+2. Fix database destructive migration: Replace fallbackToDestructiveMigration() with proper migration strategies to prevent data loss during app updates. Users currently lose all downloaded beatmaps, playlists, and cached data on schema changes.
+3. Fix token management issues: Implement proactive token refresh using isTokenExpired() check and fix TokenAuthenticator retry logic. Currently users get logged out unexpectedly due to expired tokens not being refreshed properly.
+
 
 
 # UI improvement (implement 3 first)
@@ -13,12 +15,11 @@
     1. implement cache cleaning in settings.
     2. Implement sound balancing base on loudness normalization algorithms
     3. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
-    4. Implement language changing feature, support the language in the language menu mentioned in 1.6 (Library, Search and Profile page done)
 2. Player / Player view
     1. Add HT(Half Time) similar to DT that doesn't change pitch.
     2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion.
 3. Playlist feature
-    
+    Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
     2. Add mode selection for recent play filter
@@ -73,6 +74,7 @@
 5. Slider reshape into AM style.
 8. Removed Language settings, as this is now following Android system settings.
 3. When an individual song within a songpack(beatmapset) is played, the music player should show the difficulty title (individual song title) instead of the songpack(beatmapset) title. 
+4. Implement language changing feature
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -93,3 +95,4 @@
 16. Song pack in library has wrong background color, it should be very subtle lighter/darker color than the songlist background color depend on the dark/light mode.
 2. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
 4. Find song doesn't work for individual songs in a songpack. 
+3. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?

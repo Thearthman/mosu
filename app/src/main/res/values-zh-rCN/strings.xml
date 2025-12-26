@@ -24,6 +24,25 @@
     <string name="genre_novelty">另类</string>
     <string name="genre_other">其他</string>
     <string name="playlist_dialog_title">添加到播放列表</string>
+    <!-- Playlist Screen Strings -->
+    <string name="playlist_title">播放列表</string>
+    <string name="playlist_empty_state">还没有播放列表。点击 + 创建一个。</string>
+    <string name="playlist_default_name">播放列表</string>
+    <string name="playlist_song_count_suffix">首歌曲</string>
+    <string name="playlist_no_songs">还没有歌曲。点击 + 添加。</string>
+    <string name="playlist_add_songs_dialog_title">添加歌曲</string>
+    <string name="playlist_add_button">添加</string>
+    <string name="playlist_cancel_button">取消</string>
+    <string name="playlist_added_status">已添加</string>
+    <string name="playlist_create_dialog_title">创建播放列表</string>
+    <string name="playlist_name_label">名称</string>
+    <string name="playlist_create_button">创建</string>
+    <!-- Content Descriptions -->
+    <string name="playlist_cd_create_playlist">创建播放列表</string>
+    <string name="playlist_cd_back">返回</string>
+    <string name="playlist_cd_add_songs">添加歌曲</string>
+    <string name="playlist_cd_play_playlist">播放播放列表</string>
+    <string name="playlist_cd_delete_playlist">删除播放列表</string>
     <string name="library_find_current_cd">定位当前歌曲</string>
     <string name="library_cd_add_playlist">加入播放列表</string>
     <string name="library_cd_delete">删除</string>

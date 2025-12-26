@@ -25,6 +25,7 @@ import androidx.compose.material3.SwipeToDismiss
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,9 +75,20 @@ fun AlbumGroup(
     actions: AlbumGroupActions,
     modifier: Modifier = Modifier,
     highlight: Boolean = false,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    forceExpanded: Boolean = false,
+    onExpansionChanged: ((Boolean) -> Unit)? = null,
+    highlightTrackId: Long? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
+
+    // Handle forced expansion
+    LaunchedEffect(forceExpanded) {
+        if (forceExpanded && !expanded) {
+            expanded = true
+            onExpansionChanged?.invoke(true)
+        }
+    }
 
     var currentProgress by remember { mutableStateOf(0f) }
 
@@ -163,7 +175,13 @@ fun AlbumGroup(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { expanded = !expanded }
+                        .clickable {
+                            if (!forceExpanded) {
+                                val newExpanded = !expanded
+                                expanded = newExpanded
+                                onExpansionChanged?.invoke(newExpanded)
+                            }
+                        }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -195,15 +213,22 @@ fun AlbumGroup(
                         modifier = Modifier
                             .fillMaxWidth()
                     ) {
-                        album.songs.forEachIndexed { index, song ->
+                        // Sort songs by difficulty name for better organization in beatmapsets
+                        val sortedSongs = album.songs.sortedBy { it.difficultyName }
+                        sortedSongs.forEachIndexed { index, song ->
                             androidx.compose.runtime.key(song.id) {
+                                val isHighlightedTrack = highlightTrackId == song.id
                                 TrackRowWithSwipe(
                                     song = song,
                                     onPlay = { actions.onTrackPlay?.invoke(song) },
                                     onDelete = { actions.onTrackDelete?.invoke(song) },
                                     onAddToPlaylist = { actions.onTrackAddToPlaylist?.invoke(song) },
                                     modifier = Modifier,
-                                    backgroundColor = if (index % 2 == 0) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+                                    backgroundColor = when {
+                                        isHighlightedTrack -> MaterialTheme.colorScheme.primaryContainer
+                                        index % 2 == 0 -> MaterialTheme.colorScheme.surface
+                                        else -> MaterialTheme.colorScheme.surfaceVariant
+                                    }
                                 )
                             }
                         }

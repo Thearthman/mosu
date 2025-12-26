@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.media3.common.Player
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,6 +24,8 @@ class SettingsManager(private val context: Context) {
         private val DEFAULT_SEARCH_VIEW_KEY = stringPreferencesKey("default_search_view") // played/recent/favorite/most_played/all/any
         private val SEARCH_ANY_KEY = booleanPreferencesKey("search_any_enabled")
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
+        private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
+        private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
     }
 
     val clientId: Flow<String> = context.settingsDataStore.data
@@ -59,6 +63,16 @@ class SettingsManager(private val context: Context) {
             preferences[INFO_COVER_KEY] ?: true
         }
 
+    val shuffleModeEnabled: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[SHUFFLE_MODE_KEY] ?: false
+        }
+
+    val repeatMode: Flow<Int> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[REPEAT_MODE_KEY] ?: Player.REPEAT_MODE_OFF
+        }
+
     suspend fun saveCredentials(clientId: String, clientSecret: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[CLIENT_ID_KEY] = clientId
@@ -93,6 +107,18 @@ class SettingsManager(private val context: Context) {
     suspend fun saveInfoCoverEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[INFO_COVER_KEY] = enabled
+        }
+    }
+
+    suspend fun saveShuffleModeEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[SHUFFLE_MODE_KEY] = enabled
+        }
+    }
+
+    suspend fun saveRepeatMode(mode: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[REPEAT_MODE_KEY] = mode
         }
     }
 

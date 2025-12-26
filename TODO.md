@@ -1,8 +1,7 @@
 # Bug Fix
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
-2. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
 3. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?
-4. Find song doesn't work for individual songs in a songpack. 
+
 
 # UI improvement (implement 3 first)
 1. In Search page, add gamemode labels (images are in icons folder) at the end of the composer's name's line.
@@ -92,3 +91,5 @@
 14. UI in profile page is bugged because the button being pushed to the right by the text that's too wide. All buttons in profile page should align to the right instead of aligning to the text, and text here should align have a common max width. Update Credential button should have its text centered. Default search view drop down menu button should be much wider because it shows text inside.
 15. Cannot download music in favorite page because proper mapping to beatmap link was not made. 
 16. Song pack in library has wrong background color, it should be very subtle lighter/darker color than the songlist background color depend on the dark/light mode.
+2. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
+4. Find song doesn't work for individual songs in a songpack. 

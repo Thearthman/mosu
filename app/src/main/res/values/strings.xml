@@ -24,6 +24,25 @@
     <string name="genre_novelty">Novelty</string>
     <string name="genre_other">Other</string>
     <string name="playlist_dialog_title">Add to playlist</string>
+    <!-- Playlist Screen Strings -->
+    <string name="playlist_title">Playlists</string>
+    <string name="playlist_empty_state">No playlists yet. Tap + to create one.</string>
+    <string name="playlist_default_name">Playlist</string>
+    <string name="playlist_song_count_suffix">songs</string>
+    <string name="playlist_no_songs">No songs yet. Tap + to add.</string>
+    <string name="playlist_add_songs_dialog_title">Add songs</string>
+    <string name="playlist_add_button">Add</string>
+    <string name="playlist_cancel_button">Cancel</string>
+    <string name="playlist_added_status">Added</string>
+    <string name="playlist_create_dialog_title">Create playlist</string>
+    <string name="playlist_name_label">Name</string>
+    <string name="playlist_create_button">Create</string>
+    <!-- Content Descriptions -->
+    <string name="playlist_cd_create_playlist">Create playlist</string>
+    <string name="playlist_cd_back">Back</string>
+    <string name="playlist_cd_add_songs">Add songs</string>
+    <string name="playlist_cd_play_playlist">Play playlist</string>
+    <string name="playlist_cd_delete_playlist">Delete playlist</string>
     <string name="library_find_current_cd">Find current song</string>
     <string name="library_cd_add_playlist">Add to playlist</string>
     <string name="library_cd_delete">Delete</string>

@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -64,6 +65,7 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
+import com.mosu.app.R
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.AlbumGroup
 import com.mosu.app.ui.components.AlbumGroupActions
@@ -151,12 +153,12 @@ fun PlaylistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Playlists",
+                    text = stringResource(id = R.string.playlist_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
                 IconButton(onClick = { showCreateDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Create playlist")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_create_playlist))
                 }
             }
 
@@ -167,7 +169,7 @@ fun PlaylistScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "No playlists yet. Tap + to create one.")
+                    Text(text = stringResource(id = R.string.playlist_empty_state))
                 }
             } else {
                 val countsMap = playlistCounts.associate { it.playlistId to it.count }
@@ -212,16 +214,16 @@ fun PlaylistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { selectedPlaylistId = null }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(id = R.string.playlist_cd_back))
                 }
                 Column {
                     Text(
-                        text = selectedPlaylist?.name ?: "Playlist",
+                        text = selectedPlaylist?.name ?: stringResource(id = R.string.playlist_default_name),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${playlistTracks.size} songs",
+                        text = "${playlistTracks.size} ${stringResource(id = R.string.playlist_song_count_suffix)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
@@ -231,10 +233,10 @@ fun PlaylistScreen(
                     addSelection = emptySet()
                     showAddDialog = true
                 }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add songs")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_add_songs))
                 }
                 IconButton(onClick = { playAlbum(playlistTracks) }) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Play playlist")
+                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(id = R.string.playlist_cd_play_playlist))
                 }
             }
 
@@ -245,7 +247,7 @@ fun PlaylistScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "No songs yet. Tap + to add.")
+                    Text(text = stringResource(id = R.string.playlist_no_songs))
                 }
             } else {
                 // Group tracks by beatmapSetId like in the library
@@ -360,7 +362,7 @@ fun PlaylistScreen(
             if (showAddDialog) {
                 AlertDialog(
                     onDismissRequest = { showAddDialog = false },
-                    title = { Text("Add songs") },
+                    title = { Text(stringResource(id = R.string.playlist_add_songs_dialog_title)) },
                     text = {
                         LazyColumn(
                             modifier = Modifier
@@ -405,7 +407,7 @@ fun PlaylistScreen(
                                     if (alreadyIn) {
                                         Spacer(modifier = Modifier.weight(1f))
                                         Text(
-                                            text = "Added",
+                                            text = stringResource(id = R.string.playlist_added_status),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.secondary
                                         )
@@ -431,11 +433,11 @@ fun PlaylistScreen(
                                 showAddDialog = false
                             }
                         ) {
-                            Text("Add")
+                            Text(stringResource(id = R.string.playlist_add_button))
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showAddDialog = false }) { Text("Cancel") }
+                        TextButton(onClick = { showAddDialog = false }) { Text(stringResource(id = R.string.playlist_cancel_button)) }
                     }
                 )
             }
@@ -445,13 +447,13 @@ fun PlaylistScreen(
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text("Create playlist") },
+            title = { Text(stringResource(id = R.string.playlist_create_dialog_title)) },
             text = {
                 OutlinedTextField(
                     value = newPlaylistName,
                     onValueChange = { newPlaylistName = it },
                     singleLine = true,
-                    label = { Text("Name") },
+                    label = { Text(stringResource(id = R.string.playlist_name_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -468,12 +470,12 @@ fun PlaylistScreen(
                         }
                     }
                 ) {
-                    Text("Create")
+                    Text(stringResource(id = R.string.playlist_create_button))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(id = R.string.playlist_cancel_button))
                 }
             }
         )
@@ -562,7 +564,7 @@ private fun PlaylistCard(
                 if (showDeleteIcon) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete playlist",
+                        contentDescription = stringResource(id = R.string.playlist_cd_delete_playlist),
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier
                             .align(Alignment.TopEnd)

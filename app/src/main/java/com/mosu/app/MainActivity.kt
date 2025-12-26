@@ -121,7 +121,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     
     // Music Controller stays alive at MainScreen level
-    val musicController = remember { MusicController(context) }
+    val musicController = remember { MusicController(context, settingsManager) }
     
     // Access Token State (loaded from TokenManager or from OAuth)
     val storedToken by tokenManager.accessToken.collectAsState(initial = null)

@@ -12,6 +12,7 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.mosu.app.data.db.BeatmapEntity
+import com.mosu.app.data.SettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,7 +23,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 
-class MusicController(context: Context) {
+class MusicController(
+    context: Context,
+    private val settingsManager: SettingsManager
+) {
     
     private var controllerFuture: ListenableFuture<MediaController>
     private val controller: MediaController?
@@ -87,6 +91,18 @@ class MusicController(context: Context) {
             _shuffleModeEnabled.value = controller.shuffleModeEnabled
             _duration.value = controller.duration.coerceAtLeast(0L)
             applyPlaybackMod(_playbackMod.value)
+
+            // Restore saved play mode settings
+            scope.launch {
+                settingsManager.shuffleModeEnabled.collect { enabled ->
+                    controller.shuffleModeEnabled = enabled
+                }
+            }
+            scope.launch {
+                settingsManager.repeatMode.collect { mode ->
+                    controller.repeatMode = mode
+                }
+            }
             
             startProgressUpdater()
         }, MoreExecutors.directExecutor())
@@ -171,12 +187,19 @@ class MusicController(context: Context) {
     
     fun toggleShuffleMode() {
         val controller = this.controller ?: return
-        controller.shuffleModeEnabled = !controller.shuffleModeEnabled
+        val newEnabled = !controller.shuffleModeEnabled
+        controller.shuffleModeEnabled = newEnabled
+        scope.launch {
+            settingsManager.saveShuffleModeEnabled(newEnabled)
+        }
     }
 
     fun setShuffleMode(enabled: Boolean) {
         val controller = this.controller ?: return
         controller.shuffleModeEnabled = enabled
+        scope.launch {
+            settingsManager.saveShuffleModeEnabled(enabled)
+        }
     }
     
     fun toggleRepeatMode() {
@@ -188,11 +211,17 @@ class MusicController(context: Context) {
             else -> Player.REPEAT_MODE_OFF
         }
         controller.repeatMode = newMode
+        scope.launch {
+            settingsManager.saveRepeatMode(newMode)
+        }
     }
 
     fun setRepeatMode(mode: Int) {
         val controller = this.controller ?: return
         controller.repeatMode = mode
+        scope.launch {
+            settingsManager.saveRepeatMode(mode)
+        }
     }
 
     fun setPlaybackMod(mod: PlaybackMod) {

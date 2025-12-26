@@ -72,6 +72,8 @@ fun LibraryScreen(
     val listState = rememberLazyListState()
     var highlightSetId by remember { mutableStateOf<Long?>(null) }
     var buttonBlink by remember { mutableStateOf(false) }
+    var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var highlightTrackId by remember { mutableStateOf<Long?>(null) }
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val playingTitle = nowPlaying?.title?.toString()?.trim()?.lowercase()
 
@@ -202,7 +204,16 @@ fun LibraryScreen(
                     AlbumGroup(
                         album = albumData,
                         actions = albumActions,
-                        highlight = highlightSetId == setId && nowPlaying != null
+                        highlight = highlightSetId == setId && nowPlaying != null,
+                        forceExpanded = expandedBeatmapSets.contains(setId),
+                        onExpansionChanged = { expanded ->
+                            expandedBeatmapSets = if (expanded) {
+                                expandedBeatmapSets + setId
+                            } else {
+                                expandedBeatmapSets - setId
+                            }
+                        },
+                        highlightTrackId = highlightTrackId
                     )
                 } else {
                     // Single Track
@@ -281,21 +292,63 @@ fun LibraryScreen(
             IconButton(
                 onClick = {
                     val keyList = groupedMaps.keys.toList()
-                    val match = filteredMaps.firstOrNull { it.title.trim().lowercase() == playingTitle }
+                    val match = filteredMaps.firstOrNull {
+                        // Try matching by title first (for standalone songs)
+                        it.title.trim().lowercase() == playingTitle ||
+                        // Then try matching by difficulty name (for songs in beatmapsets)
+                        it.difficultyName.trim().lowercase() == playingTitle
+                    }
                     if (match != null) {
                         val targetIndex = keyList.indexOf(match.beatmapSetId)
                         if (targetIndex >= 0) {
                             scope.launch {
-                                listState.animateScrollToItem(targetIndex)
-                                repeat(3) {
-                                    highlightSetId = match.beatmapSetId
-                                    delay(150)
-                                    highlightSetId = null
-                                    delay(150)
+                                // Check if it's a song in a beatmapset pack
+                                val isSongInPack = groupedMaps[match.beatmapSetId]?.size ?: 0 > 1 &&
+                                                  match.difficultyName.trim().lowercase() == playingTitle
+
+                                if (isSongInPack) {
+                                    // For songs in beatmapset packs: expand the pack and highlight only the specific track
+                                    expandedBeatmapSets = expandedBeatmapSets + match.beatmapSetId
+                                    highlightTrackId = match.uid
+
+                                    // Calculate song position within the beatmapset for scroll offset
+                                    val beatmapset = groupedMaps[match.beatmapSetId] ?: emptyList()
+                                    val sortedSongs = beatmapset.sortedBy { it.difficultyName } // Sort by difficulty name like AlbumGroup
+                                    val songIndex = sortedSongs.indexOfFirst { it.uid == match.uid }
+
+                                    // Estimate scroll offset: header height + (song index * estimated item height)
+                                    // Header is ~80dp, each song item is ~60dp
+                                    val estimatedOffsetDp = 80 + songIndex * 65
+                                    val estimatedOffsetPx = estimatedOffsetDp * 3 // Rough density multiplier
+
+                                    // Scroll to the beatmapset with offset to bring target song into view
+                                    if (songIndex > 2) { // Only use offset if song is not in the first few positions
+                                        // Positive offset to position beatmapset lower, revealing content above
+                                        listState.animateScrollToItem(targetIndex, estimatedOffsetPx.toInt())
+                                    } else {
+                                        listState.animateScrollToItem(targetIndex)
+                                    }
+
+                                    // Normal highlight sequence for the specific track (same as standalone songs)
+                                    repeat(3) {
+                                        highlightTrackId = match.uid  // Set highlight
+                                        delay(150)
+                                        highlightTrackId = null       // Clear highlight
+                                        delay(150)
+                                    }
+
+                                    // Final clear (already cleared in loop, but for safety)
+                                    highlightTrackId = null
+                                } else {
+                                    // For standalone songs, just highlight the item
+                                    listState.animateScrollToItem(targetIndex)
+                                    repeat(3) {
+                                        highlightSetId = match.beatmapSetId
+                                        delay(150)
+                                        highlightSetId = null
+                                        delay(150)
+                                    }
                                 }
-                                highlightSetId = match.beatmapSetId
-                                delay(700)
-                                highlightSetId = null
                             }
                         }
                     } else {

@@ -12,22 +12,20 @@
 
 # New Feature
 1. Settings page update
-    1. implement cache cleaning in settings.
-    2. Implement sound balancing base on loudness normalization algorithms
-    3. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
-2. Player / Player view
+    1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
+2. Player / Player view updates
     1. Add HT(Half Time) similar to DT that doesn't change pitch.
     2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion.
-3. Playlist feature
+    3. Implement sound balancing base on loudness normalization algorithms
+3. Playlist page updates
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
     2. Add mode selection for recent play filter
     3. Maybe add timestamp to recent played music
-5. Library update
-    1. add search page search bar to library.
+5. Library page update
     2. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
-6. Add Playlist page
+6. Playlist page update
     1. Implement Playlist management system allowing for rearrangement(placement) of playlist and deletion of playlists.
 
 
@@ -46,8 +44,8 @@
     4. The shuffle button, when clicked, should cycle (1->2,2->3,3->1,1->2, ...) instead of (1->2,2->3,3->2,2->1, ...)
 3. Playlist feature
     1. Implement `single`/`loop`/`random`(that loops) feature. As of current, the playlist is the whole library, i.e., loop/random applies to the whole library. The library genre feature should work here to change the playlist.
-    1. Long pressing a playlist in playlist page should call out a pop up menu which you can delete or rename the playlist.
-    2. Inside a playlist, right swipe a song should remove it from the playlist (with a confirmation popup), left swipe should delete the song from the entire library as usual.
+    2. Long pressing a playlist in playlist page should call out a pop up menu which you can delete or rename the playlist.
+    3. Inside a playlist, right swipe a song should remove it from the playlist (with a confirmation popup), left swipe should delete the song from the entire library as usual.
 4. Search page updates
     1. When a song is downloaded is clicked in search page, it is played.
     2. Implement filter by `favorite`(extracted from user's osu account data) (it should be a part of the `played`/`all` button). So now it alternates between `played`, `all`, `favorite`.
@@ -63,6 +61,7 @@
     2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.
     3. implement a find current song button in library. It should be a button (with a locate icon and transparent background) floating on the bottom left of the song list (still above the miniplayer). When clicked, the song list scrolls to the song that's playing. For now use title for matching. Then briefly make the background of the song that's found blink for one second. It should dissappear when using full player and make sure its button functionality is disabled so it won't cause mistouch in full player. It should not appear when no music is in miniplayer. Also, if there is no matching music, don't move at all, just blink the button itself for a second to indicate error. If the music is already in current view, just blink it.
     4. add right swipe to add to playlist action for every song that enter a menu displaying a list of playlist to add to. Should also be able to remove songs from playlists from here.
+    1. add search page search bar to library.
 6. Add Playlist page
     1. Add `Playlist` page which you can create album and put music into it. has a create album button on the top right. page view default to all album spreading out. Two albums per row and extends downwards. You can click into albums and the view changes to the album title on top with a play button next to it, with song list below. You can add song here, base on the add button on the top right. or play the album which when using loop/random will only loop the songs in the album.
 
@@ -72,9 +71,9 @@
 3. remove black line below search bar. Also make genre bar sit closer to search bar and song list below, and make the genre buttons slightly smaller.
 4. add most-played view also to support. Support's search page should be able to contain all 4 search methods. We need to rethink about the ordering of these modes, maybe change the UX for switching between 4 modes because one button is too much for 4 modes.
 5. Slider reshape into AM style.
-8. Removed Language settings, as this is now following Android system settings.
-3. When an individual song within a songpack(beatmapset) is played, the music player should show the difficulty title (individual song title) instead of the songpack(beatmapset) title. 
-4. Implement language changing feature
+6. Removed Language settings, as this is now following Android system settings.
+7. When an individual song within a songpack(beatmapset) is played, the music player should show the difficulty title (individual song title) instead of the songpack(beatmapset) title.
+8. Implement language changing feature
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -91,8 +90,9 @@
 12. Inside each playlist, there are some songs that have their play button squished probably because of a long title. Remove the Play button because clicking the song itself will lead to play.
 13. Recent filter mode doesn't work
 14. UI in profile page is bugged because the button being pushed to the right by the text that's too wide. All buttons in profile page should align to the right instead of aligning to the text, and text here should align have a common max width. Update Credential button should have its text centered. Default search view drop down menu button should be much wider because it shows text inside.
-15. Cannot download music in favorite page because proper mapping to beatmap link was not made. 
+15. Cannot download music in favorite page because proper mapping to beatmap link was not made.
 16. Song pack in library has wrong background color, it should be very subtle lighter/darker color than the songlist background color depend on the dark/light mode.
-2. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
-4. Find song doesn't work for individual songs in a songpack. 
-3. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?
+17. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
+18. Find song doesn't work for individual songs in a songpack.
+19. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?
+20. implement cache cleaning in settings.

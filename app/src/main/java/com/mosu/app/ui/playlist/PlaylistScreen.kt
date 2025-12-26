@@ -30,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,8 +39,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,9 +62,12 @@ import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
 import com.mosu.app.player.MusicController
+import com.mosu.app.ui.library.SingleTrackItem
+import com.mosu.app.ui.library.AlbumGroupItem
 import kotlinx.coroutines.launch
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistScreen(
     db: AppDatabase,
@@ -72,6 +78,9 @@ fun PlaylistScreen(
     val downloadedTracks by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
     val playlistTrackRefs by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val beatmapByUid = remember(downloadedTracks) { downloadedTracks.associateBy { it.uid } }
+    val playlistMembership = playlistTrackRefs
+        .groupBy { it.playlistId }
+        .mapValues { entry -> entry.value.map { it.beatmapUid }.toSet() }
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
     val playlistTracks: List<BeatmapEntity> by if (selectedPlaylistId != null) {
@@ -86,11 +95,38 @@ fun PlaylistScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var addSelection by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
+    // Playlist dialog for adding tracks/playlists to other playlists
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var dialogTrack by remember { mutableStateOf<BeatmapEntity?>(null) }
+    var dialogSelection by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val dialogSelectionCache = remember { mutableStateMapOf<Long, Set<Long>>() }
+
     val scope = rememberCoroutineScope()
 
     fun playAlbum(tracks: List<BeatmapEntity>) {
         if (tracks.isEmpty()) return
         musicController.playSong(tracks.first(), tracks)
+    }
+
+    fun openPlaylistDialog(track: BeatmapEntity) {
+        dialogTrack = track
+        dialogSelection = dialogSelectionCache[track.uid]
+            ?: playlists
+                .filter { playlistMembership[it.id]?.contains(track.uid) == true }
+                .map { it.id }
+                .toSet()
+        showPlaylistDialog = true
+    }
+
+    // Keep dialog checkboxes in sync with latest membership while dialog is open
+    LaunchedEffect(playlistTrackRefs, dialogTrack, playlists) {
+        val track = dialogTrack ?: return@LaunchedEffect
+        val latest = playlists
+            .filter { playlistMembership[it.id]?.contains(track.uid) == true }
+            .map { it.id }
+            .toSet()
+        dialogSelection = latest
+        dialogSelectionCache[track.uid] = latest
     }
 
     Column(
@@ -188,16 +224,65 @@ fun PlaylistScreen(
                     Text(text = "No songs yet. Tap + to add.")
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(playlistTracks.size) { index ->
-                        val track = playlistTracks[index]
-                        PlaylistTrackRow(
-                            track = track,
-                            onPlay = { playAlbum(playlistTracks) }
-                        )
+                // Group tracks by beatmapSetId like in the library
+                val groupedTracks = playlistTracks.groupBy { it.beatmapSetId }
+
+                // Determine which beatmapsets have multiple songs available in the library
+                val libraryBeatmapSets = downloadedTracks.groupBy { it.beatmapSetId }
+                val multiSongBeatmapSets = libraryBeatmapSets.filter { it.value.size > 1 }.keys.toSet()
+
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(
+                        count = groupedTracks.keys.size,
+                        key = { index -> groupedTracks.keys.elementAt(index) }
+                    ) { index ->
+                        val setId = groupedTracks.keys.elementAt(index)
+                        val tracks = groupedTracks[setId] ?: emptyList()
+                        if (tracks.isEmpty()) return@items
+
+                        if (multiSongBeatmapSets.contains(setId)) {
+                            // Album Group
+                            AlbumGroupItem(
+                                tracks = tracks,
+                                musicController = musicController,
+                                db = db,
+                                scope = scope,
+                                highlight = false,
+                                onPlay = { selectedTrack ->
+                                    musicController.playSong(selectedTrack, playlistTracks)
+                                },
+                                onDelete = {
+                                    scope.launch {
+                                        tracks.forEach { track ->
+                                            db.playlistDao().removeTrack(
+                                                playlistId = selectedPlaylistId!!,
+                                                beatmapUid = track.uid
+                                            )
+                                        }
+                                    }
+                                },
+                                onAddToPlaylist = { openPlaylistDialog(tracks.first()) }
+                            )
+                        } else {
+                            // Single Track
+                            SingleTrackItem(
+                                map = tracks[0],
+                                musicController = musicController,
+                                highlight = false,
+                                onPlay = {
+                                    musicController.playSong(tracks[0], playlistTracks)
+                                },
+                                onDelete = {
+                                    scope.launch {
+                                        db.playlistDao().removeTrack(
+                                            playlistId = selectedPlaylistId!!,
+                                            beatmapUid = tracks[0].uid
+                                        )
+                                    }
+                                },
+                                onAddToPlaylist = { openPlaylistDialog(tracks[0]) }
+                            )
+                        }
                     }
                 }
             }
@@ -323,6 +408,79 @@ fun PlaylistScreen(
             }
         )
     }
+
+    if (showPlaylistDialog && dialogTrack != null) {
+        val track = dialogTrack!!
+        AlertDialog(
+            onDismissRequest = { showPlaylistDialog = false },
+            title = { Text("Add to playlist") },
+            text = {
+                Column {
+                    playlists.forEach { playlist ->
+                        val checked = dialogSelection.contains(playlist.id)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val newChecked = !checked
+                                    dialogSelection = if (newChecked) dialogSelection + playlist.id else dialogSelection - playlist.id
+                                    dialogSelectionCache[track.uid] = dialogSelection
+                                    scope.launch {
+                                        if (newChecked) {
+                                            db.playlistDao().addTrack(
+                                                PlaylistTrackEntity(
+                                                    playlistId = playlist.id,
+                                                    beatmapUid = track.uid
+                                                )
+                                            )
+                                        } else {
+                                            db.playlistDao().removeTrack(
+                                                playlistId = playlist.id,
+                                                beatmapUid = track.uid
+                                            )
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { newChecked ->
+                                    dialogSelection = if (newChecked) dialogSelection + playlist.id else dialogSelection - playlist.id
+                                    dialogSelectionCache[track.uid] = dialogSelection
+                                    scope.launch {
+                                        if (newChecked) {
+                                            db.playlistDao().addTrack(
+                                                PlaylistTrackEntity(
+                                                    playlistId = playlist.id,
+                                                    beatmapUid = track.uid
+                                                )
+                                            )
+                                        } else {
+                                            db.playlistDao().removeTrack(
+                                                playlistId = playlist.id,
+                                                beatmapUid = track.uid
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                            Text(text = playlist.name, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                    if (playlists.isEmpty()) {
+                        Text(
+                            text = "No playlists yet",
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
 }
 
 @Composable
@@ -391,45 +549,6 @@ private fun PlaylistCard(
     }
 }
 
-@Composable
-private fun PlaylistTrackRow(
-    track: BeatmapEntity,
-    onPlay: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onPlay() }
-            .padding(vertical = 12.dp, horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = File(track.coverPath),
-            contentDescription = null,
-            modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(6.dp)),
-            contentScale = ContentScale.Crop
-        )
-        Column(
-            modifier = Modifier
-                .padding(start = 12.dp)
-                .weight(1f)
-        ) {
-            Text(
-                text = track.title, 
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
-            )
-            Text(
-                text = track.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary,
-                maxLines = 1
-            )
-        }
-    }
-}
 
 @Composable
 private fun CollageBackground(

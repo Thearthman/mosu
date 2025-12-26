@@ -38,6 +38,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SwipeToDismiss
+import androidx.compose.material3.SwipeToDismissDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
@@ -49,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -181,6 +183,8 @@ fun LibraryScreen(
                     AlbumGroupItem(
                         tracks = tracks,
                         musicController = musicController,
+                        db = db,
+                        scope = scope,
                         highlight = highlightSetId == setId && nowPlaying != null,
                         onPlay = { selectedTrack ->
                             musicController.playSong(selectedTrack, filteredMaps)
@@ -358,6 +362,8 @@ fun LibraryScreen(
 fun AlbumGroupItem(
     tracks: List<BeatmapEntity>,
     musicController: MusicController,
+    db: AppDatabase,
+    scope: CoroutineScope,
     onPlay: (BeatmapEntity) -> Unit,
     onDelete: () -> Unit,
     onAddToPlaylist: (BeatmapEntity) -> Unit,
@@ -370,7 +376,7 @@ fun AlbumGroupItem(
             when (value) {
                 DismissValue.DismissedToStart -> {
                     onDelete()
-                    true
+                    false
                 }
                 DismissValue.DismissedToEnd -> {
                     onAddToPlaylist(firstTrack)
@@ -456,13 +462,25 @@ fun AlbumGroupItem(
                 }
                 
                 if (expanded) {
-                    tracks.forEach { map ->
-                        TrackRowWithSwipe(
-                            map = map,
-                            onPlay = { onPlay(map) },
-                            onAddToPlaylist = { onAddToPlaylist(map) },
-                            modifier = Modifier.padding(start = 66.dp, end = 8.dp)
-                        )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        tracks.forEachIndexed { index, map ->
+                            TrackRowWithSwipe(
+                                map = map,
+                                scope = scope,
+                                onPlay = { onPlay(map) },
+                                onAddToPlaylist = { onAddToPlaylist(map) },
+                                onDelete = {
+                                    db.beatmapDao().deleteBeatmap(map)
+                                    File(map.audioPath).delete()
+                                    // Don't delete cover photo for individual songs - only when entire beatmapset is deleted
+                                },
+                                modifier = Modifier,
+                                backgroundColor = if (index % 2 == 0) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -485,7 +503,7 @@ fun SingleTrackItem(
             when (value) {
                 DismissValue.DismissedToStart -> {
                     onDelete()
-                    true
+                    false
                 }
                 DismissValue.DismissedToEnd -> {
                     onAddToPlaylist(map)
@@ -564,34 +582,62 @@ fun SingleTrackItem(
 @Composable
 private fun TrackRowWithSwipe(
     map: BeatmapEntity,
+    scope: CoroutineScope,
     onPlay: () -> Unit,
     onAddToPlaylist: (BeatmapEntity) -> Unit,
-    modifier: Modifier = Modifier
+    onDelete: suspend () -> Unit,
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = MaterialTheme.colorScheme.surface
 ) {
     val dismissState = rememberDismissState(
         confirmValueChange = { value ->
-            if (value == DismissValue.DismissedToEnd) {
-                onAddToPlaylist(map)
+            when (value) {
+                DismissValue.DismissedToEnd -> {
+                    onAddToPlaylist(map)
+                    false
+                }
+                DismissValue.DismissedToStart -> {
+                    scope.launch {
+                        onDelete()
+                    }
+                    false
+                }
+                else -> false
             }
-            false
         }
     )
 
     SwipeToDismiss(
         state = dismissState,
-        directions = setOf(DismissDirection.StartToEnd),
+        directions = setOf(DismissDirection.StartToEnd, DismissDirection.EndToStart),
         background = {
+            val bgColor = when (dismissState.dismissDirection) {
+                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.error
+            }
+            val icon = when (dismissState.dismissDirection) {
+                DismissDirection.StartToEnd -> Icons.Default.Add
+                else -> Icons.Default.Delete
+            }
+            val iconTint = when (dismissState.dismissDirection) {
+                DismissDirection.StartToEnd -> MaterialTheme.colorScheme.onPrimary
+                else -> MaterialTheme.colorScheme.onError
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(bgColor)
                     .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.CenterStart
+                contentAlignment = if (dismissState.dismissDirection == DismissDirection.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(id = R.string.library_cd_add_playlist),
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    imageVector = icon,
+                    contentDescription = if (dismissState.dismissDirection == DismissDirection.StartToEnd)
+                        stringResource(id = R.string.library_cd_add_playlist)
+                    else
+                        stringResource(id = R.string.library_cd_delete),
+                    tint = iconTint,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -600,12 +646,14 @@ private fun TrackRowWithSwipe(
             Row(
                 modifier = modifier
                     .fillMaxWidth()
+                    .background(backgroundColor)
                     .clickable { onPlay() }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(text = map.difficultyName, style = MaterialTheme.typography.bodyMedium)
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(text = map.difficultyName, style = MaterialTheme.typography.titleMedium)
+                    Text(text = map.creator, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
                 }
             }
         }

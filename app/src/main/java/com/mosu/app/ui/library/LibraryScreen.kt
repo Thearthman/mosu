@@ -21,6 +21,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -56,8 +57,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.isImeVisible
 import kotlinx.coroutines.delay
@@ -105,59 +104,16 @@ fun LibraryScreen(
     // Search State
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
-    var hasSearchFocus by remember { mutableStateOf(false) }
-    var isIntentionallyExpanding by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-    val context = LocalContext.current
 
-    // Monitor keyboard visibility
+    // Monitor keyboard visibility - collapse when keyboard is hidden and no search text
     val isKeyboardVisible = WindowInsets.isImeVisible
 
-    // Handle focus management and back press
-    DisposableEffect(Unit) {
-        val activity = context as? ComponentActivity
-        val callback = object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (isSearchExpanded) {
-                    isSearchExpanded = false
-                    focusManager.clearFocus()
-                } else {
-                    // Allow normal back press behavior - remove this callback temporarily
-                    isEnabled = false
-                    activity?.onBackPressed()
-                    isEnabled = true
-                }
-            }
-        }
-
-        activity?.onBackPressedDispatcher?.addCallback(callback)
-
-        onDispose {
-            callback.remove()
-            focusManager.clearFocus()
+    LaunchedEffect(isKeyboardVisible, searchQuery) {
+        if (!isKeyboardVisible && searchQuery.isEmpty() && isSearchExpanded) {
             isSearchExpanded = false
-        }
-    }
-
-    // Monitor focus state and keyboard visibility for reliable dismissal detection
-    LaunchedEffect(hasSearchFocus, isKeyboardVisible, searchQuery, isIntentionallyExpanding) {
-        // Don't collapse if we're intentionally expanding (waiting for keyboard to appear)
-        if (isIntentionallyExpanding) return@LaunchedEffect
-
-        if (!hasSearchFocus && !isKeyboardVisible) {
-            // Keyboard is dismissed and we lost focus
             focusManager.clearFocus()
-            if (searchQuery.isEmpty()) {
-                isSearchExpanded = false
-            }
-        } else if (hasSearchFocus && !isKeyboardVisible && isSearchExpanded) {
-            // Edge case: we have focus but keyboard is not visible - clear focus
-            focusManager.clearFocus()
-            if (searchQuery.isEmpty()) {
-                kotlinx.coroutines.delay(100)
-                isSearchExpanded = false
-            }
         }
     }
 
@@ -230,81 +186,107 @@ fun LibraryScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            TextField(
-                value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    // Keep expanded when there's text
-                    if (it.isNotEmpty()) {
-                        isSearchExpanded = true
-                    }
-                },
-                placeholder = {
-                    if (isSearchExpanded || searchQuery.isNotEmpty()) {
-                        Text(stringResource(id = R.string.library_search_placeholder), style = MaterialTheme.typography.bodySmall)
-                    }
-                },
+            // Custom search field with dynamic text positioning
+            Box(
                 modifier = Modifier
                     .width(searchBarWidth)
                     .height(50.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp)
+                    )
                     .focusRequester(searchFocusRequester)
                     .onFocusChanged { focusState ->
-                        hasSearchFocus = focusState.isFocused
                         if (focusState.isFocused) {
                             isSearchExpanded = true
                         }
-                    },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        // Search is already triggered by the filtering logic
                     }
-                ),
-                leadingIcon = {
+            ) {
+                // Search icon (fades/disappears based on width)
+                if (searchBarWidth < 120.dp) {
+                    val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
+
                     IconButton(
                         onClick = {
                             if (!isSearchExpanded) {
-                                isIntentionallyExpanding = true
                                 isSearchExpanded = true
                                 searchFocusRequester.requestFocus()
-                                // Clear the flag after keyboard should be visible
-                                scope.launch {
-                                    kotlinx.coroutines.delay(300)
-                                    isIntentionallyExpanding = false
-                                }
                             }
                         },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(24.dp)
                     ) {
                         Icon(
                             Icons.Default.Search,
                             contentDescription = "Open search",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = iconAlpha)
+                        )
+                    }
+                }
+
+                // Text field content with dynamic positioning
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        // Keep expanded when there's text
+                        if (it.isNotEmpty()) {
+                            isSearchExpanded = true
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = if (searchBarWidth >= 120.dp) 18.dp else 10.dp, // More space when icon hidden
+                            end = 30.dp,  // Space for clear button
+                            bottom = 1.dp
+                        ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            // Search is already triggered by the filtering logic
+                        }
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (searchQuery.isEmpty() && searchBarWidth >= 125.dp) {
+                                Text(
+                                    text = stringResource(id = R.string.library_search_placeholder),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+
+                // Clear button
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(
+                        onClick = { searchQuery = "" },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 10.dp)
+                            .size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = stringResource(id = R.string.search_cd_clear),
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(
-                                Icons.Default.Clear,
-                                contentDescription = stringResource(id = R.string.search_cd_clear),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                ),
-                shape = RoundedCornerShape(12.dp),
-                textStyle = MaterialTheme.typography.bodySmall
-            )
+                }
+            }
 
         }
 

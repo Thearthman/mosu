@@ -108,17 +108,23 @@ class MusicController(context: Context) {
         val controller = this.controller ?: return
         
         // Convert playlist to MediaItems
+        // Group by beatmapSetId to identify songs that are part of beatmapsets vs standalone
+        val beatmapSetsInPlaylist = playlist.groupBy { it.beatmapSetId }
+
         val mediaItems = playlist.map { beatmap ->
             val file = File(beatmap.audioPath)
-            // For individual tracks in beatmapsets, show difficulty name as title and beatmapset title as artist
-            // For standalone tracks or albums, use normal title/artist
-            val (displayTitle, displayArtist) = if (beatmap.difficultyName.isNotBlank() && beatmap.difficultyName != beatmap.title) {
-                // Individual difficulty: title = difficulty name, artist = beatmapset title
+
+            // Check if this beatmap is part of a multi-difficulty beatmapset in the current playlist
+            val isPartOfBeatmapset = beatmapSetsInPlaylist[beatmap.beatmapSetId]?.size ?: 0 > 1
+
+            val (displayTitle, displayArtist) = if (isPartOfBeatmapset) {
+                // Song is part of a beatmapset: show difficulty as title, beatmapset title as artist
                 beatmap.difficultyName to beatmap.title
             } else {
-                // Album or standalone track: use normal title/artist
+                // Standalone song: use normal title/artist
                 beatmap.title to beatmap.artist
             }
+
             val metadata = MediaMetadata.Builder()
                 .setTitle(displayTitle)
                 .setArtist(displayArtist)

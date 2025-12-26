@@ -78,21 +78,38 @@ fun AlbumGroup(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
+    var currentProgress by remember { mutableStateOf(0f) }
+
     val dismissState = rememberDismissState(
         confirmValueChange = { value ->
             when (value) {
                 DismissValue.DismissedToStart -> {
-                    actions.onDelete?.invoke()
-                    false
+                    // Custom threshold for delete: require 70% progress
+                    if (currentProgress >= SwipeThresholds.DELETE) {
+                        actions.onDelete?.invoke()
+                        true // Allow dismissal
+                    } else {
+                        false // Cancel dismissal
+                    }
                 }
                 DismissValue.DismissedToEnd -> {
-                    actions.onAddToPlaylist?.invoke()
-                    false
+                    // Custom threshold for add: require 40% progress
+                    if (currentProgress >= SwipeThresholds.ADD_TO_PLAYLIST) {
+                        actions.onAddToPlaylist?.invoke()
+                        false // Don't dismiss, just execute action
+                    } else {
+                        false // Cancel dismissal
+                    }
                 }
                 else -> false
             }
         }
     )
+
+    // Track the current progress
+    androidx.compose.runtime.LaunchedEffect(dismissState.progress) {
+        currentProgress = dismissState.progress
+    }
 
     SwipeToDismiss(
         state = dismissState,
@@ -210,21 +227,38 @@ private fun TrackRowWithSwipe(
     modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface
 ) {
+    var currentProgress by remember { mutableStateOf(0f) }
+
     val dismissState = rememberDismissState(
         confirmValueChange = { value ->
             when (value) {
                 DismissValue.DismissedToEnd -> {
-                    onAddToPlaylist?.invoke()
-                    false
+                    // Custom threshold for add: require 40% progress
+                    if (currentProgress >= SwipeThresholds.ADD_TO_PLAYLIST) {
+                        onAddToPlaylist?.invoke()
+                        false // Don't dismiss, just execute action
+                    } else {
+                        false // Cancel dismissal
+                    }
                 }
                 DismissValue.DismissedToStart -> {
-                    onDelete?.invoke()
-                    false
+                    // Custom threshold for delete: require 70% progress
+                    if (currentProgress >= SwipeThresholds.DELETE) {
+                        onDelete?.invoke()
+                        true // Allow dismissal
+                    } else {
+                        false // Cancel dismissal
+                    }
                 }
                 else -> false
             }
         }
     )
+
+    // Track the current progress
+    androidx.compose.runtime.LaunchedEffect(dismissState.progress) {
+        currentProgress = dismissState.progress
+    }
 
     androidx.compose.material3.SwipeToDismiss(
         state = dismissState,

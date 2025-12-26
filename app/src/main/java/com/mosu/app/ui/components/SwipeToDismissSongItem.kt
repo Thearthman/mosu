@@ -18,6 +18,10 @@ import androidx.compose.material3.SwipeToDismiss
 import androidx.compose.material3.SwipeToDismissDefaults
 import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,21 +50,38 @@ fun SwipeToDismissSongItem(
     highlight: Boolean = false,
     backgroundColor: Color = MaterialTheme.colorScheme.surface
 ) {
+    var currentProgress by remember { mutableStateOf(0f) }
+
     val dismissState = rememberDismissState(
         confirmValueChange = { value ->
             when (value) {
                 DismissValue.DismissedToStart -> {
-                    swipeActions.onDelete?.invoke()
-                    false
+                    // Custom threshold for delete: require 70% progress
+                    if (currentProgress >= SwipeThresholds.DELETE) {
+                        swipeActions.onDelete?.invoke()
+                        true // Allow dismissal
+                    } else {
+                        false // Cancel dismissal
+                    }
                 }
                 DismissValue.DismissedToEnd -> {
-                    swipeActions.onAddToPlaylist?.invoke(song)
-                    false
+                    // Custom threshold for add: require 40% progress
+                    if (currentProgress >= SwipeThresholds.ADD_TO_PLAYLIST) {
+                        swipeActions.onAddToPlaylist?.invoke(song)
+                        false // Don't dismiss, just execute action
+                    } else {
+                        false // Cancel dismissal
+                    }
                 }
                 else -> false
             }
         }
     )
+
+    // Track the current progress
+    androidx.compose.runtime.LaunchedEffect(dismissState.progress) {
+        currentProgress = dismissState.progress
+    }
 
     SwipeToDismiss(
         state = dismissState,

@@ -2,11 +2,12 @@
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Should preserve play mode (shuffle, loop single or no loop) even when app is exited
 3. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?
-
+4. Find song doesn't work for individual songs in a songpack. 
 
 # UI improvement (implement 3 first)
 1. In Search page, add gamemode labels (images are in icons folder) at the end of the composer's name's line.
 2. Add global player playcount to info popup in search page.
+
 
 # New Feature
 1. Settings page update
@@ -18,8 +19,7 @@
     1. Add HT(Half Time) similar to DT that doesn't change pitch.
     2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion.
 3. Playlist feature
-    1. Long pressing a playlist in playlist page should call out a pop up menu which you can delete or rename the playlist.
-    2. Inside a playlist, right swipe a song should remove it from the playlist (with a confirmation popup), left swipe should delete the song from the entire library as usual.
+    
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
     2. Add mode selection for recent play filter
@@ -30,6 +30,8 @@
 6. Add Playlist page
     1. Implement Playlist management system allowing for rearrangement(placement) of playlist and deletion of playlists.
 
+
+---
 
 
 # Implemented Features
@@ -44,6 +46,8 @@
     4. The shuffle button, when clicked, should cycle (1->2,2->3,3->1,1->2, ...) instead of (1->2,2->3,3->2,2->1, ...)
 3. Playlist feature
     1. Implement `single`/`loop`/`random`(that loops) feature. As of current, the playlist is the whole library, i.e., loop/random applies to the whole library. The library genre feature should work here to change the playlist.
+    1. Long pressing a playlist in playlist page should call out a pop up menu which you can delete or rename the playlist.
+    2. Inside a playlist, right swipe a song should remove it from the playlist (with a confirmation popup), left swipe should delete the song from the entire library as usual.
 4. Search page updates
     1. When a song is downloaded is clicked in search page, it is played.
     2. Implement filter by `favorite`(extracted from user's osu account data) (it should be a part of the `played`/`all` button). So now it alternates between `played`, `all`, `favorite`.
@@ -69,6 +73,7 @@
 4. add most-played view also to support. Support's search page should be able to contain all 4 search methods. We need to rethink about the ordering of these modes, maybe change the UX for switching between 4 modes because one button is too much for 4 modes.
 5. Slider reshape into AM style.
 8. Removed Language settings, as this is now following Android system settings.
+3. When an individual song within a songpack(beatmapset) is played, the music player should show the difficulty title (individual song title) instead of the songpack(beatmapset) title. 
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

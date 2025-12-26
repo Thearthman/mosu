@@ -51,6 +51,7 @@
     <string name="search_not_logged">未登入</string>
     <string name="search_config_prompt">請前往「個人」頁設定憑證並登入。</string>
     <string name="search_placeholder">以標題或歌手搜尋…</string>
+    <string name="library_search_placeholder">搜尋…</string>
     <string name="search_cd_search">搜尋</string>
     <string name="search_cd_clear">清除</string>
     <string name="search_filter_genre">依曲風篩選</string>

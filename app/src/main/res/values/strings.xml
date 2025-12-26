@@ -51,6 +51,7 @@
     <string name="search_not_logged">Not Logged In</string>
     <string name="search_config_prompt">Please go to the Profile tab to configure credentials and login.</string>
     <string name="search_placeholder">Search by title or artist...</string>
+    <string name="library_search_placeholder">Search...</string>
     <string name="search_cd_search">Search</string>
     <string name="search_cd_clear">Clear</string>
     <string name="search_filter_genre">Filter by Genre</string>

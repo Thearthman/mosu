@@ -8,23 +8,33 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,11 +44,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.isImeVisible
 import kotlinx.coroutines.delay
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
@@ -57,6 +78,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.mosu.app.R
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LibraryScreen(
     db: AppDatabase,
@@ -79,12 +101,82 @@ fun LibraryScreen(
 
     // Genre Filter State
     var selectedGenreId by remember { mutableStateOf<Int?>(null) }
-    
-    // Filter maps by selected genre
-    val filteredMaps = if (selectedGenreId != null) {
+
+    // Search State
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    var hasSearchFocus by remember { mutableStateOf(false) }
+    var isIntentionallyExpanding by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+
+    // Monitor keyboard visibility
+    val isKeyboardVisible = WindowInsets.isImeVisible
+
+    // Handle focus management and back press
+    DisposableEffect(Unit) {
+        val activity = context as? ComponentActivity
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isSearchExpanded) {
+                    isSearchExpanded = false
+                    focusManager.clearFocus()
+                } else {
+                    // Allow normal back press behavior - remove this callback temporarily
+                    isEnabled = false
+                    activity?.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        }
+
+        activity?.onBackPressedDispatcher?.addCallback(callback)
+
+        onDispose {
+            callback.remove()
+            focusManager.clearFocus()
+            isSearchExpanded = false
+        }
+    }
+
+    // Monitor focus state and keyboard visibility for reliable dismissal detection
+    LaunchedEffect(hasSearchFocus, isKeyboardVisible, searchQuery, isIntentionallyExpanding) {
+        // Don't collapse if we're intentionally expanding (waiting for keyboard to appear)
+        if (isIntentionallyExpanding) return@LaunchedEffect
+
+        if (!hasSearchFocus && !isKeyboardVisible) {
+            // Keyboard is dismissed and we lost focus
+            focusManager.clearFocus()
+            if (searchQuery.isEmpty()) {
+                isSearchExpanded = false
+            }
+        } else if (hasSearchFocus && !isKeyboardVisible && isSearchExpanded) {
+            // Edge case: we have focus but keyboard is not visible - clear focus
+            focusManager.clearFocus()
+            if (searchQuery.isEmpty()) {
+                kotlinx.coroutines.delay(100)
+                isSearchExpanded = false
+            }
+        }
+    }
+
+    // Filter maps by selected genre and search query
+    val genreFilteredMaps = if (selectedGenreId != null) {
         downloadedMaps.filter { it.genreId == selectedGenreId }
     } else {
         downloadedMaps
+    }
+
+    val filteredMaps = if (searchQuery.isNotBlank()) {
+        genreFilteredMaps.filter { map ->
+            map.title.contains(searchQuery, ignoreCase = true) ||
+            map.artist.contains(searchQuery, ignoreCase = true) ||
+            map.difficultyName.contains(searchQuery, ignoreCase = true) ||
+            map.creator.contains(searchQuery, ignoreCase = true)
+        }
+    } else {
+        genreFilteredMaps
     }
     
     // Group maps by Set ID
@@ -117,13 +209,105 @@ fun LibraryScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text(
-            text = stringResource(id = R.string.library_title),
-            style = MaterialTheme.typography.displayMedium, // Apple Music style large title
-            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        // Animated width for collapsible search bar
+        val searchBarWidth by animateDpAsState(
+            targetValue = if (isSearchExpanded || searchQuery.isNotEmpty()) 200.dp else 50.dp,
+            animationSpec = tween(durationMillis = 300),
+            label = "searchBarWidth"
         )
-        
+
+        // Header with title and search bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Text(
+                text = stringResource(id = R.string.library_title),
+                style = MaterialTheme.typography.displayMedium, // Apple Music style large title
+                modifier = Modifier.weight(1f)
+            )
+
+            TextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                    // Keep expanded when there's text
+                    if (it.isNotEmpty()) {
+                        isSearchExpanded = true
+                    }
+                },
+                placeholder = {
+                    if (isSearchExpanded || searchQuery.isNotEmpty()) {
+                        Text(stringResource(id = R.string.library_search_placeholder), style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                modifier = Modifier
+                    .width(searchBarWidth)
+                    .height(50.dp)
+                    .focusRequester(searchFocusRequester)
+                    .onFocusChanged { focusState ->
+                        hasSearchFocus = focusState.isFocused
+                        if (focusState.isFocused) {
+                            isSearchExpanded = true
+                        }
+                    },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        // Search is already triggered by the filtering logic
+                    }
+                ),
+                leadingIcon = {
+                    IconButton(
+                        onClick = {
+                            if (!isSearchExpanded) {
+                                isIntentionallyExpanding = true
+                                isSearchExpanded = true
+                                searchFocusRequester.requestFocus()
+                                // Clear the flag after keyboard should be visible
+                                scope.launch {
+                                    kotlinx.coroutines.delay(300)
+                                    isIntentionallyExpanding = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Open search",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = stringResource(id = R.string.search_cd_clear),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                ),
+                shape = RoundedCornerShape(12.dp),
+                textStyle = MaterialTheme.typography.bodySmall
+            )
+
+        }
+
         // Genre Filter
         Text(text = stringResource(id = R.string.library_filter_genre), style = MaterialTheme.typography.labelMedium)
         GenreFilter(
@@ -377,6 +561,7 @@ fun LibraryScreen(
                 )
             }
         }
+
     }
 }
 

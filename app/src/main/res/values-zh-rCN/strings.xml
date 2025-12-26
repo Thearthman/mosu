@@ -51,6 +51,7 @@
     <string name="search_not_logged">未登录</string>
     <string name="search_config_prompt">请前往“个人”页配置凭证并登录。</string>
     <string name="search_placeholder">按标题或艺术家搜索…</string>
+    <string name="library_search_placeholder">搜索…</string>
     <string name="search_cd_search">搜索</string>
     <string name="search_cd_clear">清除</string>
     <string name="search_filter_genre">按曲风筛选</string>

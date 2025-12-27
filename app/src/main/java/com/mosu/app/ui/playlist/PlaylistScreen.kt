@@ -1,6 +1,5 @@
 package com.mosu.app.ui.playlist
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -305,12 +304,12 @@ fun PlaylistScreen(
                                         }
                                     }
                                 },
-                                onAddToPlaylist = { openPlaylistDialog(tracks.first() as BeatmapEntity) },
+                                onAddToPlaylist = { openPlaylistDialog(tracks.first()) },
                                 onTrackDelete = { songData ->
                                     scope.launch {
                                         db.playlistDao().removeTrack(
                                             playlistId = selectedPlaylistId!!,
-                                            beatmapUid = (songData as SongItemData).id
+                                            beatmapUid = songData.id
                                         )
                                         // Force UI refresh by reassigning the selected playlist ID
                                         val currentId = selectedPlaylistId

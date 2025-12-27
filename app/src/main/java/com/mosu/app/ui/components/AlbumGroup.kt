@@ -73,7 +73,6 @@ data class AlbumGroupActions(
 fun AlbumGroup(
     album: AlbumGroupData,
     actions: AlbumGroupActions,
-    modifier: Modifier = Modifier,
     highlight: Boolean = false,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     forceExpanded: Boolean = false,

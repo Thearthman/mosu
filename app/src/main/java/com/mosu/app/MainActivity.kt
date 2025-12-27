@@ -144,12 +144,10 @@ fun MainScreen(
     tokenManager: TokenManager,
     settingsManager: SettingsManager,
     redirectUri: String
-//    musicController: MusicController
-    ) {
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    
+
     // Configure API authenticator for automatic token refresh
     LaunchedEffect(Unit) {
         RetrofitClient.configureAuthenticator(
@@ -173,8 +171,6 @@ fun MainScreen(
     val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
     val language by settingsManager.language.collectAsState(initial = "en")
     
-    // Login error state
-    var loginError by remember { mutableStateOf<String?>(null) }
     
     // Initialize access token from storage
     LaunchedEffect(storedToken) {
@@ -188,10 +184,8 @@ fun MainScreen(
         if (initialAuthCode != null && accessToken == null) {
             if (clientId.isEmpty() || clientSecret.isEmpty()) {
                 android.util.Log.w("MainActivity", "OAuth callback received but credentials not configured")
-                loginError = "Login failed: Please configure your Client ID and Secret in Profile settings first."
             } else {
                 try {
-                    loginError = null
                     android.util.Log.d("MainActivity", "Processing OAuth callback with code: ${initialAuthCode.take(10)}...")
                     android.util.Log.d("MainActivity", "Client ID configured: ${clientId.isNotEmpty()}")
                     val tokenResponse = repository.exchangeCodeForToken(initialAuthCode, clientId, clientSecret)
@@ -201,11 +195,9 @@ fun MainScreen(
                         tokenResponse.expiresIn
                     )
                     accessToken = tokenResponse.accessToken
-                    loginError = "Login successful!"
                     android.util.Log.d("MainActivity", "Login successful!")
                 } catch (e: Exception) {
                     android.util.Log.e("MainActivity", "Login failed", e)
-                    loginError = "Login failed: ${e.message}\n\nPlease check your Client ID and Secret in Profile settings."
                 }
             }
         }
@@ -253,7 +245,6 @@ fun MainScreen(
         val progress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
         val miniPlayerAlpha = (1f - progress*4f).coerceIn(0f,1f)
         val nowPlaying by musicController.nowPlaying.collectAsState()
-        val isPlaying by musicController.isPlaying.collectAsState()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
         // Move Nav Bar down as sheet expands. 200f is an arbitrary sufficient offset.
@@ -285,22 +276,11 @@ fun MainScreen(
                     }
                     composable("search") {
                         SearchScreen(
-                            authCode = initialAuthCode,
                             repository = repository,
                             db = db,
                             accessToken = accessToken,
-                            clientId = clientId,
-                            clientSecret = clientSecret,
                             settingsManager = settingsManager,
                             musicController = musicController,
-                            onTokenReceived = { token ->
-                                scope.launch {
-                                    accessToken = token
-                                    // For refresh token flow, we only have access token
-                                    // This is a fallback - ideally we'd get expires_in too
-                                    tokenManager.saveToken(token)
-                                }
-                            },
                             scrollToTop = scrollSearchToTop,
                             onScrolledToTop = { scrollSearchToTop = false }
                         )
@@ -380,8 +360,8 @@ fun MainScreen(
                     .align(Alignment.BottomCenter)
                     .offset { IntOffset(0, navBarTranslationY.roundToInt()) }
             ) {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination?.route
+                val navBackStackEntryLocal by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntryLocal?.destination?.route
 
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Home, contentDescription = "Library") },

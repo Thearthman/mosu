@@ -52,7 +52,6 @@ fun ProfileScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     val clientId by settingsManager.clientId.collectAsState(initial = "")
     val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
-    val playedFilterMode by settingsManager.playedFilterMode.collectAsState(initial = "url")
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val searchAnyEnabled by settingsManager.searchAnyEnabled.collectAsState(initial = false)
     val language by settingsManager.language.collectAsState(initial = "en")

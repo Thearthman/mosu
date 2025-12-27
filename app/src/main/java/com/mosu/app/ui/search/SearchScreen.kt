@@ -1,9 +1,6 @@
 package com.mosu.app.ui.search
 
 import android.content.Context
-import android.os.Vibrator
-import android.os.Build
-import android.os.VibrationEffect
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
@@ -112,21 +109,14 @@ data class DownloadProgress(
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
-    authCode: String?,
     repository: OsuRepository,
     db: AppDatabase,
     accessToken: String?,
-    clientId: String,
-    clientSecret: String,
     settingsManager: com.mosu.app.data.SettingsManager,
     musicController: com.mosu.app.player.MusicController,
-    onTokenReceived: (String) -> Unit,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {}
 ) {
-    var debugMode = false
-
-    var statusText by remember { mutableStateOf("") }
     
     // Search Query
     var searchQuery by remember { mutableStateOf("") }
@@ -308,32 +298,6 @@ fun SearchScreen(
         return downloaded + others
     }
 
-    // Vibration helper function
-    fun vibrate() {
-        try {
-            Log.d("SearchScreen", "Attempting to vibrate")
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            if (vibrator == null) {
-                Log.d("SearchScreen", "Vibrator service not available")
-                return
-            }
-            if (!vibrator.hasVibrator()) {
-                Log.d("SearchScreen", "Device has no vibrator")
-                return
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
-                Log.d("SearchScreen", "Vibrated with VibrationEffect")
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(50)
-                Log.d("SearchScreen", "Vibrated with deprecated API")
-            }
-        } catch (e: Exception) {
-            // Log error or ignore if vibration fails
-            Log.e("SearchScreen", "Vibration failed", e)
-        }
-    }
 
     fun filterMetadataFor(list: List<BeatmapsetCompact>, metadata: Map<Long, Pair<Int, Int>>): Map<Long, Pair<Int, Int>> {
         if (metadata.isEmpty()) return emptyMap()
@@ -346,7 +310,7 @@ fun SearchScreen(
         val recentFromDb = db.recentPlayDao().getRecentPlays()
         if ((recentFromDb.isEmpty() || forceRefresh) && accessToken != null && userId != null) {
             try {
-                val recentEntities = repository.fetchRecentPlays(accessToken!!, userId!!, 100)
+                val recentEntities = repository.fetchRecentPlays(accessToken, userId!!, 100)
                 db.recentPlayDao().mergeNewPlays(recentEntities)
             } catch (e: Exception) {
                 // Silently fail for now, will use existing data
@@ -359,7 +323,6 @@ fun SearchScreen(
         searchResults = dedupeByTitle(applied)
         currentCursor = null
         searchResultsMetadata = emptyMap()
-        statusText = ""
     }
     
     Column(modifier = Modifier.fillMaxSize()) {
@@ -377,14 +340,6 @@ fun SearchScreen(
                         stringResource(id = R.string.search_config_prompt),
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    if (statusText.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
                 }
             }
         } else {
@@ -410,14 +365,14 @@ fun SearchScreen(
                             if (filterMode == "recent") {
                                 val uid = userId ?: return@launch
                                 val fresh = repository.fetchRecentPlays(
-                                    accessToken = accessToken!!,
+                                    accessToken = accessToken,
                                     userId = uid
                                 )
                                 db.recentPlayDao().mergeNewPlays(fresh)
                                 loadRecent()
                             } else {
                                 val result = repository.getPlayedBeatmaps(
-                                    accessToken = accessToken!!,
+                                    accessToken = accessToken,
                                     genreId = selectedGenreId,
                                     cursorString = null,
                                     searchQuery = searchQuery.trim().ifEmpty { null },
@@ -441,10 +396,9 @@ fun SearchScreen(
                                     searchResultsMetadata =
                                         (searchResultsMetadata + result.metadata).filterKeys { it in mergedIds }
                                 }
-                                statusText = context.getString(R.string.search_status_refreshed)
                             }
                         } catch (e: Exception) {
-                            statusText = context.getString(R.string.search_status_refresh_error, e.message ?: "")
+                            Log.e("SearchScreen", "Refresh failed", e)
                         } finally {
                             isRefreshing = false
                         }
@@ -512,7 +466,7 @@ fun SearchScreen(
                                                         } else {
                                                             val result =
                                                                 repository.getPlayedBeatmaps(
-                                                                    accessToken!!,
+                                                                    accessToken,
                                                                     selectedGenreId,
                                                                     null,
                                                                     null,
@@ -533,7 +487,7 @@ fun SearchScreen(
                                                                 )
                                                         }
                                                     } catch (e: Exception) {
-                                                        statusText = context.getString(R.string.search_error_prefix, e.message ?: "")
+                                                        Log.e("SearchScreen", "Clear search failed", e)
                                                     }
                                                 }
                                             }) {
@@ -645,7 +599,7 @@ fun SearchScreen(
                                                             } else {
                                                                 val result =
                                                                     repository.getPlayedBeatmaps(
-                                                                        accessToken!!,
+                                                                        accessToken,
                                                                         selectedGenreId,
                                                                         null,
                                                                         searchQuery.trim()
@@ -684,7 +638,7 @@ fun SearchScreen(
                                                     loadRecent()
                                                 } else {
                                                     val result = repository.getPlayedBeatmaps(
-                                                        accessToken!!,
+                                                        accessToken,
                                                         selectedGenreId,
                                                         null,
                                                         searchQuery.trim(),
@@ -702,7 +656,7 @@ fun SearchScreen(
                                                         filterMetadataFor(deduped, result.metadata)
                                                 }
                                             } catch (e: Exception) {
-                                                statusText = context.getString(R.string.search_error_prefix, e.message ?: "")
+                                                Log.e("SearchScreen", "Search failed", e)
                                             }
                                         }
                                     }
@@ -762,7 +716,7 @@ fun SearchScreen(
                                                                 )
                                                         }
                                                     } catch (e: Exception) {
-                                                        statusText = context.getString(R.string.search_error_prefix, e.message ?: "")
+                                                        Log.e("SearchScreen", "Genre filter failed", e)
                                                     }
                                                 }
                                             },
@@ -843,39 +797,32 @@ fun SearchScreen(
                                         val key = mergeKey(map)
                                         infoMergedSetIds = mergeGroups[key]?.toList() ?: listOf(map.id)
                                         infoSetCreators = emptyMap()
-                                        val token = accessToken
-                                        if (token == null) {
-                                            infoError = context.getString(R.string.search_info_login_required)
-                                            infoLoading = false
-                                        } else {
-                                            scope.launch {
-                                                try {
-                                                    val allBeatmaps = mutableListOf<BeatmapDetail>()
-                                                    val creators = mutableMapOf<Long, String>()
-                                                    val ids = infoMergedSetIds.ifEmpty { listOf(map.id) }
-                                                    ids.forEach { setId ->
-                                                        try {
-                                                            val detail = repository.getBeatmapsetDetail(
-                                                                accessToken = token,
-                                                                beatmapsetId = setId
-                                                            )
-                                                            allBeatmaps += detail.beatmaps
-                                                            creators[detail.id] = detail.creator
-                                                        } catch (e: Exception) {
-                                                            // keep going, surface error at end
-                                                            infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
-                                                        }
+                                        scope.launch {
+                                            try {
+                                                val allBeatmaps = mutableListOf<BeatmapDetail>()
+                                                val creators = mutableMapOf<Long, String>()
+                                                val ids = infoMergedSetIds.ifEmpty { listOf(map.id) }
+                                                ids.forEach { setId ->
+                                                    try {
+                                                        val detail = repository.getBeatmapsetDetail(
+                                                            accessToken = accessToken!!,
+                                                            beatmapsetId = setId
+                                                        )
+                                                        allBeatmaps += detail.beatmaps
+                                                        creators[detail.id] = detail.creator
+                                                    } catch (e: Exception) {
+                                                        // keep going, surface error at end
+                                                        infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
                                                     }
-                                                    infoBeatmaps = allBeatmaps
-                                                    infoSetCreators = creators
-                                                } catch (e: Exception) {
-                                                    infoError = e.message ?: context.getString(R.string.search_info_load_error)
-                                                } finally {
-                                                    infoLoading = false
                                                 }
+                                                infoBeatmaps = allBeatmaps
+                                                infoSetCreators = creators
+                                            } catch (e: Exception) {
+                                                infoError = e.message ?: context.getString(R.string.search_info_load_error)
+                                            } finally {
+                                                infoLoading = false
                                             }
                                         }
-                                        true // Consume the long click
                                     }
                                 )
                                 .padding(vertical = 8.dp)
@@ -1082,10 +1029,9 @@ fun SearchScreen(
                                 onClick = {
                                     scope.launch {
                                         isLoadingMore = true
-                                                statusText = context.getString(R.string.search_status_loading_more)
                                         try {
                                             val result = repository.getPlayedBeatmaps(
-                                                accessToken!!,
+                                                accessToken,
                                                 selectedGenreId,
                                                 currentCursor,
                                                 searchQuery.trim().ifEmpty { null },
@@ -1107,14 +1053,11 @@ fun SearchScreen(
                                                 currentCursor = result.cursor
                                                 searchResultsMetadata =
                                                     (searchResultsMetadata + result.metadata).filterKeys { it in mergedIds }
-                                                        statusText =
-                                                            context.getString(R.string.search_status_loaded_more, result.beatmaps.size)
                                             } else {
-                                                        statusText = context.getString(R.string.search_status_no_more)
                                                 currentCursor = null
                                             }
                                         } catch (e: Exception) {
-                                                    statusText = context.getString(R.string.search_status_load_more_error, e.message ?: "")
+                                            Log.e("SearchScreen", "Load more failed", e)
                                         } finally {
                                             isLoadingMore = false
                                         }
@@ -1128,20 +1071,6 @@ fun SearchScreen(
                         }
                     }
 
-                    // Status/Error Message Display
-                    if (statusText.isNotEmpty() && debugMode) {
-                        item {
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (statusText.contains("Error") || statusText.contains("Failed"))
-                                    MaterialTheme.colorScheme.error
-                                else
-                                    MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth().padding(16.dp)
-                            )
-                        }
-                    }
                 }
                 PullRefreshIndicator(
                     refreshing = isRefreshing,
@@ -1299,10 +1228,10 @@ fun SearchScreen(
                 try {
                     val user = repository.getMe(accessToken)
                     userId = user.id.toString()
-                    isSupporter = user.isSupporter ?: false
+                    isSupporter = user.isSupporter
                     isSupporterKnown = true
                 } catch (e: Exception) {
-                    statusText = context.getString(R.string.search_error_prefix, e.message ?: "")
+                    Log.e("SearchScreen", "Failed to get user info", e)
                     isSupporter = false // Default to non-supporter on error
                     isSupporterKnown = true
                 }
@@ -1332,7 +1261,7 @@ fun SearchScreen(
                         searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
                     }
                 } catch (e: Exception) {
-                    statusText = context.getString(R.string.search_error_prefix, e.message ?: "")
+                    Log.e("SearchScreen", "Initial load failed", e)
                 }
             }
         }

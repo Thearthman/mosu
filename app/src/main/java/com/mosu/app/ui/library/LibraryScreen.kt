@@ -534,7 +534,6 @@ fun LibraryScreen(
                     .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(buttonBg)
-//                    .zIndex(2f)
             ) {
                 Icon(
                     imageVector = Icons.Default.MyLocation,

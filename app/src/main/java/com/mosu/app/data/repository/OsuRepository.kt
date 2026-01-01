@@ -91,13 +91,42 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         val metadata: Map<Long, Pair<Int, Int>> = emptyMap() // beatmapId -> (rank, playcount) for most_played
     )
     
+    suspend fun getCachedPlayedBeatmaps(
+        genreId: Int? = null,
+        searchQuery: String? = null,
+        filterMode: String = "played",
+        playedFilterMode: String = "url",
+        userId: String? = null
+    ): PlayedBeatmapsResult? {
+        val safeQuery = sanitizeQuery(searchQuery)
+
+        // Generate appropriate cache key based on filter mode
+        val cacheKey = when (filterMode) {
+            "favorite" -> "favorite_user_${userId}_offset_0"
+            "most_played" -> "most_played_user_${userId}"
+            "played" -> "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_initial"
+            else -> "search_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_initial"
+        }
+
+        // Check cache for initial load conditions (no cursor/query for most modes)
+        if (safeQuery.isNullOrEmpty()) {
+            val cached = searchCacheDao?.getCachedResult(cacheKey)
+            if (cached != null) {
+                val type = object : TypeToken<List<BeatmapsetCompact>>() {}.type
+                val results: List<BeatmapsetCompact> = gson.fromJson(cached.resultsJson, type)
+                return PlayedBeatmapsResult(results, cached.cursorString)
+            }
+        }
+        return null
+    }
+
     suspend fun getPlayedBeatmaps(
-        accessToken: String, 
-        genreId: Int? = null, 
-        cursorString: String? = null, 
-        searchQuery: String? = null, 
-        filterMode: String = "played", 
-        playedFilterMode: String = "url", 
+        accessToken: String,
+        genreId: Int? = null,
+        cursorString: String? = null,
+        searchQuery: String? = null,
+        filterMode: String = "played",
+        playedFilterMode: String = "url",
         userId: String? = null,
         isSupporter: Boolean = true, // Assume supporter unless specified
         searchAny: Boolean = false,

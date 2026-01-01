@@ -5,7 +5,7 @@
 4. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 5. [fixed?] Recent played doesn't work with genre filter. Whats worse is music downloaded from this filter mode does not preserve the genre metadata, it won't be filtered by genre in library either. Never delete recent query, it will be saved for a purpose (year recap). It should also have separators that shows a time stamp(today, three days ago, a week ago, a month ago, 3 months ago, 6 months ago, a year ago, two years ago.) 
 6. [fixed] Bug 5 raises my concern on how we deal with metadata after downloads. We need to perform a thorough check on the consistency of storing the downloaded metadata. 
-
+7. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
 
 # UI improvement (implement 3 first)
 1. In Search page, add gamemode labels (images are in icons folder) at the end of the composer's name's line.

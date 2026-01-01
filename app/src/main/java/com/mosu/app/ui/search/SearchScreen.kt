@@ -1244,7 +1244,7 @@ fun SearchScreen(
             }
         }
             
-        // Initial Load - Fetch results when logged in
+        // Initial Load - Show cached data immediately, then refresh
         LaunchedEffect(accessToken, filterMode, userId) {
             if (accessToken != null && userId != null) {
                 val uid = userId ?: return@LaunchedEffect
@@ -1252,12 +1252,36 @@ fun SearchScreen(
                     if (filterMode == "recent") {
                         loadRecent(forceRefresh = true) // Force fetch from API on initial load
                     } else {
-                        val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
-                        val deduped = dedupeByTitle(result.beatmaps)
-                        mergeGroups = buildMergeGroups(result.beatmaps)
-                        searchResults = deduped
-                        currentCursor = result.cursor
-                        searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
+                        // First, try to load cached data immediately for all filter modes
+                        val cachedResult = repository.getCachedPlayedBeatmaps(
+                            genreId = null,
+                            searchQuery = null,
+                            filterMode = filterMode,
+                            playedFilterMode = playedFilterMode,
+                            userId = uid
+                        )
+                        if (cachedResult != null) {
+                            val deduped = dedupeByTitle(cachedResult.beatmaps)
+                            mergeGroups = buildMergeGroups(cachedResult.beatmaps)
+                            searchResults = deduped
+                            currentCursor = cachedResult.cursor
+                            searchResultsMetadata = filterMetadataFor(deduped, cachedResult.metadata)
+                        }
+
+                        // Then refresh with fresh data in background for all filter modes
+                        scope.launch {
+                            try {
+                                val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
+                                val deduped = dedupeByTitle(result.beatmaps)
+                                mergeGroups = buildMergeGroups(result.beatmaps)
+                                searchResults = deduped
+                                currentCursor = result.cursor
+                                searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
+                            } catch (e: Exception) {
+                                Log.e("SearchScreen", "Background refresh failed", e)
+                                // Don't overwrite cached data if refresh fails
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e("SearchScreen", "Initial load failed", e)

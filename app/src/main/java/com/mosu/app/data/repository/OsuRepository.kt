@@ -13,13 +13,12 @@ import com.mosu.app.data.db.RecentPlayEntity
 import java.time.OffsetDateTime
 
 class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
-    private val api = RetrofitClient.api
     private val gson = Gson()
     
     private val redirectUri = "mosu://callback"
     
     suspend fun exchangeCodeForToken(code: String, clientId: String, clientSecret: String): OsuTokenResponse {
-        return api.getToken(
+        return RetrofitClient.api.getToken(
             clientId = clientId,
             clientSecret = clientSecret,
             code = code,
@@ -28,16 +27,16 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         )
     }
 
-    suspend fun getMe(accessToken: String): OsuUserCompact {
-        return api.getMe("Bearer $accessToken")
+    suspend fun getMe(): OsuUserCompact {
+        return RetrofitClient.api.getMe("")
     }
 
-    suspend fun getBeatmapsetDetail(accessToken: String, beatmapsetId: Long): com.mosu.app.data.api.model.BeatmapsetDetail {
-        return api.getBeatmapsetDetail("Bearer $accessToken", beatmapsetId)
+    suspend fun getBeatmapsetDetail(beatmapsetId: Long): com.mosu.app.data.api.model.BeatmapsetDetail {
+        return RetrofitClient.api.getBeatmapsetDetail("", beatmapsetId)
     }
 
     suspend fun getUserMostPlayed(accessToken: String, userId: String): List<BeatmapPlaycount> {
-        return api.getUserMostPlayed("Bearer $accessToken", userId)
+        return RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId)
     }
 
     suspend fun getRecentPlayedBeatmaps(
@@ -45,7 +44,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         userId: String,
         limit: Int = 100
     ): List<BeatmapsetCompact> {
-        val recentScores = api.getUserRecentScores("Bearer $accessToken", userId, limit)
+        val recentScores = RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit)
         // Keep order as returned (newest first), de-dup by beatmapset id, filter last 7 days
         val seen = mutableSetOf<Long>()
         val ordered = mutableListOf<BeatmapsetCompact>()
@@ -63,7 +62,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         userId: String,
         limit: Int = 100
     ): List<RecentPlayEntity> {
-        val recentScores = api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1)
+        val recentScores = RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1)
         val seen = mutableSetOf<Long>()
         val entities = mutableListOf<RecentPlayEntity>()
         for (score in recentScores) {
@@ -78,6 +77,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
                     artist = beatmapset.artist,
                     creator = beatmapset.creator,
                     coverUrl = beatmapset.covers.coverUrl,
+                    genreId = beatmapset.genreId,
                     playedAt = playedAt.toInstant().toEpochMilli()
                 )
             )
@@ -108,7 +108,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         if (filterMode == "favorite" && userId != null && cursorString != "cache") {
             val offset = cursorString?.toIntOrNull() ?: 0
             val limit = 50
-            val favourites = api.getUserFavoriteBeatmapsets(
+            val favourites = RetrofitClient.api.getUserFavoriteBeatmapsets(
                 authHeader = "Bearer $accessToken",
                 userId = userId,
                 limit = limit,
@@ -126,7 +126,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
 
         // Explicit most_played view
         if (filterMode == "most_played" && userId != null && cursorString == null) {
-            val mostPlayedData = api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100)
+            val mostPlayedData = RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100)
 
             val groupedData = mostPlayedData.groupBy { it.beatmapset.title }
             val deduplicatedData = groupedData.map { (_, items) ->
@@ -167,11 +167,11 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         // If filterMode is "played" and effective mode is "most_played", use getUserMostPlayed
         if (filterMode == "played" && effectivePlayedMode == "most_played" && userId != null && cursorString == null) {
             // Use most played data - note: this doesn't support pagination/cursor
-            val mostPlayedData = api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100) // Get top 100
+            val mostPlayedData = RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100) // Get top 100
             
             // Group by song title (to combine same songs from different mappers + different difficulties)
             val groupedData = mostPlayedData.groupBy { it.beatmapset.title }
-            val deduplicatedData = groupedData.map { (title, items) ->
+            val deduplicatedData = groupedData.map { (_, items) ->
                 val firstItem = items.first() // Keep first (highest individual rank) for beatmapset data
                 val totalPlaycount = items.sumOf { it.count } // Sum all playcounts across all difficulties and mappers
                 BeatmapPlaycount(
@@ -224,7 +224,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         }
         
         // Fetch from API
-        val response = api.searchBeatmapsets(
+        val response = RetrofitClient.api.searchBeatmapsets(
             authHeader = "Bearer $accessToken",
             played = if (filterMode == "played") "played" else null,
             genre = genreId,

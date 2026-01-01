@@ -59,6 +59,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.mosu.app.data.AccountManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.RetrofitClient
@@ -72,10 +73,12 @@ import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.playlist.PlaylistScreen
 import com.mosu.app.ui.profile.ProfileScreen
 import com.mosu.app.ui.search.SearchScreen
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
 
@@ -112,6 +115,7 @@ class MainActivity : ComponentActivity() {
         val repository = OsuRepository(db.searchCacheDao())
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
+        val accountManager = AccountManager(this, tokenManager)
         val settingsManager = SettingsManager(this)
 
 
@@ -122,6 +126,7 @@ class MainActivity : ComponentActivity() {
                     repository = repository,
                     db = db,
                     tokenManager = tokenManager,
+                    accountManager = accountManager,
                     settingsManager = settingsManager,
                     redirectUri = redirectUri
                 )
@@ -142,62 +147,149 @@ fun MainScreen(
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
+    accountManager: AccountManager,
     settingsManager: SettingsManager,
     redirectUri: String
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
 
-    // Configure API authenticator for automatic token refresh
-    LaunchedEffect(Unit) {
-        RetrofitClient.configureAuthenticator(
-            TokenAuthenticator(context, tokenManager, settingsManager)
-        )
-    }
+    // Configure API authentication for automatic token refresh
+    // Do this synchronously to ensure it's set up before any API calls
+    RetrofitClient.configureAuthentication(
+        TokenAuthenticator(context, tokenManager, settingsManager),
+        tokenManager,
+        settingsManager
+    )
 
     // Music Controller stays alive at MainScreen level
     val musicController = remember { MusicController(context, settingsManager) }
     
     // Access Token State (loaded from TokenManager or from OAuth)
-    val storedToken by tokenManager.accessToken.collectAsState(initial = null)
-    var accessToken by remember { mutableStateOf<String?>(null) }
+    // Initialize synchronously to prevent race condition with API calls
+    var accessToken by remember {
+        mutableStateOf(runBlocking {
+            val token = tokenManager.getCurrentAccessToken()
+
+            // If token exists, check if it's expired and try to refresh
+            if (token != null) {
+                val isExpired = tokenManager.isTokenExpired().first() ?: false
+
+                if (isExpired) {
+                        val clientId = settingsManager.clientId.first()
+                        val clientSecret = settingsManager.clientSecret.first()
+
+                        if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
+                            val refreshSuccess = tokenManager.refreshTokenIfNeeded(clientId, clientSecret)
+
+                        if (refreshSuccess) {
+                            // Get the refreshed token
+                            tokenManager.getCurrentAccessToken()
+                            } else {
+                                tokenManager.clearCurrentAccountToken()
+                                null
+                            }
+                        } else {
+                            token
+                        }
+                    } else {
+                        token
+                    }
+                } else {
+                    null
+                }
+        })
+    }
     
     // Scroll to top trigger for Search screen
     var scrollSearchToTop by remember { mutableStateOf(false) }
     var lastSearchTapTime by remember { mutableStateOf(0L) }
     
-    // OAuth Credentials from Settings
-    val clientId by settingsManager.clientId.collectAsState(initial = "")
-    val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
+    // OAuth Credentials from current account
+    var clientId by remember { mutableStateOf("") }
+    var clientSecret by remember { mutableStateOf("") }
+
+    // Initialize accounts and migrate settings on first launch
+    LaunchedEffect(Unit) {
+        val availableAccountIds = tokenManager.getAvailableAccountIds()
+
+        // If no accounts exist but settings have credentials, migrate to main account
+        if (availableAccountIds.isEmpty()) {
+            val settingsClientId = settingsManager.clientId.first()
+            val settingsClientSecret = settingsManager.clientSecret.first()
+
+            if (settingsClientId.isNotEmpty() && settingsClientSecret.isNotEmpty()) {
+                accountManager.createAccount("main", settingsClientId, settingsClientSecret)
+                tokenManager.setCurrentAccount("main")
+            }
+        }
+    }
+
+    // Update credentials when account changes
+    LaunchedEffect(Unit) {
+        tokenManager.currentAccountId.collect { accountId ->
+            accountId?.let {
+                val (cid, csecret) = tokenManager.getAccountCredentials(it)
+
+                // If account has no credentials, fall back to settings for backward compatibility
+                if (cid.isNullOrEmpty() || csecret.isNullOrEmpty()) {
+                    val settingsClientId = settingsManager.clientId.first()
+                    val settingsClientSecret = settingsManager.clientSecret.first()
+                    clientId = settingsClientId
+                    clientSecret = settingsClientSecret
+                } else {
+                    clientId = cid ?: ""
+                    clientSecret = csecret ?: ""
+                }
+            }
+        }
+    }
     val language by settingsManager.language.collectAsState(initial = "en")
     
     
-    // Initialize access token from storage
+    // Listen for token changes (e.g., after OAuth login or account switch)
+    val storedToken by tokenManager.accessToken.collectAsState(initial = accessToken)
+    val currentAccountId by tokenManager.currentAccountId.collectAsState(initial = "main")
+
     LaunchedEffect(storedToken) {
-        if (storedToken != null) {
+        if (storedToken != accessToken) {
             accessToken = storedToken
         }
     }
+
+    // Force accessToken update when account changes
+    LaunchedEffect(currentAccountId) {
+        val token = tokenManager.getCurrentAccessToken()
+        accessToken = token
+    }
     
     // Handle OAuth callback - Process login code globally
-    LaunchedEffect(initialAuthCode, clientId, clientSecret) {
-        if (initialAuthCode != null && accessToken == null) {
-            if (clientId.isEmpty() || clientSecret.isEmpty()) {
-                android.util.Log.w("MainActivity", "OAuth callback received but credentials not configured")
+    LaunchedEffect(initialAuthCode) {
+        if (initialAuthCode != null) {
+            // Get current account credentials, fall back to settings if not available
+            val currentAccountId = tokenManager.getCurrentAccountId()
+            val (currentClientId, currentClientSecret) = tokenManager.getAccountCredentials(currentAccountId)
+
+            val effectiveClientId = if (currentClientId.isNullOrEmpty()) runBlocking { settingsManager.clientId.first() } else currentClientId
+            val effectiveClientSecret = if (currentClientSecret.isNullOrEmpty()) runBlocking { settingsManager.clientSecret.first() } else currentClientSecret
+
+            if (effectiveClientId.isNullOrEmpty() || effectiveClientSecret.isNullOrEmpty()) {
+                android.util.Log.w("MainActivity", "OAuth callback received but no credentials configured for account: $currentAccountId")
             } else {
                 try {
-                    android.util.Log.d("MainActivity", "Processing OAuth callback with code: ${initialAuthCode.take(10)}...")
-                    android.util.Log.d("MainActivity", "Client ID configured: ${clientId.isNotEmpty()}")
-                    val tokenResponse = repository.exchangeCodeForToken(initialAuthCode, clientId, clientSecret)
-                    tokenManager.saveTokens(
-                        tokenResponse.accessToken,
-                        tokenResponse.refreshToken ?: "",
-                        tokenResponse.expiresIn
-                    )
-                    accessToken = tokenResponse.accessToken
-                    android.util.Log.d("MainActivity", "Login successful!")
+                    // If account doesn't have stored credentials, save them first
+                    if (currentClientId.isNullOrEmpty() || currentClientSecret.isNullOrEmpty()) {
+                        tokenManager.saveAccountCredentials(currentAccountId, effectiveClientId, effectiveClientSecret)
+                    }
+
+                    val success = accountManager.loginToAccount(currentAccountId, initialAuthCode, redirectUri)
+                    if (success) {
+                        // Refresh the access token state
+                        val savedToken = tokenManager.accessToken.first()
+                        accessToken = savedToken
+                    }
                 } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "Login failed", e)
+                    android.util.Log.e("MainActivity", "Login failed for account: $currentAccountId", e)
                 }
             }
         }
@@ -288,9 +380,11 @@ fun MainScreen(
                     composable("profile") {
                         ProfileScreen(
                             accessToken = accessToken,
+                            currentAccountId = currentAccountId ?: "main",
                             repository = repository,
                             db = db,
                             tokenManager = tokenManager,
+                            accountManager = accountManager,
                             settingsManager = settingsManager,
                             onLoginClick = {
                                 if (clientId.isNotEmpty()) {
@@ -302,7 +396,11 @@ fun MainScreen(
                                 }
                             },
                             onLogout = {
+                                // Clear token from both UI state and persistent storage
                                 accessToken = null
+                                scope.launch {
+                                    accountManager.logoutFromCurrentAccount()
+                                }
                             }
                         )
                     }

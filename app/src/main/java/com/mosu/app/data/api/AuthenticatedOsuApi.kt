@@ -65,7 +65,8 @@ class AuthenticatedOsuApi(
     }
 
     /**
-     * Makes an authenticated API call with automatic token refresh
+     * Makes an authenticated API call
+     * Token refresh is handled automatically by OkHttp Authenticator
      */
     private suspend fun <T> makeAuthenticatedCall(
         apiCall: suspend (authHeader: String) -> T
@@ -76,46 +77,12 @@ class AuthenticatedOsuApi(
         }
 
         val authHeader = "Bearer $token"
-
-        return try {
-            apiCall(authHeader)
-        } catch (e: Exception) {
-            // Check if it's an authentication error (401)
-            if (isAuthError(e)) {
-                // Try to refresh token
-                val clientId = settingsManager.clientId.first()
-                val clientSecret = settingsManager.clientSecret.first()
-
-                if (!clientId.isNullOrEmpty() && !clientSecret.isNullOrEmpty()) {
-                    val refreshSuccess = tokenManager.refreshAccessToken(clientId, clientSecret)
-
-                    if (refreshSuccess) {
-                        // Retry with new token
-                        val newToken = tokenManager.accessToken.first()
-                        if (!newToken.isNullOrEmpty()) {
-                            val newAuthHeader = "Bearer $newToken"
-                            return apiCall(newAuthHeader)
-                        }
-                    }
-                }
-            }
-            // Re-throw if refresh failed or wasn't an auth error
-            throw e
-        }
-    }
-
-    /**
-     * Checks if the exception is an authentication error
-     */
-    private fun isAuthError(e: Exception): Boolean {
-        // This is a simplified check - in a real app you'd check HTTP status codes
-        // For now, we'll assume any exception might be auth-related and try refresh
-        return true
+        return apiCall(authHeader)
     }
 }
 
 /**
- * Interceptor for adding auth headers (can be used with OkHttp if needed)
+ * Interceptor for adding Authorization headers to requests
  */
 class AuthInterceptor(
     private val tokenManager: TokenManager,
@@ -125,30 +92,53 @@ class AuthInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
-        // Add auth header if we have a token
-        val token = runBlocking { tokenManager.accessToken.first() }
-        val authenticatedRequest = if (!token.isNullOrEmpty()) {
-            originalRequest.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-        } else {
-            originalRequest
+        // Get current token synchronously
+        val token = runBlocking { tokenManager.getCurrentAccessToken() }
+        android.util.Log.d("AuthInterceptor", "Token from DataStore: ${token?.take(10)}...")
+        if (token.isNullOrEmpty()) {
+            // Log when token is missing for debugging
+            android.util.Log.w("AuthInterceptor", "No access token available for request: ${originalRequest.url}")
+            return chain.proceed(originalRequest)
         }
 
-        val response = chain.proceed(authenticatedRequest)
+        // Proactively refresh token if needed
+        val refreshNeeded = runBlocking {
+            val isExpired = tokenManager.isTokenExpired().first() ?: false
+            android.util.Log.d("AuthInterceptor", "Token expired check: $isExpired")
 
-        // If we get a 401, try to refresh token
-        if (response.code == 401) {
-            runBlocking {
+            if (isExpired) {
                 val clientId = settingsManager.clientId.first()
                 val clientSecret = settingsManager.clientSecret.first()
+                android.util.Log.d("AuthInterceptor", "Client credentials available for refresh: ${clientId.isNotEmpty() && clientSecret.isNotEmpty()}")
 
-                if (!clientId.isNullOrEmpty() && !clientSecret.isNullOrEmpty()) {
-                    tokenManager.refreshAccessToken(clientId, clientSecret)
+                if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
+                    val refreshSuccess = tokenManager.refreshTokenIfNeeded(clientId, clientSecret)
+                    android.util.Log.d("AuthInterceptor", "Token refresh result: $refreshSuccess")
+                    refreshSuccess
+                } else {
+                    false
                 }
+            } else {
+                true // Token is still valid
             }
         }
 
-        return response
+        // Get the potentially refreshed token
+        val currentToken = if (refreshNeeded) {
+            runBlocking { tokenManager.getCurrentAccessToken() }
+        } else {
+            // Token refresh failed or wasn't attempted, use original token
+            token
+        }
+
+        if (currentToken.isNullOrEmpty()) {
+            android.util.Log.w("AuthInterceptor", "No valid token available after refresh attempt")
+            return chain.proceed(originalRequest)
+        }
+        val authenticatedRequest = originalRequest.newBuilder()
+            .header("Authorization", "Bearer $currentToken")
+            .build()
+
+        return chain.proceed(authenticatedRequest)
     }
 }

@@ -1,10 +1,10 @@
 # Bugs
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Fix database destructive migration: Replace fallbackToDestructiveMigration() with proper migration strategies to prevent data loss during app updates. Users currently lose all downloaded beatmaps, playlists, and cached data on schema changes.
-3. Fix token management issues: Implement proactive token refresh using isTokenExpired() check and fix TokenAuthenticator retry logic. Currently users get logged out unexpectedly due to expired tokens not being refreshed properly.
-4. [FIXED] Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
-5. Recent played doesn't work with genre filter. Whats worse is music downloaded from this filter mode does not preserve the genre metadata, it won't be filtered by genre in library either. Never delete recent query, it will be saved for a purpose (year recap). It should also have separators that shows a time stamp(today, three days ago, a week ago, a month ago, 3 months ago, 6 months ago, a year ago, two years ago.) 
-6. Bug 5 raises my concern on how we deal with metadata after downloads. We need to perform a thorough check on the consistency of storing the downloaded metadata. 
+3. [fixed] Fix token management issues: Implement proactive token refresh using isTokenExpired() check and fix TokenAuthenticator retry logic. Currently users get logged out unexpectedly due to expired tokens not being refreshed properly. Use refresh token to get new tokens.
+4. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
+5. [fixed?] Recent played doesn't work with genre filter. Whats worse is music downloaded from this filter mode does not preserve the genre metadata, it won't be filtered by genre in library either. Never delete recent query, it will be saved for a purpose (year recap). It should also have separators that shows a time stamp(today, three days ago, a week ago, a month ago, 3 months ago, 6 months ago, a year ago, two years ago.) 
+6. [fixed] Bug 5 raises my concern on how we deal with metadata after downloads. We need to perform a thorough check on the consistency of storing the downloaded metadata. 
 
 
 # UI improvement (implement 3 first)
@@ -13,6 +13,8 @@
 
 
 # New Feature
+0. Core Feature
+    1. [done] Add ability to login two accounts and preserve both login info according to bug fix 3.
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates

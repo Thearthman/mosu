@@ -21,29 +21,39 @@ class TokenAuthenticator(
 ) : Authenticator {
 
     override fun authenticate(route: Route?, response: Response): Request? {
-        // Only retry once to avoid infinite loops
-        if (response.request.header("Authorization")?.startsWith("Bearer ") == true) {
-            // This request already had auth, don't retry
-            return null
+        // Prevent infinite loops - only retry once
+        if (response.priorResponse != null) {
+            return null // Give up, let the user log in again
         }
 
         return runBlocking {
             try {
-                // Try to refresh the token
+                // Get stored refresh token synchronously
+                val refreshToken = tokenManager.refreshToken.first()
+                // Also get current access token for retry
+                val currentToken = tokenManager.getCurrentAccessToken()
+                if (refreshToken.isNullOrEmpty()) {
+                    return@runBlocking null
+                }
+
+                // Get client credentials
                 val clientId = settingsManager.clientId.first()
                 val clientSecret = settingsManager.clientSecret.first()
 
-                if (!clientId.isNullOrEmpty() && !clientSecret.isNullOrEmpty()) {
-                    val refreshSuccess = tokenManager.refreshAccessToken(clientId, clientSecret)
+                if (clientId.isNullOrEmpty() || clientSecret.isNullOrEmpty()) {
+                    return@runBlocking null
+                }
 
-                    if (refreshSuccess) {
-                        // Retry with new token
-                        val newToken = tokenManager.accessToken.first()
-                        if (!newToken.isNullOrEmpty()) {
-                            return@runBlocking response.request.newBuilder()
-                                .header("Authorization", "Bearer $newToken")
-                                .build()
-                        }
+                // Try to refresh the token
+                val refreshSuccess = tokenManager.refreshAccessToken(clientId, clientSecret)
+
+                if (refreshSuccess) {
+                    // Retry with new token
+                    val newToken = tokenManager.getCurrentAccessToken()
+                    if (!newToken.isNullOrEmpty()) {
+                        return@runBlocking response.request.newBuilder()
+                            .header("Authorization", "Bearer $newToken")
+                            .build()
                     }
                 }
             } catch (e: Exception) {

@@ -26,20 +26,25 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.R
+import com.mosu.app.data.AccountManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ProfileScreen(
     accessToken: String?,
+    currentAccountId: String,
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
+    accountManager: AccountManager,
     settingsManager: SettingsManager,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit
@@ -66,22 +71,57 @@ fun ProfileScreen(
     // Token debug dialog state
     var showTokenDialog by remember { mutableStateOf(false) }
     var currentToken by remember { mutableStateOf<String?>(null) }
+
+    // Account management state
+    var showAddAccountDialog by remember { mutableStateOf(false) }
+    var showAccountSwitcher by remember { mutableStateOf(false) }
+    var newClientId by remember { mutableStateOf("") }
+    var newClientSecret by remember { mutableStateOf("") }
+
+    // Available accounts
+    val availableAccounts by accountManager.accounts.collectAsState(initial = emptyList())
     
     val scope = rememberCoroutineScope()
 
-    // Fetch user info only once when logged in (not on every navigation)
-    LaunchedEffect(accessToken) {
-        if (accessToken != null && userInfo == null && !isLoading) {
-            isLoading = true
-            try {
-                userInfo = repository.getMe(accessToken)
-            } catch (e: Exception) {
-                // Handle error
-            } finally {
-                isLoading = false
+    // Load cached user info immediately, update in background
+    LaunchedEffect(currentAccountId) {
+        if (accessToken != null) {
+            // First, try to get cached user info immediately
+            val cachedInfo = accountManager.getCachedUserInfo(currentAccountId)
+            if (cachedInfo != null) {
+                userInfo = cachedInfo
+                // Update in background
+                withContext(Dispatchers.IO) {
+                    try {
+                        val freshInfo = repository.getMe()
+                        // Only update UI if data actually changed
+                        if (freshInfo.username != cachedInfo.username ||
+                            freshInfo.avatarUrl != cachedInfo.avatarUrl) {
+                            accountManager.saveUserInfo(currentAccountId, freshInfo)
+                            // Update UI on main thread
+                            withContext(Dispatchers.Main) {
+                                userInfo = freshInfo
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Background update failed, keep cached data
+                    }
+                }
+            } else {
+                // No cache, fetch fresh data
+                isLoading = true
+                try {
+                    val freshInfo = repository.getMe()
+                    accountManager.saveUserInfo(currentAccountId, freshInfo)
+                    userInfo = freshInfo
+                } catch (e: Exception) {
+                    android.util.Log.e("ProfileScreen", "Failed to fetch user info", e)
+                    userInfo = null
+                } finally {
+                    isLoading = false
+                }
             }
-        } else if (accessToken == null) {
-            // Reset on logout
+        } else {
             userInfo = null
         }
     }
@@ -229,6 +269,7 @@ fun ProfileScreen(
                     )
                 }
             }
+
         } else {
             // User Info Card (clickable for token debug)
             userInfo?.let { user ->
@@ -238,7 +279,7 @@ fun ProfileScreen(
                         .padding(bottom = 16.dp)
                         .clickable {
                             scope.launch {
-                                currentToken = tokenManager.accessToken.firstOrNull()
+                                currentToken = tokenManager.getCurrentAccessToken()
                                 showTokenDialog = true
                             }
                         }
@@ -252,7 +293,12 @@ fun ProfileScreen(
                             contentDescription = "Avatar",
                             modifier = Modifier
                                 .size(64.dp)
-                                .clip(CircleShape),
+                                .clip(CircleShape)
+                                .clickable {
+                                    if (availableAccounts.size > 1) {
+                                        showAccountSwitcher = true
+                                    }
+                                },
                             contentScale = ContentScale.Crop
                         )
                         Column(modifier = Modifier.padding(start = 16.dp)) {
@@ -472,7 +518,6 @@ fun ProfileScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        tokenManager.clearToken()
                         onLogout()
                     }
                 },
@@ -485,6 +530,15 @@ fun ProfileScreen(
                 Icon(Icons.Default.ExitToApp, contentDescription = stringResource(R.string.profile_logout_button))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(stringResource(R.string.profile_logout_button))
+            }
+
+            // Add new account button
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { showAddAccountDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Add New Account")
             }
         }
     }
@@ -598,6 +652,125 @@ fun ProfileScreen(
             dismissButton = {
                 TextButton(onClick = { showTokenDialog = false }) {
                     Text(stringResource(R.string.profile_token_dialog_close))
+                }
+            }
+        )
+    }
+
+    // Account switcher dialog
+    if (showAccountSwitcher) {
+        AlertDialog(
+            onDismissRequest = { showAccountSwitcher = false },
+            title = { Text("Switch Account") },
+            text = {
+                Column {
+                    availableAccounts.forEach { account ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    scope.launch {
+                                        accountManager.switchToAccount(account.id)
+                                        showAccountSwitcher = false
+                                    }
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (account.id == currentAccountId)
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (account.userInfo != null) {
+                                    AsyncImage(
+                                        model = account.userInfo.avatarUrl,
+                                        contentDescription = "Avatar",
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    Column(modifier = Modifier.padding(start = 12.dp)) {
+                                        Text(
+                                            text = account.userInfo.username,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Text(
+                                            text = "Account: ${account.userInfo.id}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Account: ${account.id} (Not logged in)",
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAccountSwitcher = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // Add new account dialog
+    if (showAddAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddAccountDialog = false },
+            title = { Text("Add New Account") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newClientId,
+                        onValueChange = { newClientId = it },
+                        label = { Text("Client ID") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newClientSecret,
+                        onValueChange = { newClientSecret = it },
+                        label = { Text("Client Secret") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newClientId.isNotBlank() && newClientSecret.isNotBlank()) {
+                            scope.launch {
+                                // Auto-generate account ID
+                                val accountId = "account${availableAccounts.size + 1}"
+                                accountManager.createAccount(accountId, newClientId, newClientSecret)
+                                // Switch to the new account
+                                accountManager.switchToAccount(accountId)
+                                // Close dialog (keep form values for next time)
+                                showAddAccountDialog = false
+                                // Trigger login flow for the new account
+                                onLoginClick()
+                            }
+                        }
+                    },
+                    enabled = newClientId.isNotBlank() && newClientSecret.isNotBlank()
+                ) {
+                    Text("Add Account")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddAccountDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )

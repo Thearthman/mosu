@@ -27,6 +27,15 @@ interface OsuApi {
         @Field("redirect_uri") redirectUri: String
     ): OsuTokenResponse
 
+    @FormUrlEncoded
+    @POST("oauth/token")
+    suspend fun refreshToken(
+        @Field("client_id") clientId: String,
+        @Field("client_secret") clientSecret: String,
+        @Field("grant_type") grantType: String,
+        @Field("refresh_token") refreshToken: String
+    ): OsuTokenResponse
+
     @GET("api/v2/me")
     suspend fun getMe(
         @Header("Authorization") authHeader: String

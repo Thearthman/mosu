@@ -805,7 +805,6 @@ fun SearchScreen(
                                                 ids.forEach { setId ->
                                                     try {
                                                         val detail = repository.getBeatmapsetDetail(
-                                                            accessToken = accessToken!!,
                                                             beatmapsetId = setId
                                                         )
                                                         allBeatmaps += detail.beatmaps
@@ -960,16 +959,16 @@ fun SearchScreen(
                                                                     val coverPath = track.coverFile?.takeIf { it.exists() }?.absolutePath
                                                                         ?: fallbackCoverPath
                                                                         ?: ""
-                                                                    val entity = BeatmapEntity(
-                                                                        beatmapSetId = map.id,
-                                                                        title = track.title,
-                                                                        artist = track.artist,
-                                                                        creator = map.creator,
-                                                                        difficultyName = track.difficultyName,
-                                                                        audioPath = track.audioFile.absolutePath,
-                                                                        coverPath = coverPath,
-                                                                        genreId = map.genreId
-                                                                    )
+                                                                val entity = BeatmapEntity(
+                                                                    beatmapSetId = map.id,
+                                                                    title = track.title,
+                                                                    artist = track.artist,
+                                                                    creator = map.creator,
+                                                                    difficultyName = track.difficultyName,
+                                                                    audioPath = track.audioFile.absolutePath,
+                                                                    coverPath = coverPath,
+                                                                    genreId = map.genreId
+                                                                )
                                                                     db.beatmapDao()
                                                                         .insertBeatmap(entity)
                                                                 }
@@ -1226,7 +1225,7 @@ fun SearchScreen(
         LaunchedEffect(accessToken) {
             if (accessToken != null) {
                 try {
-                    val user = repository.getMe(accessToken)
+                    val user = repository.getMe()
                     userId = user.id.toString()
                     isSupporter = user.isSupporter
                     isSupporterKnown = true
@@ -1276,7 +1275,7 @@ private fun RecentPlayEntity.toBeatmapset(): BeatmapsetCompact {
         artist = artist,
         creator = creator,
         covers = Covers(coverUrl = cover, listUrl = cover),
-        genreId = null
+        genreId = genreId
     )
 }
 

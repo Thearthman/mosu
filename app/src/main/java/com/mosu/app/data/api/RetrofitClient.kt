@@ -1,5 +1,7 @@
 package com.mosu.app.data.api
 
+import com.mosu.app.data.SettingsManager
+import com.mosu.app.data.TokenManager
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -23,23 +25,32 @@ object RetrofitClient {
         }
         .build()
 
-    // Client with authenticator (set later)
+    // Client with authenticator and interceptor (set later)
     private var authenticatedClient: OkHttpClient? = null
 
-    val api: OsuApi by lazy {
-        Retrofit.Builder()
+    val api: OsuApi
+        get() = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(authenticatedClient ?: baseClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(OsuApi::class.java)
-    }
 
     val okHttpClient: OkHttpClient
         get() = authenticatedClient ?: baseClient
 
-    fun configureAuthenticator(authenticator: okhttp3.Authenticator) {
+    // Provide access to base client for token refresh operations
+    fun getBaseClient(): OkHttpClient = baseClient
+
+    fun configureAuthentication(
+        authenticator: okhttp3.Authenticator,
+        tokenManager: TokenManager,
+        settingsManager: SettingsManager
+    ) {
+        val authInterceptor = AuthInterceptor(tokenManager, settingsManager)
+
         authenticatedClient = baseClient.newBuilder()
+            .addInterceptor(authInterceptor)
             .authenticator(authenticator)
             .build()
     }

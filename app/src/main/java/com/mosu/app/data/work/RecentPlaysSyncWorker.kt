@@ -33,7 +33,7 @@ class RecentPlaysSyncWorker(
         val db = AppDatabase.getDatabase(applicationContext)
         val repository = OsuRepository(db.searchCacheDao())
         return runCatching {
-            val user = repository.getMe(token)
+            val user = repository.getMe()
             val recentScores = RetrofitClient.api.getUserRecentScores(
                 authHeader = "Bearer $token",
                 userId = user.id.toString(),

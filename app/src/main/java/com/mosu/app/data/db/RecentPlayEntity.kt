@@ -13,6 +13,7 @@ data class RecentPlayEntity(
     val artist: String,
     val creator: String,
     val coverUrl: String? = null,
+    val genreId: Int? = null,
     val playedAt: Long
 )
 

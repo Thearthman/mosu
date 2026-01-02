@@ -134,5 +134,10 @@
     <string name="language_simplified_chinese">简体中文</string>
     <string name="language_traditional_chinese">繁体中文</string>
     <string name="profile_language_desc">選擇應用顯示語言</string>
+
+    <!-- Restore Downloads -->
+    <string name="profile_restore_downloads_title">恢復下載</string>
+    <string name="profile_restore_downloads_description">%1$d 首資料庫重置後之前下載的譜面</string>
+    <string name="profile_restore_button">恢復</string>
 </resources>
 

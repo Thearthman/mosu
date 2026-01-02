@@ -1,20 +1,21 @@
 # Bugs
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
-2. Fix database destructive migration: Replace fallbackToDestructiveMigration() with proper migration strategies to prevent data loss during app updates. Users currently lose all downloaded beatmaps, playlists, and cached data on schema changes.
-3. [fixed] Fix token management issues: Implement proactive token refresh using isTokenExpired() check and fix TokenAuthenticator retry logic. Currently users get logged out unexpectedly due to expired tokens not being refreshed properly. Use refresh token to get new tokens.
-4. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
-5. [fixed?] Recent played doesn't work with genre filter. Whats worse is music downloaded from this filter mode does not preserve the genre metadata, it won't be filtered by genre in library either. Never delete recent query, it will be saved for a purpose (year recap). It should also have separators that shows a time stamp(today, three days ago, a week ago, a month ago, 3 months ago, 6 months ago, a year ago, two years ago.) 
-6. [fixed] Bug 5 raises my concern on how we deal with metadata after downloads. We need to perform a thorough check on the consistency of storing the downloaded metadata. 
-7. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
+2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
+3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
+4. Searching `artist=miku` in search page crashes the app
+5. Do not move downloaded song to top, make them stay where they are default to the position of the returned list
+6. Pressing restore when the song already exist will still download the music one more time
+
 
 # UI improvement (implement 3 first)
 1. In Search page, add gamemode labels (images are in icons folder) at the end of the composer's name's line.
 2. Add global player playcount to info popup in search page.
+3. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions and maybe rethink about account management interface to provide better control over add/remove/modify account. 
 
 
 # New Feature
 0. Core Feature
-    1. [done] Add ability to login two accounts and preserve both login info according to bug fix 3.
+    Nothing as of present
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
@@ -37,6 +38,8 @@
 
 
 # Implemented Features
+0. Core Feature
+    1. Add ability to login two accounts and preserve both login info according to bug fix 3.
 1. Settings page update
     1. Implement switch in settings that configures whether the played song is filtered by the literal url tag in the search url or the user's most played data. This is because most user without supporter status will not be able to search for their played songs directly through the url. When user don't have supporter, it locks to search by the most played songs directly from user data.
     2. Implement search true all songs(unranked, loved, and so on) with url tag `s=any`
@@ -100,3 +103,7 @@
 18. Find song doesn't work for individual songs in a songpack.
 19. After a period of time the user would be logged out(token expired) is there a way to retain access for a long period of time?
 20. implement cache cleaning in settings.
+21. Fix token management issues: Implement proactive token refresh using isTokenExpired() check and fix TokenAuthenticator retry logic. Currently users get logged out unexpectedly due to expired tokens not being refreshed properly. Use refresh token to get new tokens.
+22. Recent played doesn't work with genre filter. Whats worse is music downloaded from this filter mode does not preserve the genre metadata, it won't be filtered by genre in library either. Never delete recent query, it will be saved for a purpose (year recap). It should also have separators that shows a time stamp(today, three days ago, a week ago, a month ago, 3 months ago, 6 months ago, a year ago, two years ago.)
+23. Bug 5 raises my concern on how we deal with metadata after downloads. We need to perform a thorough check on the consistency of storing the downloaded metadata.
+24. Fix database destructive migration: Replace fallbackToDestructiveMigration() with proper migration strategies to prevent data loss during app updates. Users currently lose all downloaded beatmaps, playlists, and cached data on schema changes.

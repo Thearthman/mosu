@@ -20,8 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -32,10 +36,99 @@ import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
+import com.mosu.app.domain.download.BeatmapDownloader
+import com.mosu.app.domain.download.ZipExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+suspend fun performRestore(
+    context: Context,
+    repository: OsuRepository,
+    db: AppDatabase,
+    tokenManager: TokenManager,
+    updateProgress: (Int, String) -> Unit,
+    updateRestoring: (Boolean) -> Unit
+) {
+    try {
+        updateRestoring(true)
+        updateProgress(0, "Starting restore...")
+
+        val preservedSetIds = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().firstOrNull() ?: emptyList()
+        if (preservedSetIds.isEmpty()) {
+            android.widget.Toast.makeText(context, "No beatmaps to restore", android.widget.Toast.LENGTH_SHORT).show()
+            updateRestoring(false)
+            return
+        }
+
+        val downloader = BeatmapDownloader(context)
+        val extractor = ZipExtractor(context)
+        val accessToken = tokenManager.getCurrentAccessToken()
+
+        var completed = 0
+        val total = preservedSetIds.size
+
+        for (preservedSetId in preservedSetIds) {
+            try {
+                updateProgress(((completed * 100) / total), "Downloading beatmap ${preservedSetId.beatmapSetId}...")
+
+                downloader.downloadBeatmap(preservedSetId.beatmapSetId, accessToken)
+                    .collect { state ->
+                        when (state) {
+                            is com.mosu.app.domain.download.DownloadState.Downloading -> {
+                                // Update progress within current beatmap
+                            }
+                            is com.mosu.app.domain.download.DownloadState.Downloaded -> {
+                                updateProgress(((completed * 100) / total), "Extracting beatmap ${preservedSetId.beatmapSetId}...")
+                                try {
+                                    val extractedTracks = extractor.extractBeatmap(state.file, preservedSetId.beatmapSetId)
+
+                                    // For each track, create beatmap entity and save
+                                    extractedTracks.forEach { track ->
+                                        val entity = com.mosu.app.data.db.BeatmapEntity(
+                                            beatmapSetId = preservedSetId.beatmapSetId,
+                                            title = track.title,
+                                            artist = track.artist,
+                                            creator = "", // We don't have creator info from preserved data
+                                            difficultyName = track.difficultyName,
+                                            audioPath = track.audioFile.absolutePath,
+                                            coverPath = track.coverFile?.absolutePath ?: "",
+                                            genreId = null // We don't have genre info from preserved data
+                                        )
+                                        db.beatmapDao().insertBeatmap(entity)
+                                    }
+
+                                    completed++
+                                    val progress = (completed * 100) / total
+                                    updateProgress(progress, "Restored $completed/$total beatmaps")
+
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ProfileScreen", "Failed to extract beatmap ${preservedSetId.beatmapSetId}", e)
+                                }
+                            }
+                            is com.mosu.app.domain.download.DownloadState.Error -> {
+                                android.util.Log.e("ProfileScreen", "Failed to download beatmap ${preservedSetId.beatmapSetId}: ${state.message}")
+                            }
+                            else -> {}
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileScreen", "Failed to restore beatmap ${preservedSetId.beatmapSetId}", e)
+            }
+        }
+
+        updateProgress(100, "Restore completed! Restored $completed/$total beatmaps")
+        android.widget.Toast.makeText(context, "Restore completed! Restored $completed beatmaps", android.widget.Toast.LENGTH_LONG).show()
+
+    } catch (e: Exception) {
+        android.util.Log.e("ProfileScreen", "Restore failed", e)
+        updateProgress(0, "Restore failed: ${e.message}")
+        android.widget.Toast.makeText(context, "Restore failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+    } finally {
+        updateRestoring(false)
+    }
+}
 
 @Composable
 fun ProfileScreen(
@@ -51,7 +144,11 @@ fun ProfileScreen(
 ) {
     var userInfo by remember { mutableStateOf<OsuUserCompact?>(null) }
     var totalDownloaded by remember { mutableStateOf(0) }
+    var preservedCount by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
+    var isRestoring by remember { mutableStateOf(false) }
+    var restoreProgress by remember { mutableStateOf(0) }
+    var restoreMessage by remember { mutableStateOf("") }
     
     // Settings State
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -130,6 +227,51 @@ fun ProfileScreen(
     LaunchedEffect(Unit) {
         db.beatmapDao().getAllBeatmaps().collect { maps ->
             totalDownloaded = maps.groupBy { it.beatmapSetId }.size
+        }
+    }
+
+    val context = LocalContext.current
+
+    // Fetch preserved count and sync with SharedPreferences backup (separate effect)
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("preserved_beatmaps", Context.MODE_PRIVATE)
+        val preservedSetIdsKey = "preserved_set_ids"
+
+        // Load preserved IDs from SharedPreferences (survives database migrations)
+        val preservedSetIdsFromPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
+        val preservedSetIdsLong = preservedSetIdsFromPrefs.mapNotNull { it.toLongOrNull() }
+
+        // Sync database with SharedPreferences backup
+        val currentPreserved = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().firstOrNull() ?: emptyList()
+        val currentPreservedIds = currentPreserved.map { it.beatmapSetId }.toSet()
+
+        // If database is missing some preserved IDs from prefs, restore them
+        val missingIds = preservedSetIdsLong.filter { it !in currentPreservedIds }
+        missingIds.forEach { setId ->
+            db.preservedBeatmapSetIdDao().insertPreservedSetId(
+                com.mosu.app.data.db.PreservedBeatmapSetIdEntity(beatmapSetId = setId)
+            )
+        }
+
+        // If this is first-time setup (no preserved data anywhere), initialize with current library
+        val currentBeatmaps = db.beatmapDao().getAllBeatmaps().firstOrNull() ?: emptyList()
+        if (preservedSetIdsLong.isEmpty() && currentBeatmaps.isNotEmpty()) {
+            val currentSetIds = currentBeatmaps.map { it.beatmapSetId }.distinct()
+            val setIdsString = currentSetIds.map { it.toString() }.toSet()
+
+            // Save to SharedPreferences
+            prefs.edit().putStringSet(preservedSetIdsKey, setIdsString).apply()
+
+            // Save to database
+            currentSetIds.forEach { setId ->
+                db.preservedBeatmapSetIdDao().insertPreservedSetId(
+                    com.mosu.app.data.db.PreservedBeatmapSetIdEntity(beatmapSetId = setId)
+                )
+            }
+        }
+
+        db.preservedBeatmapSetIdDao().getPreservedCount().collect { count ->
+            preservedCount = count
         }
     }
 
@@ -321,6 +463,7 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_downloaded_songs_label, totalDownloaded), style = MaterialTheme.typography.bodyLarge)
                 }
             }
+
 
             // Settings Card (Logged in version) - Fixed layout with consistent max width for text
             Card(
@@ -514,6 +657,76 @@ fun ProfileScreen(
                 }
             }
 
+            // Restore Downloads Card (only show if there are preserved beatmapSetIds)
+            if (preservedCount > 0) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(0.7f)
+                        ) {
+                            Text(stringResource(R.string.profile_restore_downloads_title), style = MaterialTheme.typography.titleMedium)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = buildAnnotatedString {
+                                    withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                        append("$preservedCount")
+                                    }
+                                    append(" previously downloaded beatmaps after database reset")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Button(
+                            onClick = {
+                                if (!isRestoring) {
+                                    scope.launch {
+                                        performRestore(
+                                            context,
+                                            repository,
+                                            db,
+                                            tokenManager,
+                                            { progress, message ->
+                                                restoreProgress = progress
+                                                restoreMessage = message
+                                            },
+                                            { restoring -> isRestoring = restoring }
+                                        )
+                                    }
+                                }
+                            },
+                            enabled = !isRestoring,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            if (isRestoring) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("$restoreProgress%")
+                            } else {
+                                Text(stringResource(R.string.profile_restore_button))
+                            }
+                        }
+                    }
+                }
+            }
+
             // Logout Button
             Button(
                 onClick = {
@@ -533,7 +746,7 @@ fun ProfileScreen(
             }
 
             // Add new account button
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = { showAddAccountDialog = true },
                 modifier = Modifier.fillMaxWidth()
@@ -594,8 +807,6 @@ fun ProfileScreen(
     
     // Token Debug Dialog
     if (showTokenDialog) {
-        val context = LocalContext.current
-        
         AlertDialog(
             onDismissRequest = { showTokenDialog = false },
             title = { Text(stringResource(R.string.profile_token_dialog_title)) },

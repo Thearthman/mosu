@@ -64,6 +64,7 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
+import com.mosu.app.data.db.PlaylistTrackWithBeatmap
 import com.mosu.app.R
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.AlbumGroup
@@ -93,11 +94,14 @@ fun PlaylistScreen(
         .mapValues { entry -> entry.value.map { it.beatmapUid }.toSet() }
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
-    val playlistTracks: List<BeatmapEntity> by if (selectedPlaylistId != null) {
-        db.playlistDao().getTracksForPlaylist(selectedPlaylistId!!).collectAsState(initial = emptyList())
+    val playlistTracksWithStatus: List<PlaylistTrackWithBeatmap> by if (selectedPlaylistId != null) {
+        db.playlistDao().getTracksWithStatusForPlaylist(selectedPlaylistId!!).collectAsState(initial = emptyList())
     } else {
         remember { mutableStateOf(emptyList()) }
     }
+
+    // Extract downloaded tracks for backward compatibility
+    val playlistTracks: List<BeatmapEntity> = playlistTracksWithStatus.mapNotNull { it.toBeatmapEntity() }
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
@@ -221,8 +225,14 @@ fun PlaylistScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
+                    val downloadedCount = playlistTracksWithStatus.count { it.toBeatmapEntity() != null }
+                    val totalCount = playlistTracksWithStatus.size
                     Text(
-                        text = "${playlistTracks.size} ${stringResource(id = R.string.playlist_song_count_suffix)}",
+                        text = if (downloadedCount < totalCount) {
+                            "$downloadedCount/${totalCount} ${stringResource(id = R.string.playlist_song_count_suffix)}"
+                        } else {
+                            "$totalCount ${stringResource(id = R.string.playlist_song_count_suffix)}"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
@@ -234,7 +244,7 @@ fun PlaylistScreen(
                 }) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_add_songs))
                 }
-                IconButton(onClick = { playAlbum(playlistTracks) }) {
+                IconButton(onClick = { playAlbum(playlistTracks) }, enabled = playlistTracks.isNotEmpty()) {
                     Icon(Icons.Default.PlayArrow, contentDescription = stringResource(id = R.string.playlist_cd_play_playlist))
                 }
             }
@@ -249,90 +259,22 @@ fun PlaylistScreen(
                     Text(text = stringResource(id = R.string.playlist_no_songs))
                 }
             } else {
-                // Group tracks by beatmapSetId like in the library
-                val groupedTracks = playlistTracks.groupBy { it.beatmapSetId }
-
-                // Determine which beatmapsets have multiple songs available in the library
-                val libraryBeatmapSets = downloadedTracks.groupBy { it.beatmapSetId }
-                val multiSongBeatmapSets = libraryBeatmapSets.filter { it.value.size > 1 }.keys.toSet()
-
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(
-                        count = groupedTracks.keys.size,
-                        key = { index -> groupedTracks.keys.elementAt(index) }
+                        count = playlistTracksWithStatus.size,
+                        key = { index -> playlistTracksWithStatus[index].beatmapUid }
                     ) { index ->
-                        val setId = groupedTracks.keys.elementAt(index)
-                        val tracks = groupedTracks[setId] ?: emptyList()
-                        if (tracks.isEmpty()) return@items
+                        val trackWithStatus = playlistTracksWithStatus[index]
+                        val beatmapEntity = trackWithStatus.toBeatmapEntity()
 
-                        if (multiSongBeatmapSets.contains(setId)) {
-                            // Album Group
-                            val albumData = AlbumGroupData(
-                                title = tracks[0].title,
-                                artist = tracks[0].artist,
-                                coverPath = tracks[0].coverPath,
-                                trackCount = tracks.size,
-                                songs = tracks.map { track ->
-                                    SongItemData(
-                                        title = track.difficultyName,
-                                        artist = track.creator,
-                                        coverPath = track.coverPath,
-                                        difficultyName = track.difficultyName,
-                                        id = track.uid
-                                    )
-                                },
-                                id = setId
-                            )
-
-                            val albumActions = AlbumGroupActions(
-                                onAlbumPlay = {
-                                    musicController.playSong(tracks.first(), playlistTracks)
-                                },
-                                onTrackPlay = { songData ->
-                                    val track = tracks.find { it.uid == songData.id }
-                                    if (track != null) {
-                                        musicController.playSong(track, playlistTracks)
-                                    }
-                                },
-                                onDelete = {
-                                    scope.launch {
-                                        tracks.forEach { track ->
-                                            db.playlistDao().removeTrack(
-                                                playlistId = selectedPlaylistId!!,
-                                                beatmapUid = track.uid
-                                            )
-                                        }
-                                    }
-                                },
-                                onAddToPlaylist = { openPlaylistDialog(tracks.first()) },
-                                onTrackDelete = { songData ->
-                                    scope.launch {
-                                        db.playlistDao().removeTrack(
-                                            playlistId = selectedPlaylistId!!,
-                                            beatmapUid = songData.id
-                                        )
-                                        // Force UI refresh by reassigning the selected playlist ID
-                                        val currentId = selectedPlaylistId
-                                        selectedPlaylistId = null
-                                        selectedPlaylistId = currentId
-                                    }
-                                }
-                            )
-
-                            AlbumGroup(
-                                album = albumData,
-                                actions = albumActions,
-                                highlight = false
-                            )
-                        } else {
-                            // Single Track
-                            val track = tracks[0]
+                        if (beatmapEntity != null) {
+                            // Downloaded track - show normally
                             val songData = SongItemData(
-                                title = track.title,
-                                artist = track.artist,
-                                coverPath = track.coverPath,
-                                difficultyName = track.difficultyName,
-                                id = track.uid
+                                title = beatmapEntity.title,
+                                artist = beatmapEntity.artist,
+                                coverPath = beatmapEntity.coverPath,
+                                difficultyName = beatmapEntity.difficultyName,
+                                id = beatmapEntity.uid
                             )
 
                             val swipeActions = SwipeActions(
@@ -340,18 +282,48 @@ fun PlaylistScreen(
                                     scope.launch {
                                         db.playlistDao().removeTrack(
                                             playlistId = selectedPlaylistId!!,
-                                            beatmapUid = track.uid
+                                            beatmapUid = beatmapEntity.uid
                                         )
                                     }
                                 },
-                                onAddToPlaylist = { openPlaylistDialog(track) }
+                                onAddToPlaylist = { openPlaylistDialog(beatmapEntity) }
                             )
 
                             SwipeToDismissSongItem(
                                 song = songData,
-                                onClick = { musicController.playSong(track, playlistTracks) },
+                                onClick = { musicController.playSong(beatmapEntity, playlistTracks) },
                                 swipeActions = swipeActions,
                                 highlight = false
+                            )
+                        } else {
+                            // Undownloaded track - show placeholder with different styling
+                            val songData = SongItemData(
+                                title = "Undownloaded Track",
+                                artist = "ID: ${trackWithStatus.beatmapUid}",
+                                coverPath = "",
+                                difficultyName = "",
+                                id = trackWithStatus.beatmapUid
+                            )
+
+                            SwipeToDismissSongItem(
+                                song = songData,
+                                onClick = {
+                                    // TODO: Implement restore for individual playlist tracks
+                                    // This should trigger download of the specific beatmap set
+                                },
+                                swipeActions = SwipeActions(
+                                    onDelete = {
+                                        scope.launch {
+                                            db.playlistDao().removeTrack(
+                                                playlistId = selectedPlaylistId!!,
+                                                beatmapUid = trackWithStatus.beatmapUid
+                                            )
+                                        }
+                                    },
+                                    onAddToPlaylist = null // Can't add undownloaded tracks to other playlists
+                                ),
+                                highlight = false,
+                                backgroundColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         }
                     }

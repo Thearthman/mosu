@@ -83,6 +83,7 @@ fun LibraryScreen(
     db: AppDatabase,
     musicController: MusicController
 ) {
+    val context = LocalContext.current
     val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistTracks by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
@@ -343,6 +344,19 @@ fun LibraryScreen(
                                     db.beatmapDao().deleteBeatmap(track)
                                     java.io.File(track.audioPath).delete()
                                     java.io.File(track.coverPath).delete()
+
+                                    // Remove from preserved list if no more tracks from this set remain
+                                    val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
+                                    if (remainingTracks.isEmpty()) {
+                                        db.preservedBeatmapSetIdDao().deletePreservedSetId(track.beatmapSetId)
+
+                                        // Also update SharedPreferences backup
+                                        val prefs = context.getSharedPreferences("preserved_beatmaps", android.content.Context.MODE_PRIVATE)
+                                        val preservedSetIdsKey = "preserved_set_ids"
+                                        val currentPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
+                                        val updatedPrefs = currentPrefs.filter { it != track.beatmapSetId.toString() }.toSet()
+                                        prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
+                                    }
                                 }
                             }
                         },
@@ -356,6 +370,19 @@ fun LibraryScreen(
                                     db.beatmapDao().deleteBeatmap(track)
                                     java.io.File(track.audioPath).delete()
                                     // Don't delete cover photo for individual songs - only when entire beatmapset is deleted
+
+                                    // Remove from preserved list if no more tracks from this set remain
+                                    val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
+                                    if (remainingTracks.isEmpty()) {
+                                        db.preservedBeatmapSetIdDao().deletePreservedSetId(track.beatmapSetId)
+
+                                        // Also update SharedPreferences backup
+                                        val prefs = context.getSharedPreferences("preserved_beatmaps", android.content.Context.MODE_PRIVATE)
+                                        val preservedSetIdsKey = "preserved_set_ids"
+                                        val currentPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
+                                        val updatedPrefs = currentPrefs.filter { it != track.beatmapSetId.toString() }.toSet()
+                                        prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
+                                    }
                                 }
                             }
                         },

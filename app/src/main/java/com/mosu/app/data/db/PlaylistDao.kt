@@ -23,6 +23,12 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addTrack(crossRef: PlaylistTrackEntity)
 
+    @Query("UPDATE playlist_tracks SET isDownloaded = :downloaded WHERE beatmapUid = :beatmapUid")
+    suspend fun updateTrackDownloadStatus(beatmapUid: Long, downloaded: Boolean)
+
+    @Query("UPDATE playlist_tracks SET isDownloaded = 0 WHERE beatmapUid IN (SELECT uid FROM beatmaps)")
+    suspend fun markAllTracksAsUndownloaded()
+
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND beatmapUid = :beatmapUid")
     suspend fun removeTrack(playlistId: Long, beatmapUid: Long)
 
@@ -38,6 +44,22 @@ interface PlaylistDao {
     """
     )
     fun getTracksForPlaylist(playlistId: Long): Flow<List<BeatmapEntity>>
+
+    @Query(
+        """
+        SELECT
+            pt.playlistId,
+            pt.beatmapUid,
+            pt.addedAt,
+            pt.isDownloaded,
+            b.*
+        FROM playlist_tracks pt
+        LEFT JOIN beatmaps b ON pt.beatmapUid = b.uid
+        WHERE pt.playlistId = :playlistId
+        ORDER BY pt.addedAt ASC
+    """
+    )
+    fun getTracksWithStatusForPlaylist(playlistId: Long): Flow<List<PlaylistTrackWithBeatmap>>
 
     @Query("SELECT * FROM playlist_tracks")
     fun getAllPlaylistTracks(): Flow<List<PlaylistTrackEntity>>

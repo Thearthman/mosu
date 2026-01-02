@@ -135,5 +135,10 @@
     <string name="language_simplified_chinese">简体中文</string>
     <string name="language_traditional_chinese">繁体中文</string>
     <string name="profile_language_desc">Choose application display language</string>
+
+    <!-- Restore Downloads -->
+    <string name="profile_restore_downloads_title">Restore Downloads</string>
+    <string name="profile_restore_downloads_description">%1$d previously downloaded beatmaps after database reset</string>
+    <string name="profile_restore_button">Restore</string>
 </resources>
 

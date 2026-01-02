@@ -17,14 +17,14 @@ data class PlaylistEntity(
 
 @Entity(
     tableName = "playlist_tracks",
-    primaryKeys = ["playlistId", "beatmapUid"],
-    indices = [Index(value = ["playlistId"]), Index(value = ["beatmapUid"])]
+    primaryKeys = ["playlistId", "beatmapSetId"],
+    indices = [Index(value = ["playlistId"]), Index(value = ["beatmapSetId"])]
 )
 data class PlaylistTrackEntity(
     val playlistId: Long,
-    val beatmapUid: Long,
+    val beatmapSetId: Long, // Changed from beatmapUid to beatmapSetId for stability across restores
     val addedAt: Long = System.currentTimeMillis(),
-    val isDownloaded: Boolean? = true // Track if the beatmap is currently downloaded (nullable for migration compatibility)
+    val isDownloaded: Boolean? = true // Track if the beatmap set is currently downloaded (nullable for migration compatibility)
 )
 
 data class PlaylistTrackCount(
@@ -44,11 +44,10 @@ data class PlaylistTrackWithStatus(
 // Result of joining playlist_tracks with beatmaps (LEFT JOIN, so beatmap may be null)
 data class PlaylistTrackWithBeatmap(
     val playlistId: Long,
-    val beatmapUid: Long,
+    val beatmapSetId: Long, // Changed from beatmapUid
     val addedAt: Long,
     val isDownloaded: Boolean?,
     val uid: Long?, // From beatmap
-    val beatmapSetId: Long?, // From beatmap
     val title: String?, // From beatmap
     val artist: String?, // From beatmap
     val creator: String?, // From beatmap

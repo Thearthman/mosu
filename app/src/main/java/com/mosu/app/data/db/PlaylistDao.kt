@@ -23,14 +23,14 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addTrack(crossRef: PlaylistTrackEntity)
 
-    @Query("UPDATE playlist_tracks SET isDownloaded = :downloaded WHERE beatmapUid = :beatmapUid")
-    suspend fun updateTrackDownloadStatus(beatmapUid: Long, downloaded: Boolean)
+    @Query("UPDATE playlist_tracks SET isDownloaded = :downloaded WHERE beatmapSetId = :beatmapSetId")
+    suspend fun updateTrackDownloadStatus(beatmapSetId: Long, downloaded: Boolean)
 
-    @Query("UPDATE playlist_tracks SET isDownloaded = 0 WHERE beatmapUid IN (SELECT uid FROM beatmaps)")
+    @Query("UPDATE playlist_tracks SET isDownloaded = 0 WHERE beatmapSetId IN (SELECT beatmapSetId FROM beatmaps)")
     suspend fun markAllTracksAsUndownloaded()
 
-    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND beatmapUid = :beatmapUid")
-    suspend fun removeTrack(playlistId: Long, beatmapUid: Long)
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND beatmapSetId = :beatmapSetId")
+    suspend fun removeTrack(playlistId: Long, beatmapSetId: Long)
 
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId")
     suspend fun removeAllTracksFromPlaylist(playlistId: Long)
@@ -38,7 +38,7 @@ interface PlaylistDao {
     @Query(
         """
         SELECT beatmaps.* FROM beatmaps
-        INNER JOIN playlist_tracks ON beatmaps.uid = playlist_tracks.beatmapUid
+        INNER JOIN playlist_tracks ON beatmaps.beatmapSetId = playlist_tracks.beatmapSetId
         WHERE playlist_tracks.playlistId = :playlistId
         ORDER BY playlist_tracks.addedAt ASC
     """
@@ -49,12 +49,12 @@ interface PlaylistDao {
         """
         SELECT
             pt.playlistId,
-            pt.beatmapUid,
+            pt.beatmapSetId,
             pt.addedAt,
             pt.isDownloaded,
             b.*
         FROM playlist_tracks pt
-        LEFT JOIN beatmaps b ON pt.beatmapUid = b.uid
+        LEFT JOIN beatmaps b ON pt.beatmapSetId = b.beatmapSetId
         WHERE pt.playlistId = :playlistId
         ORDER BY pt.addedAt ASC
     """

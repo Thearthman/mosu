@@ -301,18 +301,10 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
     private fun sanitizeQuery(query: String?): String? {
         val trimmed = query?.trim() ?: return null
         if (trimmed.isEmpty()) return null
+        // Remove control characters that could cause issues
         val noControl = trimmed.replace(Regex("[\\p{Cntrl}]"), "")
-        val cleaned = buildString {
-            noControl.forEach { ch ->
-                when {
-                    ch.isLetterOrDigit() -> append(ch)
-                    ch.isWhitespace() -> append(' ')
-                    ch in listOf('-', '_', '.', ',', '\'', '"', '/', ':', ';', '!', '?', '(', ')', '[', ']', '{', '}', '+', '@', '#') -> append(ch)
-                    else -> append(' ')
-                }
-            }
-        }
-        val collapsedSpaces = cleaned.replace(Regex("\\s+"), " ").trim()
+        // Normalize whitespace
+        val collapsedSpaces = noControl.replace(Regex("\\s+"), " ").trim()
         return collapsedSpaces.ifEmpty { null }
     }
 }

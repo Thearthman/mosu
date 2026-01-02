@@ -36,9 +36,9 @@ fun PlaylistSelectorDialog(
     playlists: List<PlaylistOption>,
     selectedPlaylistIds: Set<Long>,
     onSelectionChanged: (Set<Long>) -> Unit,
-    onAddToPlaylist: (Long, Long) -> Unit, // (playlistId, beatmapUid)
-    onRemoveFromPlaylist: (Long, Long) -> Unit, // (playlistId, beatmapUid)
-    beatmapUid: Long,
+    onAddToPlaylist: (Long, Long) -> Unit, // (playlistId, beatmapSetId)
+    onRemoveFromPlaylist: (Long, Long) -> Unit, // (playlistId, beatmapSetId)
+    beatmapSetId: Long,
     onDismiss: () -> Unit
 ) {
     var currentSelection by mutableStateOf(selectedPlaylistIds)
@@ -68,7 +68,7 @@ fun PlaylistSelectorDialog(
                                     if (newChecked) {
                                         onAddToPlaylist(playlist.id, beatmapUid)
                                     } else {
-                                        onRemoveFromPlaylist(playlist.id, beatmapUid)
+                                        onRemoveFromPlaylist(playlist.id, beatmapSetId)
                                     }
                                 }
                                 .padding(vertical = 4.dp),
@@ -87,7 +87,7 @@ fun PlaylistSelectorDialog(
                                     if (newChecked) {
                                         onAddToPlaylist(playlist.id, beatmapUid)
                                     } else {
-                                        onRemoveFromPlaylist(playlist.id, beatmapUid)
+                                        onRemoveFromPlaylist(playlist.id, beatmapSetId)
                                     }
                                 }
                             )

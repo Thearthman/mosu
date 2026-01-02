@@ -972,7 +972,7 @@ fun SearchScreen(
                                                                     db.beatmapDao()
                                                                         .insertBeatmap(entity)
                                                                 // Mark this track as downloaded in any playlists that contain it
-                                                                db.playlistDao().updateTrackDownloadStatus(entity.uid, true)
+                                                                db.playlistDao().updateTrackDownloadStatus(entity.beatmapSetId, true)
                                                                 }
                                                                 downloadStates =
                                                                     downloadStates + (map.id to DownloadProgress(

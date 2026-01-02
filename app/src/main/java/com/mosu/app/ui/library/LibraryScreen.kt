@@ -455,25 +455,25 @@ fun LibraryScreen(
                     dialogSelection = newSelection
                     dialogSelectionCache[track.uid] = newSelection
                 },
-                onAddToPlaylist = { playlistId, beatmapUid ->
+                onAddToPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
                         db.playlistDao().addTrack(
                             PlaylistTrackEntity(
                                 playlistId = playlistId,
-                                beatmapUid = beatmapUid
+                                beatmapSetId = beatmapSetId
                             )
                         )
                     }
                 },
-                onRemoveFromPlaylist = { playlistId, beatmapUid ->
+                onRemoveFromPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
                         db.playlistDao().removeTrack(
                             playlistId = playlistId,
-                            beatmapUid = beatmapUid
+                            beatmapSetId = beatmapSetId
                         )
                     }
                 },
-                beatmapUid = track.uid,
+                beatmapSetId = track.beatmapSetId,
                 onDismiss = { showPlaylistDialog = false }
             )
         }

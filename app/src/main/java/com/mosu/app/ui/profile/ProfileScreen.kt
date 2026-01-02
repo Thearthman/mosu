@@ -71,6 +71,15 @@ suspend fun performRestore(
 
         for (preservedSetId in preservedSetIds) {
             try {
+                // Check if this beatmap set is already downloaded
+                val existingTracks = db.beatmapDao().getTracksForSet(preservedSetId.beatmapSetId)
+                if (existingTracks.isNotEmpty()) {
+                    completed++
+                    val progress = (completed * 100) / total
+                    updateProgress(progress, "Skipped already downloaded beatmap ${preservedSetId.beatmapSetId}")
+                    continue
+                }
+
                 updateProgress(((completed * 100) / total), "Downloading beatmap ${preservedSetId.beatmapSetId}...")
 
                 downloader.downloadBeatmap(preservedSetId.beatmapSetId, accessToken)

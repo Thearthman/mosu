@@ -2,8 +2,7 @@
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
-4. Pressing restore when the song already exist will still download the music one more time
-5. No idea what will happen when secondary account logs out due to inactivity. Should implement better account management.  
+4. No idea what will happen when secondary account logs out due to inactivity. Should implement better account management.  
 
 
 # UI improvement (implement 3 first)
@@ -108,3 +107,4 @@
 24. Fix database destructive migration: Replace fallbackToDestructiveMigration() with proper migration strategies to prevent data loss during app updates. Users currently lose all downloaded beatmaps, playlists, and cached data on schema changes.
 25. Searching `artist=miku` in search page crashes the app
 26. Do not move downloaded song to top, make them stay where they are default to the position of the returned list
+27. Pressing restore when the song already exist will still download the music one more time

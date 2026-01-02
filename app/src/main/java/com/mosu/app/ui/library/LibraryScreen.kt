@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.flow.firstOrNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +77,8 @@ import com.mosu.app.ui.components.SwipeToDismissSongItem
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.mosu.app.R
+import com.mosu.app.domain.TrackDeletionService
+
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -341,22 +344,7 @@ fun LibraryScreen(
                         onDelete = {
                             scope.launch {
                                 tracks.forEach { track ->
-                                    db.beatmapDao().deleteBeatmap(track)
-                                    java.io.File(track.audioPath).delete()
-                                    java.io.File(track.coverPath).delete()
-
-                                    // Remove from preserved list if no more tracks from this set remain
-                                    val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
-                                    if (remainingTracks.isEmpty()) {
-                                        db.preservedBeatmapSetIdDao().deletePreservedSetId(track.beatmapSetId)
-
-                                        // Also update SharedPreferences backup
-                                        val prefs = context.getSharedPreferences("preserved_beatmaps", android.content.Context.MODE_PRIVATE)
-                                        val preservedSetIdsKey = "preserved_set_ids"
-                                        val currentPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
-                                        val updatedPrefs = currentPrefs.filter { it != track.beatmapSetId.toString() }.toSet()
-                                        prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
-                                    }
+                                    TrackDeletionService.deleteTrackWithPreservedListUpdate(track, db, context)
                                 }
                             }
                         },
@@ -367,22 +355,7 @@ fun LibraryScreen(
                             scope.launch {
                                 val track = tracks.find { it.uid == songData.id }
                                 if (track != null) {
-                                    db.beatmapDao().deleteBeatmap(track)
-                                    java.io.File(track.audioPath).delete()
-                                    // Don't delete cover photo for individual songs - only when entire beatmapset is deleted
-
-                                    // Remove from preserved list if no more tracks from this set remain
-                                    val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
-                                    if (remainingTracks.isEmpty()) {
-                                        db.preservedBeatmapSetIdDao().deletePreservedSetId(track.beatmapSetId)
-
-                                        // Also update SharedPreferences backup
-                                        val prefs = context.getSharedPreferences("preserved_beatmaps", android.content.Context.MODE_PRIVATE)
-                                        val preservedSetIdsKey = "preserved_set_ids"
-                                        val currentPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
-                                        val updatedPrefs = currentPrefs.filter { it != track.beatmapSetId.toString() }.toSet()
-                                        prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
-                                    }
+                                    TrackDeletionService.deleteTrackWithPreservedListUpdate(track, db, context)
                                 }
                             }
                         },
@@ -422,11 +395,7 @@ fun LibraryScreen(
                     val swipeActions = SwipeActions(
                         onDelete = {
                             scope.launch {
-                                // Delete from database
-                                db.beatmapDao().deleteBeatmap(track)
-                                // Delete audio and cover files
-                                java.io.File(track.audioPath).delete()
-                                java.io.File(track.coverPath).delete()
+                                TrackDeletionService.deleteTrackWithPreservedListUpdate(track, db, context)
                             }
                         },
                         onAddToPlaylist = { openPlaylistDialog(track) }

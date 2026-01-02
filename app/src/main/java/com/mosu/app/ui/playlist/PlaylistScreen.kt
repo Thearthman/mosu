@@ -88,10 +88,10 @@ fun PlaylistScreen(
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
     val downloadedTracks by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
     val playlistTrackRefs by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
-    val beatmapByUid = remember(downloadedTracks) { downloadedTracks.associateBy { it.uid } }
+    val beatmapBySetId = remember(downloadedTracks) { downloadedTracks.associateBy { it.beatmapSetId } }
     val playlistMembership = playlistTrackRefs
         .groupBy { it.playlistId }
-        .mapValues { entry -> entry.value.map { it.beatmapUid }.toSet() }
+        .mapValues { entry -> entry.value.map { it.beatmapSetId }.toSet() }
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
     val playlistTracksWithStatus: List<PlaylistTrackWithBeatmap> by if (selectedPlaylistId != null) {
@@ -126,7 +126,7 @@ fun PlaylistScreen(
         dialogTrack = track
         dialogSelection = dialogSelectionCache[track.uid]
             ?: playlists
-                .filter { playlistMembership[it.id]?.contains(track.uid) == true }
+                .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
                 .map { it.id }
                 .toSet()
         showPlaylistDialog = true
@@ -136,7 +136,7 @@ fun PlaylistScreen(
     LaunchedEffect(playlistTrackRefs, dialogTrack, playlists) {
         val track = dialogTrack ?: return@LaunchedEffect
         val latest = playlists
-            .filter { playlistMembership[it.id]?.contains(track.uid) == true }
+            .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
             .map { it.id }
             .toSet()
         dialogSelection = latest
@@ -187,7 +187,7 @@ fun PlaylistScreen(
                             .asSequence()
                             .filter { it.playlistId == playlist.id }
                             .sortedBy { it.addedAt }
-                            .mapNotNull { ref -> beatmapByUid[ref.beatmapUid]?.coverPath }
+                            .mapNotNull { ref -> beatmapBySetId[ref.beatmapSetId]?.coverPath }
                             .filter { it.isNotBlank() }
                             .take(4)
                             .toList()
@@ -262,7 +262,7 @@ fun PlaylistScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(
                         count = playlistTracksWithStatus.size,
-                        key = { index -> playlistTracksWithStatus[index].beatmapUid }
+                        key = { index -> playlistTracksWithStatus[index].beatmapSetId }
                     ) { index ->
                         val trackWithStatus = playlistTracksWithStatus[index]
                         val beatmapEntity = trackWithStatus.toBeatmapEntity()
@@ -299,10 +299,10 @@ fun PlaylistScreen(
                             // Undownloaded track - show placeholder with different styling
                             val songData = SongItemData(
                                 title = "Undownloaded Track",
-                                artist = "ID: ${trackWithStatus.beatmapUid}",
+                                artist = "ID: ${trackWithStatus.beatmapSetId}",
                                 coverPath = "",
                                 difficultyName = "",
-                                id = trackWithStatus.beatmapUid
+                                id = trackWithStatus.beatmapSetId
                             )
 
                             SwipeToDismissSongItem(
@@ -393,12 +393,15 @@ fun PlaylistScreen(
                                 val playlistId = selectedPlaylistId ?: return@TextButton
                                 scope.launch {
                                     addSelection.forEach { uid ->
-                                        db.playlistDao().addTrack(
-                                            PlaylistTrackEntity(
-                                                playlistId = playlistId,
-                                                beatmapUid = uid
+                                        val track = downloadedTracks.find { it.uid == uid }
+                                        if (track != null) {
+                                            db.playlistDao().addTrack(
+                                                PlaylistTrackEntity(
+                                                    playlistId = playlistId,
+                                                    beatmapSetId = track.beatmapSetId
+                                                )
                                             )
-                                        )
+                                        }
                                     }
                                 }
                                 showAddDialog = false

@@ -89,7 +89,7 @@ fun LibraryScreen(
     val playlistTracks by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val playlistMembership = playlistTracks
         .groupBy { it.playlistId }
-        .mapValues { entry -> entry.value.map { it.beatmapUid }.toSet() }
+        .mapValues { entry -> entry.value.map { it.beatmapSetId }.toSet() }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var highlightSetId by remember { mutableStateOf<Long?>(null) }
@@ -148,7 +148,7 @@ fun LibraryScreen(
         dialogTrack = track
         dialogSelection = dialogSelectionCache[track.uid]
             ?: playlists
-                .filter { playlistMembership[it.id]?.contains(track.uid) == true }
+                .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
                 .map { it.id }
                 .toSet()
         showPlaylistDialog = true
@@ -158,7 +158,7 @@ fun LibraryScreen(
     LaunchedEffect(playlistTracks, dialogTrack, playlists) {
         val track = dialogTrack ?: return@LaunchedEffect
         val latest = playlists
-            .filter { playlistMembership[it.id]?.contains(track.uid) == true }
+            .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
             .map { it.id }
             .toSet()
         dialogSelection = latest

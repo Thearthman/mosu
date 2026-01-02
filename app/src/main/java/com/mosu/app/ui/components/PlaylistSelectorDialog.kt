@@ -66,7 +66,7 @@ fun PlaylistSelectorDialog(
                                     onSelectionChanged(currentSelection)
 
                                     if (newChecked) {
-                                        onAddToPlaylist(playlist.id, beatmapUid)
+                                        onAddToPlaylist(playlist.id, beatmapSetId)
                                     } else {
                                         onRemoveFromPlaylist(playlist.id, beatmapSetId)
                                     }
@@ -85,7 +85,7 @@ fun PlaylistSelectorDialog(
                                     onSelectionChanged(currentSelection)
 
                                     if (newChecked) {
-                                        onAddToPlaylist(playlist.id, beatmapUid)
+                                        onAddToPlaylist(playlist.id, beatmapSetId)
                                     } else {
                                         onRemoveFromPlaylist(playlist.id, beatmapSetId)
                                     }

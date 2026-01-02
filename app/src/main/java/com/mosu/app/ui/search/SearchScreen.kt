@@ -292,10 +292,7 @@ fun SearchScreen(
         existing.forEach { putIfBetter(it) }
         incoming.forEach { putIfBetter(it) }
 
-        val merged = map.values.toList()
-        if (downloadedBeatmapSetIds.isEmpty()) return merged
-        val (downloaded, others) = merged.partition { it.id in downloadedBeatmapSetIds }
-        return downloaded + others
+        return map.values.toList()
     }
 
 
@@ -973,6 +970,16 @@ fun SearchScreen(
                                                                         .insertBeatmap(entity)
                                                                 // Mark this track as downloaded in any playlists that contain it
                                                                 db.playlistDao().updateTrackDownloadStatus(entity.beatmapSetId, true)
+                                                                // Add to preserved list for future restoration
+                                                                db.preservedBeatmapSetIdDao().insertPreservedSetId(
+                                                                    com.mosu.app.data.db.PreservedBeatmapSetIdEntity(beatmapSetId = entity.beatmapSetId)
+                                                                )
+                                                                // Also update SharedPreferences backup
+                                                                val prefs = context.getSharedPreferences("preserved_beatmaps", Context.MODE_PRIVATE)
+                                                                val preservedSetIdsKey = "preserved_set_ids"
+                                                                val currentPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
+                                                                val updatedPrefs = currentPrefs + entity.beatmapSetId.toString()
+                                                                prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
                                                                 }
                                                                 downloadStates =
                                                                     downloadStates + (map.id to DownloadProgress(

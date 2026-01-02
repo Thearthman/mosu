@@ -241,11 +241,15 @@ fun ProfileScreen(
         val preservedSetIdsFromPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
         val preservedSetIdsLong = preservedSetIdsFromPrefs.mapNotNull { it.toLongOrNull() }
 
-        // Sync database with SharedPreferences backup
+        // Check if preserved list has been initialized before
+        val initializedKey = "preserved_list_initialized"
+        val isInitialized = prefs.getBoolean(initializedKey, false)
+
+        // Sync database with SharedPreferences backup (only add missing items, never remove)
         val currentPreserved = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().firstOrNull() ?: emptyList()
         val currentPreservedIds = currentPreserved.map { it.beatmapSetId }.toSet()
 
-        // If database is missing some preserved IDs from prefs, restore them
+        // If database is missing some preserved IDs from prefs, restore them (conservative add-only)
         val missingIds = preservedSetIdsLong.filter { it !in currentPreservedIds }
         missingIds.forEach { setId ->
             db.preservedBeatmapSetIdDao().insertPreservedSetId(
@@ -253,20 +257,25 @@ fun ProfileScreen(
             )
         }
 
-        // If this is first-time setup (no preserved data anywhere), initialize with current library
-        val currentBeatmaps = db.beatmapDao().getAllBeatmaps().firstOrNull() ?: emptyList()
-        if (preservedSetIdsLong.isEmpty() && currentBeatmaps.isNotEmpty()) {
-            val currentSetIds = currentBeatmaps.map { it.beatmapSetId }.distinct()
-            val setIdsString = currentSetIds.map { it.toString() }.toSet()
+        // Only initialize on TRUE first launch (never overwrite existing data)
+        if (!isInitialized && preservedSetIdsLong.isEmpty()) {
+            val currentBeatmaps = db.beatmapDao().getAllBeatmaps().firstOrNull() ?: emptyList()
+            if (currentBeatmaps.isNotEmpty()) {
+                val currentSetIds = currentBeatmaps.map { it.beatmapSetId }.distinct()
+                val setIdsString = currentSetIds.map { it.toString() }.toSet()
 
-            // Save to SharedPreferences
-            prefs.edit().putStringSet(preservedSetIdsKey, setIdsString).apply()
+                // Save to SharedPreferences
+                prefs.edit()
+                    .putStringSet(preservedSetIdsKey, setIdsString)
+                    .putBoolean(initializedKey, true)
+                    .apply()
 
-            // Save to database
-            currentSetIds.forEach { setId ->
-                db.preservedBeatmapSetIdDao().insertPreservedSetId(
-                    com.mosu.app.data.db.PreservedBeatmapSetIdEntity(beatmapSetId = setId)
-                )
+                // Save to database
+                currentSetIds.forEach { setId ->
+                    db.preservedBeatmapSetIdDao().insertPreservedSetId(
+                        com.mosu.app.data.db.PreservedBeatmapSetIdEntity(beatmapSetId = setId)
+                    )
+                }
             }
         }
 

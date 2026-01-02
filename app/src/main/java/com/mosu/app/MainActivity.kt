@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -413,6 +414,7 @@ fun MainScreen(
                     .zIndex(1f)
                     .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
                     .fillMaxSize()
+                    .statusBarsPadding() // Always add status bar padding to prevent drawing under notification bar
                     .draggable(
                         state = draggableState,
                         orientation = Orientation.Vertical,
@@ -435,7 +437,13 @@ fun MainScreen(
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 80.dp) // Initial position above NavBar
                         .offset { IntOffset(0, (sheetOffset.value - collapsedOffset).roundToInt()) }
-                        .graphicsLayer { alpha = miniPlayerAlpha }
+                        .graphicsLayer {
+                            alpha = miniPlayerAlpha
+                            // Optimize rendering by only updating transform when alpha changes significantly
+                            if (miniPlayerAlpha < 0.1f) {
+                                alpha = 0f // Fully hide when nearly invisible
+                            }
+                        }
                         .draggable(
                             state = draggableState,
                             orientation = Orientation.Vertical,

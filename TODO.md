@@ -7,7 +7,7 @@
 
 # UI improvement (implement 3 first)
 1. In Search page, add gamemode labels (images are in icons folder) at the end of the composer's name's line.
-2. Add global player playcount to info popup in search page.
+2. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
 3. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions and maybe rethink about account management interface to provide better control over add/remove/modify account. 
 
 

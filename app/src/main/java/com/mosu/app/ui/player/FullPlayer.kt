@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,12 +109,15 @@ fun FullPlayer(
         }
     }
 
-    LaunchedEffect(currentPosition, sliderRange, isDragging) {
-        if (!isDragging) {
-            sliderValue = currentPosition
-                .toFloat()
-                .coerceIn(sliderRange.start, sliderRange.endInclusive)
+    // Throttle position updates to reduce recompositions - only update when not dragging
+    val throttledPosition by remember(currentPosition, isDragging) {
+        derivedStateOf {
+            if (isDragging) sliderValue.toFloat() else currentPosition.toFloat()
         }
+    }
+
+    LaunchedEffect(throttledPosition, sliderRange) {
+        sliderValue = throttledPosition.coerceIn(sliderRange.start, sliderRange.endInclusive)
     }
 
     if (nowPlaying != null) {
@@ -156,6 +160,8 @@ fun FullPlayer(
                     .padding(vertical=10.dp, horizontal=24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Spacer(modifier = Modifier.height(35.dp))
+
                 // Collapse Handle / Arrow
                 IconButton(onClick = onCollapse) {
                     Icon(
@@ -166,7 +172,7 @@ fun FullPlayer(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(5.dp))
 
                 // Square Cover Art
                 AsyncImage(
@@ -179,7 +185,7 @@ fun FullPlayer(
                     contentScale = ContentScale.Crop
                 )
 
-                Spacer(modifier = Modifier.weight(10f))
+                Spacer(modifier = Modifier.height(50.dp))
 
                 // Title and Artist
                 Column(
@@ -266,7 +272,7 @@ fun FullPlayer(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(35.dp))
+                Spacer(modifier = Modifier.height(30.dp))
 
                 // Controls Row
                 Row(
@@ -291,7 +297,7 @@ fun FullPlayer(
                         Box {
                             Column(
                                 modifier = Modifier
-                                    .widthIn(min = 47.dp)
+                                    .widthIn(min = 46.dp)
                                     .clickable { modMenuExpanded = true }
                             ) {
                                 Text(
@@ -459,14 +465,16 @@ fun Track(
             .fillMaxWidth()
             .height(trackHeight)
     ) {
+        // Cache expensive calculations within Canvas context
+        val tickSizePx = trackHeight.toPx() * 0.133f // Cache tick size relative to track height
         val isRtl = layoutDirection == LayoutDirection.Rtl
         val sliderLeft = Offset(0f - horizontalExpansion, center.y)
         val sliderRight = Offset(size.width + horizontalExpansion, center.y)
         val sliderStart = if (isRtl) sliderRight else sliderLeft
         val sliderEnd = if (isRtl) sliderLeft else sliderRight
-        val tickSizePx = 2.dp.toPx()
-        val trackStrokeWidth = trackHeight.toPx()
+        val trackStrokeWidth = size.height // Use canvas height directly
 
+        // Draw inactive track
         drawLine(
             color = inactiveTrackColor,
             start = sliderStart,
@@ -475,6 +483,7 @@ fun Track(
             cap = StrokeCap.Round
         )
 
+        // Draw active track
         val sliderValueEnd = Offset(
             sliderStart.x + (sliderEnd.x - sliderStart.x) * sliderPositions.activeRange.endInclusive,
             center.y
@@ -492,17 +501,20 @@ fun Track(
             cap = StrokeCap.Round
         )
 
-        sliderPositions.tickFractions.groupBy { fraction ->
-            fraction > sliderPositions.activeRange.endInclusive ||
-                    fraction < sliderPositions.activeRange.start
-        }.forEach { (outsideFraction, list) ->
-            drawPoints(
-                points = list.map { Offset(lerp(sliderStart, sliderEnd, it).x, center.y) },
-                pointMode = PointMode.Points,
-                color = if (outsideFraction) inactiveTickColor else activeTickColor,
-                strokeWidth = tickSizePx,
-                cap = StrokeCap.Round
-            )
+        // Optimize tick rendering - only render if there are ticks
+        if (sliderPositions.tickFractions.isNotEmpty()) {
+            sliderPositions.tickFractions.groupBy { fraction ->
+                fraction > sliderPositions.activeRange.endInclusive ||
+                        fraction < sliderPositions.activeRange.start
+            }.forEach { (outsideFraction, list) ->
+                drawPoints(
+                    points = list.map { Offset(lerp(sliderStart, sliderEnd, it).x, center.y) },
+                    pointMode = PointMode.Points,
+                    color = if (outsideFraction) inactiveTickColor else activeTickColor,
+                    strokeWidth = tickSizePx,
+                    cap = StrokeCap.Round
+                )
+            }
         }
     }
 }

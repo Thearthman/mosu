@@ -72,11 +72,15 @@ class TrackService {
         suspend fun addTrackToPlaylist(
             playlistId: Long,
             beatmapSetId: Long,
+            title: String,
+            artist: String,
             db: AppDatabase
         ) {
             val playlistTrack = PlaylistTrackEntity(
                 playlistId = playlistId,
-                beatmapSetId = beatmapSetId
+                beatmapSetId = beatmapSetId,
+                title = title,
+                artist = artist
             )
             db.playlistDao().addTrack(playlistTrack)
         }

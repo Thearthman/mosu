@@ -293,10 +293,10 @@ fun PlaylistScreen(
                                 highlight = false
                             )
                         } else {
-                            // Undownloaded track - show placeholder with different styling
+                            // Undownloaded track - show stored title/artist with different styling
                             val songData = SongItemData(
-                                title = "Undownloaded Track",
-                                artist = "ID: ${trackWithStatus.beatmapSetId}",
+                                title = trackWithStatus.storedTitle,
+                                artist = trackWithStatus.storedArtist,
                                 coverPath = "",
                                 difficultyName = "",
                                 id = trackWithStatus.beatmapSetId
@@ -389,7 +389,7 @@ fun PlaylistScreen(
                                     addSelection.forEach { uid ->
                                         val track = downloadedTracks.find { it.uid == uid }
                                         if (track != null) {
-                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, db)
+                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, track.title, track.artist, db)
                                         }
                                     }
                                 }
@@ -457,7 +457,7 @@ fun PlaylistScreen(
             },
             onAddToPlaylist = { playlistId, beatmapSetId ->
                 scope.launch {
-                    TrackService.addTrackToPlaylist(playlistId, beatmapSetId, db)
+                    TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, db)
                 }
             },
             onRemoveFromPlaylist = { playlistId, beatmapSetId ->

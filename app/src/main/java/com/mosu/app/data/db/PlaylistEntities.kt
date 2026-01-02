@@ -23,6 +23,8 @@ data class PlaylistEntity(
 data class PlaylistTrackEntity(
     val playlistId: Long,
     val beatmapSetId: Long, // Changed from beatmapUid to beatmapSetId for stability across restores
+    val title: String, // Store title for undownloaded tracks
+    val artist: String, // Store artist for undownloaded tracks
     val addedAt: Long = System.currentTimeMillis(),
     val isDownloaded: Boolean? = true // Track if the beatmap set is currently downloaded (nullable for migration compatibility)
 )
@@ -45,11 +47,13 @@ data class PlaylistTrackWithStatus(
 data class PlaylistTrackWithBeatmap(
     val playlistId: Long,
     val beatmapSetId: Long, // Changed from beatmapUid
+    val storedTitle: String, // From playlist_tracks (always available)
+    val storedArtist: String, // From playlist_tracks (always available)
     val addedAt: Long,
     val isDownloaded: Boolean?,
-    val uid: Long?, // From beatmap
-    val title: String?, // From beatmap
-    val artist: String?, // From beatmap
+    val uid: Long?, // From beatmap (null if not downloaded)
+val beatmapTitle: String?, // From beatmap (null if not downloaded)
+    val beatmapArtist: String?, // From beatmap (null if not downloaded)
     val creator: String?, // From beatmap
     val difficultyName: String?, // From beatmap
     val audioPath: String?, // From beatmap
@@ -60,15 +64,15 @@ data class PlaylistTrackWithBeatmap(
     fun toBeatmapEntity(): BeatmapEntity? {
         // Determine if downloaded based on whether beatmap data exists (from LEFT JOIN)
         // If beatmap fields are not null, the beatmap exists and is downloaded
-        val isActuallyDownloaded = uid != null && beatmapSetId != null && title != null &&
-            artist != null && difficultyName != null && audioPath != null && coverPath != null
+        val isActuallyDownloaded = uid != null && beatmapSetId != null && beatmapTitle != null &&
+            beatmapArtist != null && difficultyName != null && audioPath != null && coverPath != null
 
         return if (isActuallyDownloaded) {
             BeatmapEntity(
                 uid = uid!!,
                 beatmapSetId = beatmapSetId!!,
-                title = title!!,
-                artist = artist!!,
+                title = beatmapTitle!!,
+                artist = beatmapArtist!!,
                 creator = creator ?: "",
                 difficultyName = difficultyName!!,
                 audioPath = audioPath!!,

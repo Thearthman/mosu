@@ -416,7 +416,7 @@ fun LibraryScreen(
                 },
                 onAddToPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, db)
+                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, db)
                     }
                 },
                 onRemoveFromPlaylist = { playlistId, beatmapSetId ->

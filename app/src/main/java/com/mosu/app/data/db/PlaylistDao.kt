@@ -50,9 +50,19 @@ interface PlaylistDao {
         SELECT
             pt.playlistId,
             pt.beatmapSetId,
+            pt.title AS storedTitle,
+            pt.artist AS storedArtist,
             pt.addedAt,
             pt.isDownloaded,
-            b.*
+            b.uid,
+            b.title AS beatmapTitle,
+            b.artist AS beatmapArtist,
+            b.creator,
+            b.difficultyName,
+            b.audioPath,
+            b.coverPath,
+            b.downloadedAt,
+            b.genreId
         FROM playlist_tracks pt
         LEFT JOIN beatmaps b ON pt.beatmapSetId = b.beatmapSetId
         WHERE pt.playlistId = :playlistId

@@ -19,7 +19,7 @@ import kotlinx.coroutines.withContext
         PlaylistTrackEntity::class,
         PreservedBeatmapSetIdEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -77,6 +77,47 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 10 to 11: Placeholder migration
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // This migration may have been skipped or handled elsewhere
+                // Keeping as placeholder for proper version progression
+            }
+        }
+
+        // Migration from version 11 to 12: Placeholder migration
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Placeholder migration for proper version progression
+            }
+        }
+
+        // Migration from version 12 to 13: Add title and artist columns to playlist_tracks
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Check if title column exists before adding it
+                val cursor = db.query("PRAGMA table_info(playlist_tracks)")
+                var titleExists = false
+                var artistExists = false
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val columnName = it.getString(it.getColumnIndex("name"))
+                        when (columnName) {
+                            "title" -> titleExists = true
+                            "artist" -> artistExists = true
+                        }
+                    }
+                }
+
+                if (!titleExists) {
+                    db.execSQL("ALTER TABLE playlist_tracks ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+                }
+                if (!artistExists) {
+                    db.execSQL("ALTER TABLE playlist_tracks ADD COLUMN artist TEXT NOT NULL DEFAULT ''")
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -84,7 +125,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mosu_database"
                 )
-                .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()
                 INSTANCE = instance

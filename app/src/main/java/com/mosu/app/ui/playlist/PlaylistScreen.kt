@@ -63,7 +63,7 @@ import coil.compose.AsyncImage
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
-import com.mosu.app.data.db.PlaylistTrackEntity
+import com.mosu.app.data.services.TrackService
 import com.mosu.app.data.db.PlaylistTrackWithBeatmap
 import com.mosu.app.R
 import com.mosu.app.player.MusicController
@@ -280,10 +280,7 @@ fun PlaylistScreen(
                             val swipeActions = SwipeActions(
                                 onDelete = {
                                     scope.launch {
-                                        db.playlistDao().removeTrack(
-                                            playlistId = selectedPlaylistId!!,
-                                            beatmapSetId = beatmapEntity.beatmapSetId
-                                        )
+                                        TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, beatmapEntity.beatmapSetId, db)
                                     }
                                 },
                                 onAddToPlaylist = { openPlaylistDialog(beatmapEntity) }
@@ -314,10 +311,7 @@ fun PlaylistScreen(
                                 swipeActions = SwipeActions(
                                     onDelete = {
                                         scope.launch {
-                                            db.playlistDao().removeTrack(
-                                                playlistId = selectedPlaylistId!!,
-                                                beatmapSetId = trackWithStatus.beatmapSetId
-                                            )
+                                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, trackWithStatus.beatmapSetId, db)
                                         }
                                     },
                                     onAddToPlaylist = null // Can't add undownloaded tracks to other playlists
@@ -395,12 +389,7 @@ fun PlaylistScreen(
                                     addSelection.forEach { uid ->
                                         val track = downloadedTracks.find { it.uid == uid }
                                         if (track != null) {
-                                            db.playlistDao().addTrack(
-                                                PlaylistTrackEntity(
-                                                    playlistId = playlistId,
-                                                    beatmapSetId = track.beatmapSetId
-                                                )
-                                            )
+                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, db)
                                         }
                                     }
                                 }
@@ -468,20 +457,12 @@ fun PlaylistScreen(
             },
             onAddToPlaylist = { playlistId, beatmapSetId ->
                 scope.launch {
-                    db.playlistDao().addTrack(
-                        PlaylistTrackEntity(
-                            playlistId = playlistId,
-                            beatmapSetId = beatmapSetId
-                        )
-                    )
+                    TrackService.addTrackToPlaylist(playlistId, beatmapSetId, db)
                 }
             },
             onRemoveFromPlaylist = { playlistId, beatmapSetId ->
                 scope.launch {
-                    db.playlistDao().removeTrack(
-                        playlistId = playlistId,
-                        beatmapSetId = beatmapSetId
-                    )
+                    TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, db)
                 }
             },
             beatmapSetId = track.beatmapSetId,

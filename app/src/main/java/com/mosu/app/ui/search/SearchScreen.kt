@@ -89,6 +89,7 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
+import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.domain.download.DownloadState
 import com.mosu.app.domain.download.ZipExtractor
@@ -966,20 +967,9 @@ fun SearchScreen(
                                                                     coverPath = coverPath,
                                                                     genreId = map.genreId
                                                                 )
-                                                                    db.beatmapDao()
-                                                                        .insertBeatmap(entity)
+                                                                TrackService.addTrack(entity, db, context)
                                                                 // Mark this track as downloaded in any playlists that contain it
-                                                                db.playlistDao().updateTrackDownloadStatus(entity.beatmapSetId, true)
-                                                                // Add to preserved list for future restoration
-                                                                db.preservedBeatmapSetIdDao().insertPreservedSetId(
-                                                                    com.mosu.app.data.db.PreservedBeatmapSetIdEntity(beatmapSetId = entity.beatmapSetId)
-                                                                )
-                                                                // Also update SharedPreferences backup
-                                                                val prefs = context.getSharedPreferences("preserved_beatmaps", Context.MODE_PRIVATE)
-                                                                val preservedSetIdsKey = "preserved_set_ids"
-                                                                val currentPrefs = prefs.getStringSet(preservedSetIdsKey, emptySet()) ?: emptySet()
-                                                                val updatedPrefs = currentPrefs + entity.beatmapSetId.toString()
-                                                                prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
+                                                                TrackService.updateTrackDownloadStatus(entity.beatmapSetId, true, db)
                                                                 }
                                                                 downloadStates =
                                                                     downloadStates + (map.id to DownloadProgress(

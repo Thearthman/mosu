@@ -6,9 +6,8 @@
 
 
 # UI improvement (implement 3 first)
-1. In Search page, add gamemode labels (images are in icons folder) at the end of the composer's name's line.
-2. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
-3. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions and maybe rethink about account management interface to provide better control over add/remove/modify account. 
+1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
+2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions and maybe rethink about account management interface to provide better control over add/remove/modify account. 
 
 
 # New Feature
@@ -79,6 +78,7 @@
 6. Removed Language settings, as this is now following Android system settings.
 7. When an individual song within a songpack(beatmapset) is played, the music player should show the difficulty title (individual song title) instead of the songpack(beatmapset) title.
 8. Implement language changing feature
+9. In Search page, add gamemode labels (images are in icons folder) at the end of the mapper's name's row.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

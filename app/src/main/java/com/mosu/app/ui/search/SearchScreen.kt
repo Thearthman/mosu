@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -82,6 +83,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.R
+import androidx.compose.material3.Icon
 import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.BeatmapDetail
@@ -1168,29 +1170,56 @@ fun SearchScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = stringResource(id = R.string.search_author_prefix, author),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                            Text(
-                                                text = stringResource(id = R.string.info_modes, modeLabels),
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-                                            Text(
-                                                text = if (list.size == 1) {
-                                                    stringResource(id = R.string.info_star_single, starMin)
-                                                } else {
-                                                    stringResource(id = R.string.info_star_range, starMin, starMax)
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                            Text(
-                                                text = stringResource(id = R.string.info_diff_count, list.size),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = stringResource(id = R.string.search_author_prefix, author),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                                Spacer(modifier = Modifier.weight(1f))
+                                                // Add gamemode icons at the rightmost position
+                                                modes.keys.forEach { mode ->
+                                                    val iconRes = when (mode) {
+                                                        "osu" -> R.drawable.std_icon
+                                                        "taiko" -> R.drawable.taiko_icon
+                                                        "mania" -> R.drawable.mania_icon
+                                                        "fruits" -> R.drawable.cth_icon
+                                                        else -> null
+                                                    }
+                                                    iconRes?.let {
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Icon(
+                                                            painter = painterResource(id = it),
+                                                            contentDescription = modeLabel(mode),
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ){
+                                                Text(
+                                                    text = stringResource(id = R.string.info_diff_count, list.size),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                                Spacer(modifier=Modifier.weight(1f))
+                                                Text(
+                                                    text = if (list.size == 1) {
+                                                        stringResource(id = R.string.info_star_single, starMin)
+                                                    } else {
+                                                        stringResource(id = R.string.info_star_range, starMin, starMax)
+                                                    },
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                            }
                                         }
                                     }
                                 }

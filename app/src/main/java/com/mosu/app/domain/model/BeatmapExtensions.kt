@@ -1,0 +1,127 @@
+package com.mosu.app.domain.model
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color as ComposeColor
+import com.mosu.app.data.api.model.BeatmapsetCompact
+import com.mosu.app.data.api.model.Covers
+import com.mosu.app.data.db.RecentPlayEntity
+
+fun RecentPlayEntity.toBeatmapset(): BeatmapsetCompact {
+    val cover = coverUrl ?: ""
+    return BeatmapsetCompact(
+        id = beatmapSetId,
+        title = title,
+        artist = artist,
+        creator = creator,
+        covers = Covers(coverUrl = cover, listUrl = cover),
+        genreId = genreId
+    )
+}
+
+fun modeLabel(mode: String): String {
+    return when (mode.lowercase()) {
+        "osu" -> "std"
+        "mania" -> "mania"
+        "taiko" -> "taiko"
+        "fruits", "catch" -> "catch"
+        else -> mode
+    }
+}
+
+fun getStarRatingColor(stars: Float): Color {
+    return when {
+        stars < 1.5f -> Color(0xFF4FC0FF) // Light Blue - 1.50* and below
+        stars < 2.0f -> Color(0xFF4FFFD5) // Light Green/Teal - 2.00*
+        stars < 2.5f -> Color(0xFF7CFF4F) // Green - 2.50*
+        stars < 3.25f -> Color(0xFFF6F05C) // Yellow - 3.25*
+        stars < 4.5f -> Color(0xFFFF8068) // Orange/Red - 4.50*
+        stars < 6.0f -> Color(0xFFFF3C71) // Pink/Red - 6.00*
+        stars < 7.0f -> Color(0xFF6563DE) // Purple - 7.00*
+        stars < 8.0f -> Color(0xFF18158E) // Dark Blue - right below 8.00*
+        else -> Color(0xFF000000) // Black - 8.00* and above
+    }
+}
+
+fun getStarRatingColors(): List<Color> {
+    return listOf(
+        Color(0xFF4FC0FF), // < 1.5★: Light Blue
+        Color(0xFF4FFFD5), // 1.5-2.0★: Light Green/Teal
+        Color(0xFF7CFF4F), // 2.0-2.5★: Green
+        Color(0xFFF6F05C), // 2.5-3.25★: Yellow
+        Color(0xFFFF8068), // 3.25-4.5★: Orange/Red
+        Color(0xFFFF3C71), // 4.5-6.0★: Pink/Red
+        Color(0xFF6563DE), // 6.0-7.0★: Purple
+        Color(0xFF18158E), // 7.0-8.0★: Dark Blue
+        Color(0xFF000000)  // 8.0★+: Black
+    )
+}
+
+fun getGradientColorsForRange(minStars: Float, maxStars: Float): List<Color> {
+    val allColors = getStarRatingColors()
+    val colorStops = mutableListOf<Color>()
+
+    // Find the range of colors needed for this difficulty span
+    val minIndex = when {
+        minStars < 1.5f -> 0
+        minStars < 2.0f -> 1
+        minStars < 2.5f -> 2
+        minStars < 3.25f -> 3
+        minStars < 4.5f -> 4
+        minStars < 6.0f -> 5
+        minStars < 7.0f -> 6
+        minStars < 8.0f -> 7
+        else -> 8
+    }
+
+    val maxIndex = when {
+        maxStars < 1.5f -> 0
+        maxStars < 2.0f -> 1
+        maxStars < 2.5f -> 2
+        maxStars < 3.25f -> 3
+        maxStars < 4.5f -> 4
+        maxStars < 6.0f -> 5
+        maxStars < 7.0f -> 6
+        maxStars < 8.0f -> 7
+        else -> 8
+    }
+
+    // Add colors from min to max index, ensuring no duplicates
+    val addedColors = mutableSetOf<Color>()
+    for (i in minIndex..maxIndex) {
+        val color = allColors[i]
+        if (addedColors.add(color)) {
+            colorStops.add(color)
+        }
+    }
+
+    return colorStops
+}
+
+fun createGradientStops(colors: List<Color>): Array<Pair<Float, ComposeColor>> {
+    if (colors.size <= 1) return arrayOf(colors.firstOrNull()?.let { 0f to it } ?: (0f to Color.Black))
+
+    val stops = mutableListOf<Pair<Float, ComposeColor>>()
+
+    // Make start and end colors take up more space
+    val totalColors = colors.size
+    val startEndWeight = 0.35f // Start and end colors take 35% each
+
+    for (i in colors.indices) {
+        val position = when (i) {
+            0 -> 0.0f // Start color at 0%
+            colors.indices.last -> 1.0f // End color at 100%
+            else -> {
+                // Distribute middle colors evenly in the middle section
+                val middleStart = startEndWeight
+                val middleEnd = 1.0f - startEndWeight
+                val middleRange = middleEnd - middleStart
+                val middleColors = totalColors - 2
+                val middleIndex = i - 1
+                middleStart + (middleIndex * middleRange / (middleColors - 1).coerceAtLeast(1))
+            }
+        }
+        stops.add(position to colors[i])
+    }
+
+    return stops.toTypedArray()
+}

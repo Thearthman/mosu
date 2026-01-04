@@ -35,6 +35,25 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         return RetrofitClient.api.getBeatmapsetDetail("", beatmapsetId)
     }
 
+    suspend fun searchBeatmapsetsByTitleArtist(title: String, artist: String): List<BeatmapsetCompact> {
+        // Search using title and artist as query
+        val query = "\"$title\" \"$artist\""
+        val response = RetrofitClient.api.searchBeatmapsets(
+            authHeader = "", // No auth needed for public search
+            query = query,
+            status = "any" // Include ranked, loved, qualified, etc.
+        )
+
+        // Filter results to ensure exact title/artist matches (case-insensitive, trimmed)
+        val targetTitle = title.trim().lowercase()
+        val targetArtist = artist.trim().lowercase()
+
+        return response.beatmapsets.filter { beatmapset ->
+            beatmapset.title.trim().lowercase() == targetTitle &&
+            beatmapset.artist.trim().lowercase() == targetArtist
+        }
+    }
+
     suspend fun getUserMostPlayed(accessToken: String, userId: String): List<BeatmapPlaycount> {
         return RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId)
     }

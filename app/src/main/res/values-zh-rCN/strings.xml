@@ -3,10 +3,7 @@
     <string name="info_cover_title">信息弹窗显示封面</string>
     <string name="info_cover_desc">控制搜索信息弹窗是否显示谱面封面。</string>
     <string name="info_no_details">暂无难度详情。</string>
-    <string name="info_star_range">星级范围：%1$.1f - %2$.1f</string>
-    <string name="info_star_single">星级：%1$.1f</string>
     <string name="info_diff_count">%1$d 个难度</string>
-    <string name="info_modes">模式：%1$s</string>
     <string name="library_title">曲库</string>
     <string name="library_filter_genre">按曲风筛选</string>
     <string name="library_no_playlists">还没有播放列表。请到“播放列表”标签创建。</string>
@@ -58,12 +55,12 @@
     <string name="search_genre_not_available">最常播放视图不支持曲风筛选</string>
     <string name="search_playcount_label">次播放</string>
     <string name="search_status_refreshed">已刷新</string>
-    <string name="search_status_refresh_error">刷新错误：%1$s</string>
-    <string name="search_error_prefix">错误：%1$s</string>
+    <string name="search_status_refresh_error">刷新错误: %1$s</string>
+    <string name="search_error_prefix">错误: %1$s</string>
     <string name="search_status_loading_more">正在加载更多…</string>
     <string name="search_status_loaded_more">已加载 %1$d 条新结果</string>
     <string name="search_status_no_more">没有更多结果</string>
-    <string name="search_status_load_more_error">加载更多出错：%1$s</string>
+    <string name="search_status_load_more_error">加载更多出错:%1$s</string>
     <string name="search_load_more">加载更多</string>
     <string name="search_loading">加载中…</string>
     <string name="search_download_starting">开始…</string>
@@ -71,7 +68,7 @@
     
     <!-- Token Debug Dialog Strings -->
     <string name="profile_token_dialog_title">Bearer Token (调试)</string>
-    <string name="profile_token_dialog_description">您当前的 API 测试用 bearer token：</string>
+    <string name="profile_token_dialog_description">您当前的 API 测试用 bearer token: </string>
     <string name="profile_token_dialog_no_token">无可用 token</string>
     <string name="profile_token_dialog_copy">复制</string>
     <string name="profile_token_dialog_copied">Token 已复制到剪贴板</string>
@@ -79,13 +76,13 @@
     <string name="search_download_extracting">解压中…</string>
     <string name="search_download_done">完成 ✓</string>
     <string name="search_download_failed">失败</string>
-    <string name="search_download_error_prefix">错误：%1$s</string>
+    <string name="search_download_error_prefix">错误: %1$s</string>
     <string name="search_cd_downloaded">已下载</string>
     <string name="search_cd_download">下载</string>
     <string name="search_info_login_required">需要登录以获取详情</string>
     <string name="search_info_load_partial_error">部分详情加载失败</string>
     <string name="search_info_load_error">详情加载失败</string>
-    <string name="search_author_prefix">作者：%1$s</string>
+    <string name="search_author_prefix">作者: %1$s</string>
     <string name="search_not_logged_button">登录</string>
     <string name="search_play">播放</string>
     <string name="search_filter_played">已玩</string>
@@ -99,10 +96,10 @@
     <!-- Profile page strings -->
     <string name="profile_title">个人</string>
     <string name="profile_oauth_settings_title">osu! OAuth 设置</string>
-    <string name="profile_client_id_label">客户端 ID：%1$s</string>
+    <string name="profile_client_id_label">客户端 ID: %1$s</string>
     <string name="profile_client_id_configured">已配置 ✓</string>
     <string name="profile_client_id_not_set">未设置</string>
-    <string name="profile_client_secret_label">客户端密钥：%1$s</string>
+    <string name="profile_client_secret_label">客户端密钥: %1$s</string>
     <string name="profile_client_secret_configured">已配置 ✓</string>
     <string name="profile_client_secret_not_set">未设置</string>
     <string name="profile_configure_credentials">配置凭证</string>
@@ -110,8 +107,8 @@
     <string name="profile_login_button">使用 osu! 登录</string>
     <string name="profile_login_prompt">请在上方配置您的 OAuth 凭证以登录</string>
     <string name="profile_statistics_title">统计数据</string>
-    <string name="profile_downloaded_songs_label">已下载歌曲：%1$d</string>
-    <string name="profile_id_prefix">ID：%1$s</string>
+    <string name="profile_downloaded_songs_label">已下载歌曲: %1$d</string>
+    <string name="profile_id_prefix">ID: %1$s</string>
     <string name="profile_default_search_view_title">默认搜索视图</string>
     <string name="profile_default_search_view_desc">控制搜索页面打开时的默认视图。</string>
     <string name="profile_include_unranked_title">包含未评级谱面</string>
@@ -123,10 +120,10 @@
     <string name="profile_logout_button">退出登录</string>
     <!-- OAuth Dialog strings -->
     <string name="profile_oauth_dialog_title">OAuth 凭证</string>
-    <string name="profile_oauth_dialog_message">请输入您的 osu! OAuth 应用程序凭证：</string>
+    <string name="profile_oauth_dialog_message">请输入您的 osu! OAuth 应用程序凭证: </string>
     <string name="profile_oauth_dialog_client_id_hint">客户端 ID</string>
     <string name="profile_oauth_dialog_client_secret_hint">客户端密钥</string>
-    <string name="profile_oauth_dialog_help">获取地址：osu.ppy.sh/home/account/edit</string>
+    <string name="profile_oauth_dialog_help">获取地址: osu.ppy.sh/home/account/edit</string>
     <string name="profile_oauth_dialog_save">保存</string>
     <string name="profile_oauth_dialog_cancel">取消</string>
     <!-- Language names -->

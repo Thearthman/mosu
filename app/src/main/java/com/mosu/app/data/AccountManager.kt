@@ -26,11 +26,14 @@ class AccountManager(
         private fun userInfoKey(accountId: String) = stringPreferencesKey("user_info_$accountId")
     }
 
-    // Get all accounts
+    // Get all logged-in accounts (with user info)
     val accounts: Flow<List<Account>> = context.accountDataStore.data
         .map { preferences ->
-            val accountIds = tokenManager.getAvailableAccountIds()
-            accountIds.mapNotNull { accountId ->
+            val loggedInAccountIds = preferences.asMap().keys
+                .filter { it.name.startsWith("user_info_") }
+                .map { it.name.removePrefix("user_info_") }
+
+            loggedInAccountIds.mapNotNull { accountId ->
                 val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
                 if (clientId != null && clientSecret != null) {
                     val userInfoJson = preferences[userInfoKey(accountId)]
@@ -145,8 +148,10 @@ class AccountManager(
     suspend fun logoutFromCurrentAccount() {
         tokenManager.clearCurrentAccountToken()
         val currentAccountId = tokenManager.getCurrentAccountId()
-        context.accountDataStore.edit { preferences ->
-            preferences.remove(userInfoKey(currentAccountId))
+        if (currentAccountId != null) {
+            context.accountDataStore.edit { preferences ->
+                preferences.remove(userInfoKey(currentAccountId))
+            }
         }
     }
 }

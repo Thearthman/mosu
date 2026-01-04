@@ -31,7 +31,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
@@ -81,6 +83,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import androidx.compose.material3.Icon
@@ -88,13 +92,18 @@ import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.BeatmapDetail
 import com.mosu.app.data.db.AppDatabase
-import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.domain.download.DownloadState
 import com.mosu.app.domain.download.ZipExtractor
+import com.mosu.app.domain.download.CoverDownloadService
+import com.mosu.app.domain.search.BeatmapSearchService
+import com.mosu.app.domain.model.modeLabel
+import com.mosu.app.domain.model.getStarRatingColor
+import com.mosu.app.domain.model.getGradientColorsForRange
+import com.mosu.app.domain.model.createGradientStops
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -174,6 +183,8 @@ fun SearchScreen(
     val context = LocalContext.current
     val downloader = remember { BeatmapDownloader(context) }
     val extractor = remember { ZipExtractor(context) }
+    val coverDownloadService = remember { CoverDownloadService(context) }
+    val searchService = remember { BeatmapSearchService(repository, db) }
     val uriHandler = LocalUriHandler.current
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
 
@@ -185,43 +196,9 @@ fun SearchScreen(
     var infoMergedSetIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
 
-    fun mergeKey(beatmap: BeatmapsetCompact): String {
-        return "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
-    }
 
-    fun buildMergeGroups(list: List<BeatmapsetCompact>): Map<String, Set<Long>> {
-        return list.groupBy { mergeKey(it) }.mapValues { entry -> entry.value.map { it.id }.toSet() }
-    }
 
-    fun unionMergeGroups(existing: Map<String, Set<Long>>, incoming: Map<String, Set<Long>>): Map<String, Set<Long>> {
-        if (incoming.isEmpty()) return existing
-        val result = existing.toMutableMap()
-        incoming.forEach { (k, v) ->
-            val prev = result[k]
-            result[k] = if (prev == null) v else prev + v
-        }
-        return result
-    }
 
-    suspend fun downloadFallbackCoverImage(beatmapSetId: Long, coverUrl: String): String? {
-        if (coverUrl.isBlank()) return null
-
-        return withContext(Dispatchers.IO) {
-            try {
-                val outputDir = File(context.getExternalFilesDir(null), "beatmaps/$beatmapSetId")
-                if (!outputDir.exists()) outputDir.mkdirs()
-
-                val target = File(outputDir, "cover_api.jpg")
-                URL(coverUrl).openStream().use { input ->
-                    FileOutputStream(target).use { output -> input.copyTo(output) }
-                }
-                target.absolutePath
-            } catch (e: Exception) {
-                Log.w("SearchScreen", "Failed to download fallback cover", e)
-                null
-            }
-        }
-    }
     
     // Scroll state for collapsing header
     val listState = rememberLazyListState()
@@ -234,97 +211,25 @@ fun SearchScreen(
         }
     }
 
-    val genres = listOf(
-        10 to stringResource(id = R.string.genre_electronic),
-        3 to stringResource(id = R.string.genre_anime),
-        4 to stringResource(id = R.string.genre_rock),
-        5 to stringResource(id = R.string.genre_pop),
-        2 to stringResource(id = R.string.genre_game),
-        9 to stringResource(id = R.string.genre_hiphop),
-        11 to stringResource(id = R.string.genre_metal),
-        12 to stringResource(id = R.string.genre_classical),
-        13 to stringResource(id = R.string.genre_folk),
-        14 to stringResource(id = R.string.genre_jazz),
-        7 to stringResource(id = R.string.genre_novelty),
-        6 to stringResource(id = R.string.genre_other)
-    )
-
-    fun applyLocalFilters(list: List<BeatmapsetCompact>): List<BeatmapsetCompact> {
-        val query = searchQuery.trim()
-        return list.filter { beatmap ->
-            val genreOk = selectedGenreId?.let { beatmap.genreId == it } ?: true
-            val queryOk = if (query.isEmpty()) true else {
-                beatmap.title.contains(query, ignoreCase = true) || beatmap.artist.contains(query, ignoreCase = true)
-            }
-            genreOk && queryOk
-        }
-    }
-
-    fun dedupeByTitle(list: List<BeatmapsetCompact>): List<BeatmapsetCompact> {
-        val map = LinkedHashMap<String, BeatmapsetCompact>()
-        list.forEach { beatmap ->
-            val key = "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
-            val existing = map[key]
-            val isDownloaded = beatmap.id in downloadedBeatmapSetIds
-            val existingDownloaded = existing?.id?.let { it in downloadedBeatmapSetIds } ?: false
-            when {
-                existing == null -> map[key] = beatmap
-                !existingDownloaded && isDownloaded -> map[key] = beatmap // prefer downloaded variant
-                else -> { /* keep existing */ }
-            }
-        }
-        return map.values.toList()
-    }
-
-    fun mergeByTitle(existing: List<BeatmapsetCompact>, incoming: List<BeatmapsetCompact>): List<BeatmapsetCompact> {
-        if (incoming.isEmpty()) return existing
-
-        val map = LinkedHashMap<String, BeatmapsetCompact>()
-        fun putIfBetter(beatmap: BeatmapsetCompact) {
-            val key = "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
-            val existingVal = map[key]
-            val isDownloaded = beatmap.id in downloadedBeatmapSetIds
-            val existingDownloaded = existingVal?.id?.let { it in downloadedBeatmapSetIds } ?: false
-            when {
-                existingVal == null -> map[key] = beatmap
-                !existingDownloaded && isDownloaded -> map[key] = beatmap
-                else -> { /* keep existing */ }
-            }
-        }
-
-        existing.forEach { putIfBetter(it) }
-        incoming.forEach { putIfBetter(it) }
-
-        return map.values.toList()
+    val genres = searchService.genres.map { (id, name) ->
+        id to stringResource(id = when (name) {
+            "Electronic" -> R.string.genre_electronic
+            "Anime" -> R.string.genre_anime
+            "Rock" -> R.string.genre_rock
+            "Pop" -> R.string.genre_pop
+            "Game" -> R.string.genre_game
+            "Hip Hop" -> R.string.genre_hiphop
+            "Metal" -> R.string.genre_metal
+            "Classical" -> R.string.genre_classical
+            "Folk" -> R.string.genre_folk
+            "Jazz" -> R.string.genre_jazz
+            "Novelty" -> R.string.genre_novelty
+            "Other" -> R.string.genre_other
+            else -> R.string.genre_other
+        })
     }
 
 
-    fun filterMetadataFor(list: List<BeatmapsetCompact>, metadata: Map<Long, Pair<Int, Int>>): Map<Long, Pair<Int, Int>> {
-        if (metadata.isEmpty()) return emptyMap()
-        val allowedIds = list.map { it.id }.toSet()
-        return metadata.filterKeys { it in allowedIds }
-    }
-
-    suspend fun loadRecent(forceRefresh: Boolean = false) {
-        // If database is empty or forceRefresh is true, fetch from API
-        val recentFromDb = db.recentPlayDao().getRecentPlays()
-        if ((recentFromDb.isEmpty() || forceRefresh) && accessToken != null && userId != null) {
-            try {
-                val recentEntities = repository.fetchRecentPlays(accessToken, userId!!, 100)
-                db.recentPlayDao().mergeNewPlays(recentEntities)
-            } catch (e: Exception) {
-                // Silently fail for now, will use existing data
-            }
-        }
-        
-        val recent = db.recentPlayDao().getRecentPlays()
-        val applied = applyLocalFilters(recent.map { it.toBeatmapset() })
-        mergeGroups = buildMergeGroups(applied)
-        searchResults = dedupeByTitle(applied)
-        currentCursor = null
-        searchResultsMetadata = emptyMap()
-    }
-    
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
             text = stringResource(id = R.string.search_title),
@@ -369,7 +274,12 @@ fun SearchScreen(
                                     userId = uid
                                 )
                                 db.recentPlayDao().mergeNewPlays(fresh)
-                                loadRecent()
+                                val (beatmaps, mergeGroupsResult, _) = searchService.loadRecent(accessToken, userId)
+                                val applied = searchService.applyLocalFilters(beatmaps, searchQuery, selectedGenreId)
+                                mergeGroups = mergeGroupsResult
+                                searchResults = searchService.dedupeByTitle(applied, downloadedBeatmapSetIds)
+                                currentCursor = null
+                                searchResultsMetadata = emptyMap()
                             } else {
                                 val result = repository.getPlayedBeatmaps(
                                     accessToken = accessToken,
@@ -383,13 +293,13 @@ fun SearchScreen(
                                     searchAny = searchAnyEnabled,
                                     forceRefresh = true
                                 )
-                                val incoming = dedupeByTitle(result.beatmaps)
+                                val incoming = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
                                 if (filterMode == "favorite") {
                                     searchResults = incoming
                                     currentCursor = result.cursor
-                                    searchResultsMetadata = filterMetadataFor(incoming, result.metadata)
+                                    searchResultsMetadata = searchService.filterMetadataFor(incoming, result.metadata)
                                 } else {
-                                    val merged = mergeByTitle(searchResults, incoming)
+                                    val merged = searchService.mergeByTitle(searchResults, incoming, downloadedBeatmapSetIds)
                                     val mergedIds = merged.map { it.id }.toSet()
                                     searchResults = merged
                                     currentCursor = result.cursor
@@ -476,12 +386,12 @@ fun SearchScreen(
                                                                     isSupporter
                                                                 )
                                 val deduped =
-                                    dedupeByTitle(result.beatmaps)
-                                mergeGroups = buildMergeGroups(result.beatmaps)
+                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                 searchResults = deduped
                                                             currentCursor = result.cursor
                                                             searchResultsMetadata =
-                                                                filterMetadataFor(
+                                                                searchService.filterMetadataFor(
                                                                     deduped,
                                                                     result.metadata
                                                                 )
@@ -595,27 +505,32 @@ fun SearchScreen(
                                                             )
                                                             currentCursor = null
                                                             if (mode == "recent") {
-                                                                loadRecent()
+                                                                val (beatmaps, mergeGroupsResult, _) = searchService.loadRecent(accessToken, userId)
+                                                                val applied = searchService.applyLocalFilters(beatmaps, searchQuery, selectedGenreId)
+                                                                mergeGroups = mergeGroupsResult
+                                                                searchResults = searchService.dedupeByTitle(applied, downloadedBeatmapSetIds)
+                                                                currentCursor = null
+                                                                searchResultsMetadata = emptyMap()
                                                             } else {
                                                                 val result =
-                                                                    repository.getPlayedBeatmaps(
-                                                                        accessToken,
-                                                                        selectedGenreId,
-                                                                        null,
-                                                                        searchQuery.trim()
-                                                                            .ifEmpty { null },
-                                                                        mode,
-                                                                        playedFilterMode,
-                                                                        userId,
-                                                                        isSupporter,
-                                                                        searchAnyEnabled
-                                                                    )
+                                                                repository.getPlayedBeatmaps(
+                                                                    accessToken,
+                                                                    selectedGenreId,
+                                                                    null,
+                                                                    searchQuery.trim()
+                                                                        .ifEmpty { null },
+                                                                    mode,
+                                                                    playedFilterMode,
+                                                                    userId,
+                                                                    isSupporter,
+                                                                    searchAnyEnabled
+                                                                )
                                                                 val deduped =
-                                                                    dedupeByTitle(result.beatmaps)
+                                                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
                                                                 searchResults = deduped
                                                                 currentCursor = result.cursor
                                                                 searchResultsMetadata =
-                                                                    filterMetadataFor(
+                                                                    searchService.filterMetadataFor(
                                                                         deduped,
                                                                         result.metadata
                                                                     )
@@ -635,7 +550,12 @@ fun SearchScreen(
                                             try {
                                                 currentCursor = null
                                                 if (filterMode == "recent") {
-                                                    loadRecent()
+                                                    val (beatmaps, mergeGroupsResult, _) = searchService.loadRecent(accessToken, userId)
+                                                    val applied = searchService.applyLocalFilters(beatmaps, searchQuery, selectedGenreId)
+                                                    mergeGroups = mergeGroupsResult
+                                                    searchResults = searchService.dedupeByTitle(applied, downloadedBeatmapSetIds)
+                                                    currentCursor = null
+                                                    searchResultsMetadata = emptyMap()
                                                 } else {
                                                     val result = repository.getPlayedBeatmaps(
                                                         accessToken,
@@ -648,12 +568,12 @@ fun SearchScreen(
                                                         isSupporter,
                                                         searchAnyEnabled
                                                     )
-                                                    val deduped = dedupeByTitle(result.beatmaps)
-                                                    mergeGroups = buildMergeGroups(result.beatmaps)
+                                                    val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                                    mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                     searchResults = deduped
                                                     currentCursor = result.cursor
                                                     searchResultsMetadata =
-                                                        filterMetadataFor(deduped, result.metadata)
+                                                        searchService.filterMetadataFor(deduped, result.metadata)
                                                 }
                                             } catch (e: Exception) {
                                                 Log.e("SearchScreen", "Search failed", e)
@@ -690,7 +610,12 @@ fun SearchScreen(
                                                 scope.launch {
                                                     try {
                                                         if (filterMode == "recent") {
-                                                            loadRecent()
+                                                            val (beatmaps, mergeGroupsResult, _) = searchService.loadRecent(accessToken, userId)
+                                                            val applied = searchService.applyLocalFilters(beatmaps, searchQuery, selectedGenreId)
+                                                            mergeGroups = mergeGroupsResult
+                                                            searchResults = searchService.dedupeByTitle(applied, downloadedBeatmapSetIds)
+                                                            currentCursor = null
+                                                            searchResultsMetadata = emptyMap()
                                                         } else {
                                                             val result =
                                                                 repository.getPlayedBeatmaps(
@@ -706,11 +631,11 @@ fun SearchScreen(
                                                                     searchAnyEnabled
                                                                 )
                                                             val deduped =
-                                                                dedupeByTitle(result.beatmaps)
+                                                                searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
                                                             searchResults = deduped
                                                             currentCursor = result.cursor
                                                             searchResultsMetadata =
-                                                                filterMetadataFor(
+                                                                searchService.filterMetadataFor(
                                                                     deduped,
                                                                     result.metadata
                                                                 )
@@ -794,26 +719,32 @@ fun SearchScreen(
                                         infoError = null
                                         infoTarget = map
                                         infoBeatmaps = emptyList()
-                                        val key = mergeKey(map)
-                                        infoMergedSetIds = mergeGroups[key]?.toList() ?: listOf(map.id)
+                                        infoMergedSetIds = emptyList()
                                         infoSetCreators = emptyMap()
                                         scope.launch {
                                             try {
+                                                // Search for all beatmapsets with matching title/artist from osu API
+                                                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(map.title, map.artist)
+
                                                 val allBeatmaps = mutableListOf<BeatmapDetail>()
                                                 val creators = mutableMapOf<Long, String>()
-                                                val ids = infoMergedSetIds.ifEmpty { listOf(map.id) }
-                                                ids.forEach { setId ->
+                                                val setIds = mutableListOf<Long>()
+
+                                                matchingBeatmapsets.forEach { beatmapset ->
                                                     try {
                                                         val detail = repository.getBeatmapsetDetail(
-                                                            beatmapsetId = setId
+                                                            beatmapsetId = beatmapset.id
                                                         )
                                                         allBeatmaps += detail.beatmaps
                                                         creators[detail.id] = detail.creator
+                                                        setIds.add(detail.id)
                                                     } catch (e: Exception) {
                                                         // keep going, surface error at end
                                                         infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
                                                     }
                                                 }
+
+                                                infoMergedSetIds = setIds
                                                 infoBeatmaps = allBeatmaps
                                                 infoSetCreators = creators
                                             } catch (e: Exception) {
@@ -948,7 +879,7 @@ fun SearchScreen(
                                                                             track.coverFile == null || !track.coverFile.exists()
                                                                         }
                                                                     ) {
-                                                                        downloadFallbackCoverImage(
+                                                                        coverDownloadService.downloadFallbackCoverImage(
                                                                             map.id,
                                                                             map.covers.listUrl
                                                                         )
@@ -1043,11 +974,11 @@ fun SearchScreen(
                                             )
                                             if (result.beatmaps.isNotEmpty()) {
                                                 val merged =
-                                                    mergeByTitle(searchResults, result.beatmaps)
+                                                    searchService.mergeByTitle(searchResults, result.beatmaps, downloadedBeatmapSetIds)
                                                 val mergedIds = merged.map { it.id }.toSet()
-                                                mergeGroups = unionMergeGroups(
+                                                mergeGroups = searchService.unionMergeGroups(
                                                     mergeGroups,
-                                                    buildMergeGroups(result.beatmaps)
+                                                    searchService.buildMergeGroups(result.beatmaps)
                                                 )
                                                 searchResults = merged
                                                 currentCursor = result.cursor
@@ -1152,7 +1083,6 @@ fun SearchScreen(
                             val bySet = infoBeatmaps.groupBy { it.beatmapsetId }
                             items(bySet.entries.toList()) { (setId, list) ->
                                 val modes = list.groupBy { it.mode }
-                                val modeLabels = modes.keys.joinToString { modeLabel(it) }
                                 val starMin = list.minOfOrNull { it.difficultyRating } ?: 0f
                                 val starMax = list.maxOfOrNull { it.difficultyRating } ?: 0f
                                 val url = list.firstOrNull()?.url ?: "https://osu.ppy.sh/beatmapsets/$setId"
@@ -1201,24 +1131,77 @@ fun SearchScreen(
                                                 }
                                             }
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 4.dp),
+                                                modifier = Modifier.padding(start=4.dp, end=2.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ){
                                                 Text(
                                                     text = stringResource(id = R.string.info_diff_count, list.size),
-                                                    style = MaterialTheme.typography.bodySmall,
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.secondary
                                                 )
                                                 Spacer(modifier=Modifier.weight(1f))
-                                                Text(
-                                                    text = if (list.size == 1) {
-                                                        stringResource(id = R.string.info_star_single, starMin)
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier
+                                                        .then(
+                                                            if (list.size == 1) {
+                                                                // Single difficulty: solid color background
+                                                                Modifier.background(
+                                                                    color = getStarRatingColor(starMin),
+                                                                    shape = RoundedCornerShape(8.dp)
+                                                                )
+                                                            } else {
+                                                                // Multiple difficulties: gradient background if range spans multiple colors, solid otherwise
+                                                                val gradientColors = getGradientColorsForRange(starMin, starMax)
+                                                                if (gradientColors.size >= 2) {
+                                                                    val colorStops = createGradientStops(gradientColors)
+                                                                    Modifier.background(
+                                                                        brush = Brush.horizontalGradient(
+                                                                            colorStops = colorStops
+                                                                        ),
+                                                                        shape = RoundedCornerShape(8.dp)
+                                                                    )
+                                                                } else {
+                                                                    // Fall back to solid color if range is too narrow
+                                                                    Modifier.background(
+                                                                        color = gradientColors.firstOrNull() ?: getStarRatingColor(starMax),
+                                                                        shape = RoundedCornerShape(8.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                        )
+                                                        .padding(start=9.dp,end=2.dp,top=1.dp,bottom=1.dp)
+                                                ) {
+                                                    if (list.size == 1) {
+                                                        // Single difficulty: background matches difficulty
+                                                        Text(
+                                                            text = "%.1f".format(starMin),
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = Color.White,
+                                                            modifier = Modifier.padding(end=4.dp)
+                                                        )
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Star,
+                                                            contentDescription = "Star rating",
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = Color.White
+                                                        )
                                                     } else {
-                                                        stringResource(id = R.string.info_star_range, starMin, starMax)
-                                                    },
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.secondary
-                                                )
+                                                        // Range: background matches max difficulty
+                                                        Text(
+                                                            text = "%.1f - %.1f".format(starMin, starMax),
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = Color.White,
+                                                            modifier = Modifier.padding(end=4.dp)
+                                                        )
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Star,
+                                                            contentDescription = "Star rating",
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = Color.White
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1278,7 +1261,12 @@ fun SearchScreen(
                 val uid = userId ?: return@LaunchedEffect
                 try {
                     if (filterMode == "recent") {
-                        loadRecent(forceRefresh = true) // Force fetch from API on initial load
+                        val (beatmaps, mergeGroupsResult, _) = searchService.loadRecent(accessToken, userId, forceRefresh = true)
+                        val applied = searchService.applyLocalFilters(beatmaps, searchQuery, selectedGenreId)
+                        mergeGroups = mergeGroupsResult
+                        searchResults = searchService.dedupeByTitle(applied, downloadedBeatmapSetIds)
+                        currentCursor = null
+                        searchResultsMetadata = emptyMap()
                     } else {
                         // First, try to load cached data immediately for all filter modes
                         val cachedResult = repository.getCachedPlayedBeatmaps(
@@ -1289,22 +1277,22 @@ fun SearchScreen(
                             userId = uid
                         )
                         if (cachedResult != null) {
-                            val deduped = dedupeByTitle(cachedResult.beatmaps)
-                            mergeGroups = buildMergeGroups(cachedResult.beatmaps)
+                            val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds)
+                            mergeGroups = searchService.buildMergeGroups(cachedResult.beatmaps)
                             searchResults = deduped
                             currentCursor = cachedResult.cursor
-                            searchResultsMetadata = filterMetadataFor(deduped, cachedResult.metadata)
+                            searchResultsMetadata = searchService.filterMetadataFor(deduped, cachedResult.metadata)
                         }
 
                         // Then refresh with fresh data in background for all filter modes
                         scope.launch {
                             try {
                                 val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
-                                val deduped = dedupeByTitle(result.beatmaps)
-                                mergeGroups = buildMergeGroups(result.beatmaps)
+                                val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                 searchResults = deduped
                                 currentCursor = result.cursor
-                                searchResultsMetadata = filterMetadataFor(deduped, result.metadata)
+                                searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
                             } catch (e: Exception) {
                                 Log.e("SearchScreen", "Background refresh failed", e)
                                 // Don't overwrite cached data if refresh fails
@@ -1319,24 +1307,3 @@ fun SearchScreen(
     }
 }
 
-private fun RecentPlayEntity.toBeatmapset(): BeatmapsetCompact {
-    val cover = coverUrl ?: ""
-    return BeatmapsetCompact(
-        id = beatmapSetId,
-        title = title,
-        artist = artist,
-        creator = creator,
-        covers = Covers(coverUrl = cover, listUrl = cover),
-        genreId = genreId
-    )
-}
-
-private fun modeLabel(mode: String): String {
-    return when (mode.lowercase()) {
-        "osu" -> "std"
-        "mania" -> "mania"
-        "taiko" -> "taiko"
-        "fruits", "catch" -> "catch"
-        else -> mode
-    }
-}

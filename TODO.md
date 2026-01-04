@@ -2,12 +2,12 @@
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
-4. No idea what will happen when secondary account logs out due to inactivity. Should implement better account management.  
+
 
 
 # UI improvement (implement 3 first)
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
-2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions and maybe rethink about account management interface to provide better control over add/remove/modify account. 
+2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions. 
 
 
 # New Feature
@@ -79,6 +79,8 @@
 7. When an individual song within a songpack(beatmapset) is played, the music player should show the difficulty title (individual song title) instead of the songpack(beatmapset) title.
 8. Implement language changing feature
 9. In Search page, add gamemode labels (images are in icons folder) at the end of the mapper's name's row.
+10. Complete account management system overhaul: Removed "main" account hierarchy, implemented bottom sheet account switcher, added long-press credentials management, expired account status indicators with automatic login triggers, and swipe-to-delete functionality for account removal.
+11. Enhanced star rating display with precise color-coded backgrounds based on difficulty levels, featuring gradient backgrounds for beatmapsets that emphasize start and end difficulty colors.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

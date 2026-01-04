@@ -39,15 +39,15 @@ class TokenManager(private val context: Context) {
         private val TOKEN_EXPIRY_KEY = longPreferencesKey("token_expiry")
     }
 
-    // Current account ID for backward compatibility
+    // Current account ID
     val currentAccountId: Flow<String?> = context.dataStore.data
         .map { preferences ->
-            preferences[CURRENT_ACCOUNT_KEY] ?: "main" // Default to "main" for backward compatibility
+            preferences[CURRENT_ACCOUNT_KEY]
         }
 
     // Get current account ID synchronously
-    suspend fun getCurrentAccountId(): String {
-        return context.dataStore.data.first()[CURRENT_ACCOUNT_KEY] ?: "main"
+    suspend fun getCurrentAccountId(): String? {
+        return context.dataStore.data.first()[CURRENT_ACCOUNT_KEY]
     }
 
     // Set current account
@@ -60,30 +60,30 @@ class TokenManager(private val context: Context) {
     // Current account's access token
     val accessToken: Flow<String?> = context.dataStore.data
         .map { preferences ->
-            val accountId = preferences[CURRENT_ACCOUNT_KEY] ?: "main"
-            preferences[accessTokenKey(accountId)]
+            val accountId = preferences[CURRENT_ACCOUNT_KEY]
+            accountId?.let { preferences[accessTokenKey(it)] }
         }
 
     // Synchronous access to current token for interceptors
     suspend fun getCurrentAccessToken(): String? {
         val accountId = getCurrentAccountId()
-        return context.dataStore.data.first()[accessTokenKey(accountId)]
+        return accountId?.let { context.dataStore.data.first()[accessTokenKey(it)] }
     }
 
     val refreshToken: Flow<String?> = context.dataStore.data
         .map { preferences ->
-            val accountId = preferences[CURRENT_ACCOUNT_KEY] ?: "main"
-            preferences[refreshTokenKey(accountId)]
+            val accountId = preferences[CURRENT_ACCOUNT_KEY]
+            accountId?.let { preferences[refreshTokenKey(it)] }
         }
 
     val tokenExpiry: Flow<Long?> = context.dataStore.data
         .map { preferences ->
-            val accountId = preferences[CURRENT_ACCOUNT_KEY] ?: "main"
-            preferences[tokenExpiryKey(accountId)]
+            val accountId = preferences[CURRENT_ACCOUNT_KEY]
+            accountId?.let { preferences[tokenExpiryKey(it)] }
         }
 
     suspend fun saveTokens(accessToken: String, refreshToken: String, expiresIn: Long) {
-        val accountId = getCurrentAccountId()
+        val accountId = getCurrentAccountId() ?: return // No current account to save to
         val expiryTime = System.currentTimeMillis() + (expiresIn * 1000) // Convert to milliseconds
         context.dataStore.edit { preferences ->
             preferences[accessTokenKey(accountId)] = accessToken
@@ -93,7 +93,7 @@ class TokenManager(private val context: Context) {
     }
 
     suspend fun updateAccessToken(accessToken: String, expiresIn: Long) {
-        val accountId = getCurrentAccountId()
+        val accountId = getCurrentAccountId() ?: return // No current account to update
         val expiryTime = System.currentTimeMillis() + (expiresIn * 1000)
         context.dataStore.edit { preferences ->
             preferences[accessTokenKey(accountId)] = accessToken
@@ -103,14 +103,14 @@ class TokenManager(private val context: Context) {
 
     suspend fun saveToken(token: String) {
         // Legacy method for backward compatibility
-        val accountId = getCurrentAccountId()
+        val accountId = getCurrentAccountId() ?: return // No current account to save to
         context.dataStore.edit { preferences ->
             preferences[accessTokenKey(accountId)] = token
         }
     }
 
     suspend fun clearCurrentAccountToken() {
-        val accountId = getCurrentAccountId()
+        val accountId = getCurrentAccountId() ?: return // No current account to clear
         context.dataStore.edit { preferences ->
             preferences.remove(accessTokenKey(accountId))
             preferences.remove(refreshTokenKey(accountId))
@@ -148,16 +148,17 @@ class TokenManager(private val context: Context) {
             preferences.remove(clientIdKey(accountId))
             preferences.remove(clientSecretKey(accountId))
 
-            // If this was the current account, switch to main
+            // If this was the current account, clear current account
             if (preferences[CURRENT_ACCOUNT_KEY] == accountId) {
-                preferences[CURRENT_ACCOUNT_KEY] = "main"
+                preferences.remove(CURRENT_ACCOUNT_KEY)
             }
         }
     }
 
     fun isTokenExpired(): Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            val accountId = preferences[CURRENT_ACCOUNT_KEY] ?: "main"
+            val accountId = preferences[CURRENT_ACCOUNT_KEY]
+            if (accountId == null) return@map false // No current account means no token to expire
             val expiry = preferences[tokenExpiryKey(accountId)]
             expiry != null && System.currentTimeMillis() >= expiry
         }
@@ -167,7 +168,7 @@ class TokenManager(private val context: Context) {
      * Returns true if refresh was attempted and successful, false otherwise
      */
     suspend fun refreshTokenIfNeeded(clientId: String, clientSecret: String): Boolean {
-        val accountId = getCurrentAccountId()
+        val accountId = getCurrentAccountId() ?: return false // No current account
         val expiry = context.dataStore.data.first()[tokenExpiryKey(accountId)]
         if (expiry == null) return false
 
@@ -184,7 +185,7 @@ class TokenManager(private val context: Context) {
      * Returns true if refresh was successful, false otherwise
      */
     suspend fun refreshAccessToken(clientId: String, clientSecret: String): Boolean {
-        val accountId = getCurrentAccountId()
+        val accountId = getCurrentAccountId() ?: return false // No current account
         val refreshToken = context.dataStore.data.first()[refreshTokenKey(accountId)]
         if (refreshToken.isNullOrEmpty()) {
             return false
@@ -218,7 +219,7 @@ class TokenManager(private val context: Context) {
     }
 
     /**
-     * Get all available account IDs
+     * Get all available account IDs (accounts that have access tokens)
      */
     suspend fun getAvailableAccountIds(): List<String> {
         val preferences = context.dataStore.data.first()
@@ -232,12 +233,20 @@ class TokenManager(private val context: Context) {
             }
         }
 
-        // Always include main account if it has credentials
-        if (preferences[clientIdKey("main")] != null || preferences[clientSecretKey("main")] != null) {
-            accountIds.add("main")
-        }
-
         return accountIds.toList()
+    }
+
+
+    /**
+     * Check if a specific account needs login (no token or expired token)
+     */
+    suspend fun doesAccountNeedLogin(accountId: String): Boolean {
+        val preferences = context.dataStore.data.first()
+        val token = preferences[accessTokenKey(accountId)]
+        val expiry = preferences[tokenExpiryKey(accountId)]
+
+        // No token stored, or token exists but is expired
+        return token == null || (expiry != null && System.currentTimeMillis() >= expiry)
     }
 }
 

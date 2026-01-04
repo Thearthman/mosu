@@ -214,14 +214,14 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         val availableAccountIds = tokenManager.getAvailableAccountIds()
 
-        // If no accounts exist but settings have credentials, migrate to main account
+        // If no accounts exist but settings have credentials, migrate to first account
         if (availableAccountIds.isEmpty()) {
             val settingsClientId = settingsManager.clientId.first()
             val settingsClientSecret = settingsManager.clientSecret.first()
 
             if (settingsClientId.isNotEmpty() && settingsClientSecret.isNotEmpty()) {
-                accountManager.createAccount("main", settingsClientId, settingsClientSecret)
-                tokenManager.setCurrentAccount("main")
+                accountManager.createAccount("account1", settingsClientId, settingsClientSecret)
+                tokenManager.setCurrentAccount("account1")
             }
         }
     }
@@ -250,7 +250,7 @@ fun MainScreen(
     
     // Listen for token changes (e.g., after OAuth login or account switch)
     val storedToken by tokenManager.accessToken.collectAsState(initial = accessToken)
-    val currentAccountId by tokenManager.currentAccountId.collectAsState(initial = "main")
+    val currentAccountId by tokenManager.currentAccountId.collectAsState(initial = null)
 
     LaunchedEffect(storedToken) {
         if (storedToken != accessToken) {
@@ -268,8 +268,13 @@ fun MainScreen(
     LaunchedEffect(initialAuthCode) {
         if (initialAuthCode != null) {
             // Get current account credentials, fall back to settings if not available
-            val currentAccountId = tokenManager.getCurrentAccountId()
-            val (currentClientId, currentClientSecret) = tokenManager.getAccountCredentials(currentAccountId)
+            val nullableAccountId = tokenManager.getCurrentAccountId()
+            if (nullableAccountId == null) {
+                android.util.Log.e("MainActivity", "OAuth callback received but no current account set")
+                return@LaunchedEffect
+            }
+            val accountId = nullableAccountId // Smart cast to non-null
+            val (currentClientId, currentClientSecret) = tokenManager.getAccountCredentials(accountId)
 
             val effectiveClientId = if (currentClientId.isNullOrEmpty()) runBlocking { settingsManager.clientId.first() } else currentClientId
             val effectiveClientSecret = if (currentClientSecret.isNullOrEmpty()) runBlocking { settingsManager.clientSecret.first() } else currentClientSecret
@@ -280,10 +285,10 @@ fun MainScreen(
                 try {
                     // If account doesn't have stored credentials, save them first
                     if (currentClientId.isNullOrEmpty() || currentClientSecret.isNullOrEmpty()) {
-                        tokenManager.saveAccountCredentials(currentAccountId, effectiveClientId, effectiveClientSecret)
+                        tokenManager.saveAccountCredentials(accountId, effectiveClientId, effectiveClientSecret)
                     }
 
-                    val success = accountManager.loginToAccount(currentAccountId, initialAuthCode, redirectUri)
+                    val success = accountManager.loginToAccount(accountId, initialAuthCode, redirectUri)
                     if (success) {
                         // Refresh the access token state
                         val savedToken = tokenManager.accessToken.first()
@@ -381,7 +386,7 @@ fun MainScreen(
                     composable("profile") {
                         ProfileScreen(
                             accessToken = accessToken,
-                            currentAccountId = currentAccountId ?: "main",
+                            currentAccountId = currentAccountId,
                             repository = repository,
                             db = db,
                             tokenManager = tokenManager,

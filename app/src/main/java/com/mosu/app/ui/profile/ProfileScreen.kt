@@ -3,17 +3,26 @@ package com.mosu.app.ui.profile
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.rememberDismissState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.FractionalThreshold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.AccountManager
@@ -139,10 +149,11 @@ suspend fun performRestore(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class,ExperimentalMaterialApi::class)
 @Composable
 fun ProfileScreen(
     accessToken: String?,
-    currentAccountId: String,
+    currentAccountId: String?,
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
@@ -181,6 +192,8 @@ fun ProfileScreen(
     // Account management state
     var showAddAccountDialog by remember { mutableStateOf(false) }
     var showAccountSwitcher by remember { mutableStateOf(false) }
+    var showCredentialsDialog by remember { mutableStateOf(false) }
+    var selectedAccountForCredentials by remember { mutableStateOf<String?>(null) }
     var newClientId by remember { mutableStateOf("") }
     var newClientSecret by remember { mutableStateOf("") }
 
@@ -191,7 +204,7 @@ fun ProfileScreen(
 
     // Load cached user info immediately, update in background
     LaunchedEffect(currentAccountId) {
-        if (accessToken != null) {
+        if (accessToken != null && currentAccountId != null) {
             // First, try to get cached user info immediately
             val cachedInfo = accountManager.getCachedUserInfo(currentAccountId)
             if (cachedInfo != null) {
@@ -305,171 +318,78 @@ fun ProfileScreen(
             modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
         )
 
-        if (accessToken == null) {
-            // Not logged in - Show Settings and Login
-            
-            // OAuth Settings Card - Fixed layout with consistent max width for text
+        // Account Info Card - Dynamic based on login state
+        if (currentAccountId != null && userInfo != null) {
+            // User is logged in - Show user info
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
+                    .clickable {
+                        scope.launch {
+                            currentToken = tokenManager.getCurrentAccessToken()
+                            showTokenDialog = true
+                        }
+                    }
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(0.7f)
-                    ) {
-                        Text(stringResource(R.string.profile_oauth_settings_title), style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val clientIdStatus = if (clientId.isNotEmpty()) stringResource(R.string.profile_client_id_configured) else stringResource(R.string.profile_client_id_not_set)
-                        Text(stringResource(R.string.profile_client_id_label, clientIdStatus), style = MaterialTheme.typography.bodyMedium)
-                        val clientSecretStatus = if (clientSecret.isNotEmpty()) stringResource(R.string.profile_client_secret_configured) else stringResource(R.string.profile_client_secret_not_set)
-                        Text(stringResource(R.string.profile_client_secret_label, clientSecretStatus), style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Button(
-                        onClick = { showSettingsDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        Text(
-                            stringResource(R.string.profile_configure_credentials),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-            
-            // Info Cover Toggle Card (已符合设计)
-            InfoCoverToggleCard(infoCoverEnabled = infoCoverEnabled) { checked ->
-                scope.launch { settingsManager.saveInfoCoverEnabled(checked) }
-            }
-
-            // Language Card - Fixed layout with consistent max width for text
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(0.7f)
-                    ) {
-                        Text(stringResource(R.string.profile_language_title), style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            stringResource(R.string.profile_language_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        OutlinedButton(
-                            onClick = { languageMenuExpanded = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(languageLabel(language), maxLines = 1, modifier = Modifier.weight(1f))
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Select language")
-                        }
-                        DropdownMenu(
-                            expanded = languageMenuExpanded,
-                            onDismissRequest = { languageMenuExpanded = false }
-                        ) {
-                            languageOptions.forEach { (code, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        scope.launch { settingsManager.saveLanguage(code) }
-                                        languageMenuExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Login Button
-            if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
-                Button(
-                    onClick = onLoginClick,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.profile_login_button))
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
-                    Text(
-                        stringResource(R.string.profile_login_prompt),
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
-
-        } else {
-            // User Info Card (clickable for token debug)
-            userInfo?.let { user ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                        .clickable {
-                            scope.launch {
-                                currentToken = tokenManager.getCurrentAccessToken()
-                                showTokenDialog = true
-                            }
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         AsyncImage(
-                            model = user.avatarUrl,
+                            model = userInfo?.avatarUrl,
                             contentDescription = "Avatar",
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape)
                                 .clickable {
-                                    if (availableAccounts.size > 1) {
+                                    if (availableAccounts.isNotEmpty()) {
                                         showAccountSwitcher = true
                                     }
                                 },
                             contentScale = ContentScale.Crop
                         )
-                        Column(modifier = Modifier.padding(start = 16.dp)) {
-                            Text(text = user.username, style = MaterialTheme.typography.titleLarge)
-                            Text(text = stringResource(R.string.profile_id_prefix, user.id.toString()), style = MaterialTheme.typography.bodyMedium)
-                        }
+                    Column(modifier = Modifier.padding(start = 16.dp)) {
+                        Text(text = userInfo?.username ?: "", style = MaterialTheme.typography.titleLarge)
+                        Text(text = stringResource(R.string.profile_id_prefix, userInfo?.id?.toString() ?: "0"), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
+        } else {
+            // No account selected or logged out - Show account status
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+                    .clickable {
+                        showAccountSwitcher = true
+                    }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (availableAccounts.isEmpty()) {
+                            "No accounts configured"
+                        } else {
+                            "Select an account to continue"
+                        },
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (availableAccounts.isEmpty()) {
+                            "Add an account to access osu! features"
+                        } else {
+                            "${availableAccounts.size} account${if (availableAccounts.size > 1) "s" else ""} available"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+        }
 
-            // Stats Card (保持不变)
+        // Stats Card (only show if we have downloaded content)
+        if (totalDownloaded > 0) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -481,47 +401,8 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_downloaded_songs_label, totalDownloaded), style = MaterialTheme.typography.bodyLarge)
                 }
             }
+        }
 
-
-            // Settings Card (Logged in version) - Fixed layout with consistent max width for text
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(0.7f)
-                    ) {
-                        Text(stringResource(R.string.profile_oauth_settings_title), style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val clientIdDisplay = if (clientId.isNotEmpty()) "${clientId.take(8)}..." else stringResource(R.string.profile_client_id_not_set)
-                        Text(stringResource(R.string.profile_client_id_label, clientIdDisplay), style = MaterialTheme.typography.bodyMedium)
-                        val clientSecretDisplay = if (clientSecret.isNotEmpty()) "••••••••" else stringResource(R.string.profile_client_secret_not_set)
-                        Text(stringResource(R.string.profile_client_secret_label, clientSecretDisplay), style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Button(
-                        onClick = { showSettingsDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        Text(
-                            stringResource(R.string.profile_update_credentials),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
 
             // Info Cover Toggle Card (已符合设计，使用InfoCoverToggleCard)
             InfoCoverToggleCard(infoCoverEnabled = infoCoverEnabled) { checked ->
@@ -745,35 +626,88 @@ fun ProfileScreen(
                 }
             }
 
-            // Logout Button
-            Button(
-                onClick = {
-                    scope.launch {
-                        onLogout()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = androidx.compose.ui.graphics.Color(0xFFFF3B30), // Bright red
-                    contentColor = androidx.compose.ui.graphics.Color.White
-                )
-            ) {
-                Icon(Icons.Default.ExitToApp, contentDescription = stringResource(R.string.profile_logout_button))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(stringResource(R.string.profile_logout_button))
-            }
-
-            // Add new account button
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { showAddAccountDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Add New Account")
-            }
-        }
+        
     }
-    
+
+    // Credentials management dialog
+    if (showCredentialsDialog && selectedAccountForCredentials != null) {
+        var editClientId by remember { mutableStateOf("") }
+        var editClientSecret by remember { mutableStateOf("") }
+
+        // Load current credentials when dialog opens
+        LaunchedEffect(selectedAccountForCredentials) {
+            val (currentId, currentSecret) = tokenManager.getAccountCredentials(selectedAccountForCredentials!!)
+            editClientId = currentId ?: ""
+            editClientSecret = currentSecret ?: ""
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                showCredentialsDialog = false
+                selectedAccountForCredentials = null
+            },
+            title = { Text("Manage Account Credentials") },
+            text = {
+                Column {
+                    Text(
+                        "Update credentials for account: ${selectedAccountForCredentials}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    OutlinedTextField(
+                        value = editClientId,
+                        onValueChange = { editClientId = it },
+                        label = { Text("Client ID") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editClientSecret,
+                        onValueChange = { editClientSecret = it },
+                        label = { Text("Client Secret") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Warning: Changing credentials will require re-authentication",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editClientId.isNotBlank() && editClientSecret.isNotBlank()) {
+                            scope.launch {
+                                tokenManager.saveAccountCredentials(
+                                    selectedAccountForCredentials!!,
+                                    editClientId,
+                                    editClientSecret
+                                )
+                                // Clear any existing tokens for this account to force re-auth
+                                tokenManager.clearCurrentAccountToken()
+                                showCredentialsDialog = false
+                                selectedAccountForCredentials = null
+                            }
+                        }
+                    },
+                    enabled = editClientId.isNotBlank() && editClientSecret.isNotBlank()
+                ) {
+                    Text("Update Credentials")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCredentialsDialog = false
+                    selectedAccountForCredentials = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Settings Dialog
     if (showSettingsDialog) {
         var inputClientId by remember { mutableStateOf(clientId) }
@@ -886,24 +820,118 @@ fun ProfileScreen(
         )
     }
 
-    // Account switcher dialog
+    // Account switcher bottom sheet
     if (showAccountSwitcher) {
-        AlertDialog(
+        val sheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(
             onDismissRequest = { showAccountSwitcher = false },
-            title = { Text("Switch Account") },
-            text = {
-                Column {
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    "Switch Account",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                Column{
                     availableAccounts.forEach { account ->
-                        Card(
+                        var needsLogin by remember { mutableStateOf(false) }
+
+                        // Check if account needs login
+                        LaunchedEffect(account.id) {
+                            needsLogin = tokenManager.doesAccountNeedLogin(account.id)
+                        }
+
+                        val dismissState = rememberDismissState(
+                            confirmStateChange = { dismissValue ->
+                                if (dismissValue == DismissValue.DismissedToStart) {
+                                    // Left swipe - delete account
+                                    scope.launch {
+                                        val wasCurrentAccount = account.id == currentAccountId
+                                        accountManager.deleteAccount(account.id)
+
+                                        if (wasCurrentAccount) {
+                                            // If deleting current account, switch to first available account or clear
+                                            val remainingAccounts = availableAccounts.filter { it.id != account.id }
+                                            if (remainingAccounts.isNotEmpty()) {
+                                                accountManager.switchToAccount(remainingAccounts.first().id)
+                                            } else {
+                                                tokenManager.setCurrentAccount("")
+                                            }
+                                        }
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        )
+
+                        SwipeToDismiss(
+                            state = dismissState,
+                            directions = setOf(DismissDirection.EndToStart),
+                            dismissThresholds = { FractionalThreshold(0.25f) },
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            background = {
+                                val color = when (dismissState.dismissDirection) {
+                                    DismissDirection.EndToStart -> MaterialTheme.colorScheme.error
+                                    else -> Color.Transparent
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    // Transparent area on the left (20%)
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.2f)
+                                            .fillMaxHeight()
+                                            .background(Color.Transparent)
+                                    )
+                                    // Red area on the right (80%)
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.8f)
+                                            .fillMaxHeight()
+                                            .background(color)
+                                            .padding(end=20.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ExitToApp,
+                                            contentDescription = "Delete",
+                                            tint = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable {
-                                    scope.launch {
-                                        accountManager.switchToAccount(account.id)
-                                        showAccountSwitcher = false
+                                .combinedClickable(
+                                    onClick = {
+                                        scope.launch {
+                                            if (needsLogin) {
+                                                // Account needs login - trigger login instead of switching
+                                                tokenManager.setCurrentAccount(account.id)
+                                                showAccountSwitcher = false
+                                                onLoginClick()
+                                            } else {
+                                                // Token valid - switch account normally
+                                                accountManager.switchToAccount(account.id)
+                                                showAccountSwitcher = false
+                                            }
+                                        }
+                                    },
+                                    onLongClick = {
+                                        selectedAccountForCredentials = account.id
+                                        showCredentialsDialog = true
                                     }
-                                },
+                                ),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (account.id == currentAccountId)
                                     MaterialTheme.colorScheme.primaryContainer
@@ -924,10 +952,24 @@ fun ProfileScreen(
                                         contentScale = ContentScale.Crop
                                     )
                                     Column(modifier = Modifier.padding(start = 12.dp)) {
-                                        Text(
-                                            text = account.userInfo.username,
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = account.userInfo.username,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            if (needsLogin) {
+                                                Text(
+                                                    text = "Expired - click to login",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.padding(start = 8.dp)
+                                                )
+                                            }
+                                        }
                                         Text(
                                             text = "Account: ${account.userInfo.id}",
                                             style = MaterialTheme.typography.bodySmall,
@@ -935,22 +977,74 @@ fun ProfileScreen(
                                         )
                                     }
                                 } else {
-                                    Text(
-                                        text = "Account: ${account.id} (Not logged in)",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                                    val statusText = when {
+                                        needsLogin -> "Needs login - tap to login"
+                                        account.accessToken != null -> "Logged in"
+                                        else -> "Not logged in"
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "Account: ${account.id}",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = statusText,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (needsLogin) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 8.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showAccountSwitcher = false }) {
-                    Text("Close")
+
+                    // Add Account option
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable {
+                                showAccountSwitcher = false
+                                showAddAccountDialog = true
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp, // Using the same icon as logout for now
+                                contentDescription = "Add Account",
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text(
+                                    text = "Add New Account",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = "Set up additional osu! account",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 
     // Add new account dialog

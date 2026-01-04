@@ -19,13 +19,16 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 
 
 ### Features
-- OAuth login with persisted tokens; in-app client ID/secret configuration.
-- Search views (selectable and persisted): Played, Recent (cached), Favorite, Most Played, All; global “include unranked (s=any)” toggle in Profile.
+- Multi-account management system: dynamic profile cards, bottom sheet switcher with swipe-to-delete, expired account indicators, and auto-login triggers.
+- OAuth login with support for multiple accounts; persisted tokens with automatic refresh; long-press credentials management per account.
+- Search views (selectable and persisted): Played, Recent (with timestamps), Favorite, Most Played, All; global "include unranked (s=any)" toggle in Profile.
+- Advanced search: merge duplicate songs by title/author, enhanced info popups showing all matching beatmapsets from osu API (difficulties, star ratings, game modes), color-coded difficulty gradients, manual cache refresh (pull-to-refresh).
 - Per-item download progress; downloaded items tap-to-play from Search/Library.
-- Library with genre filter and “Find current song” locator that scrolls/highlights the playing track; swipe-to-delete.
-- Player: background playback (Media3), full player + MiniPlayer; mod selector (NM/DT/NC) with persistence, deterministic mode cycling; MiniPlayer hidden on Profile.
-- Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials, language selector (global locale applied).
-- UI polish: Apple Music-like nav, double-tap Search tab to scroll to top, no divider lines, new app icon.
+- Library with genre filter, search bar, and "Find current song" locator that scrolls/highlights the playing track; swipe-to-delete or add to playlists.
+- Playlists: create custom playlists, add/remove songs, long-press to rename/delete playlists, playlist-specific playback modes.
+- Player: background playback (Media3), collapsible MiniPlayer with controls, expandable full player view; mod selector (NM/DT/NC) with persistence, deterministic shuffle cycling, playback mode persistence (single/loop/random).
+- Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.
+- UI polish: Apple Music-inspired design, dark mode, gamemode icons in search results, individual difficulty titles in player, smooth animations, no divider lines.
 
 
 ## Setup Tutorial
@@ -46,12 +49,14 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - Launch the app, go to Profile → Configure Credentials.
 - Enter your osu! OAuth client ID and secret; they are stored locally via DataStore.
 - Login will redirect via `mosu://callback` (already in the manifest).
+- Multi-account management: dynamic info cards; use bottom sheet switcher with swipe-to-delete; long-press accounts for credential management; expired accounts show indicators with auto-login triggers.
 
 ### 3. Usage tips
-- Search: choose view via dropdown; genre chips; load more; downloaded items show checkmarks and play instantly.
-- Library: genre filter; swipe-to-delete; “Find current song” button (bottom-right) to scroll/highlight current track.
-- Player: tap MiniPlayer to expand; Mod label to pick DT/NC; mod choice persists across tracks.
-- Profile: set default search view, toggle include-unranked (s=any), language selection, view stats.
+- Search: choose view via dropdown (Played/Recent/Favorite/Most Played/All); genre chips; pull-to-refresh cache; long-press for enhanced beatmap info popup showing all matching beatmapsets with color-coded difficulty gradients; short-press to play downloaded songs.
+- Library: genre filter; search bar; swipe left to delete, right to add to playlist; "Find current song" button (bottom-right) to scroll/highlight current track.
+- Playlists: create custom playlists; long-press playlist to rename/delete; within playlists, swipe right to remove from playlist, left to delete from library.
+- Player: tap MiniPlayer to expand; drag progress bar; cycle through playback modes (single/loop/random); Mod selector for DT/NC effects; mods persist across tracks.
+- Profile: redesigned with dynamic account info cards; multi-account switcher with swipe-to-delete; expired account indicators; long-press credentials management; set default search view, toggle include-unranked (s=any), language follows system settings, view download stats.
 
 ### 4. Notes
 - Download source uses mirrors; audio/cover extracted from `.osz` and stored under app files. 

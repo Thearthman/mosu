@@ -369,14 +369,6 @@ fun PlaylistScreen(
                                             color = MaterialTheme.colorScheme.secondary
                                         )
                                     }
-                                    if (alreadyIn) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                        Text(
-                                            text = stringResource(id = R.string.playlist_added_status),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
                                 }
                             }
                         }

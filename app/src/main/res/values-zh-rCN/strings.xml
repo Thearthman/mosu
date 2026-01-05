@@ -30,7 +30,6 @@
     <string name="playlist_add_songs_dialog_title">添加歌曲</string>
     <string name="playlist_add_button">添加</string>
     <string name="playlist_cancel_button">取消</string>
-    <string name="playlist_added_status">已添加</string>
     <string name="playlist_create_dialog_title">创建播放列表</string>
     <string name="playlist_name_label">名称</string>
     <string name="playlist_create_button">创建</string>
@@ -52,7 +51,7 @@
     <string name="search_cd_search">搜索</string>
     <string name="search_cd_clear">清除</string>
     <string name="search_filter_genre">按曲风筛选</string>
-    <string name="search_genre_not_available">最常播放视图不支持曲风筛选</string>
+    <string name="search_genre_not_available">最多游玩暂不支持曲风筛选</string>
     <string name="search_playcount_label">次播放</string>
     <string name="search_status_refreshed">已刷新</string>
     <string name="search_status_refresh_error">刷新错误: %1$s</string>
@@ -136,5 +135,43 @@
     <string name="profile_restore_downloads_title">恢复下载</string>
     <string name="profile_restore_downloads_description">%1$d 首数据库重置后之前下载的谱面</string>
     <string name="profile_restore_button">恢复</string>
+
+    <!-- Account Manager -->
+    <string name="profile_account_no_accounts">未配置账户</string>
+    <string name="profile_account_select_account">选择一个账户继续</string>
+    <string name="profile_account_access_description">添加账户以访问 osu! 功能</string>
+    <string name="profile_account_switch_title">切换账户</string>
+    <string name="profile_account_manage_credentials_title">管理账户凭证</string>
+    <string name="profile_account_update_credentials">更新凭证</string>
+    <string name="profile_account_add_new_title">添加新账户</string>
+    <string name="profile_account_add_new_description">设置额外的 osu! 账户</string>
+    <string name="profile_account_logged_in">已登录</string>
+    <string name="profile_account_not_logged_in">未登录</string>
+    <string name="profile_account_needs_login">需要登录 - 点击登录</string>
+    <string name="profile_account_expired_login">已过期 - 点击登录</string>
+    <string name="profile_account_add_button">添加账户</string>
+
+    <!-- Restore Downloads -->
+    <string name="profile_restore_description">首数据库重置后之前下载的谱面</string>
+    <string name="profile_restore_starting">开始恢复...</string>
+    <string name="profile_restore_no_beatmaps">没有谱面可恢复</string>
+    <string name="profile_restore_skipped">跳过已下载的谱面 %1$d</string>
+    <string name="profile_restore_downloading">正在下载谱面 %1$d...</string>
+    <string name="profile_restore_extracting">正在解压谱面 %1$d...</string>
+    <string name="profile_restore_completed_toast">恢复完成！已恢复 %1$d 首谱面</string>
+    <string name="profile_restore_completed_progress">恢复完成！已恢复 %1$d/%2$d 首谱面</string>
+    <string name="profile_restore_failed_progress">恢复失败: %1$s</string>
+    <string name="profile_restore_failed_toast">恢复失败: %1$s</string>
+
+    <!-- Timestamp formatting -->
+    <string name="timestamp_today">今天</string>
+    <string name="timestamp_yesterday">昨天</string>
+    <string name="timestamp_three_days_ago">三天前</string>
+    <string name="timestamp_last_week">上周</string>
+    <string name="timestamp_one_month_ago">1个月前</string>
+    <string name="timestamp_two_months_ago">2个月前</string>
+    <string name="timestamp_three_months_ago">3个月前</string>
+    <string name="timestamp_six_months_ago">6个月前</string>
+    <string name="timestamp_one_year_ago">1年前</string>
 </resources>
 

@@ -18,7 +18,8 @@ sealed class RecentItem {
 
 class BeatmapSearchService(
     private val repository: OsuRepository,
-    private val db: AppDatabase
+    private val db: AppDatabase,
+    private val context: android.content.Context
 ) {
 
     val genres = listOf(
@@ -198,6 +199,6 @@ class BeatmapSearchService(
     }
 
     private fun getTimePeriodLabel(timestamp: Long): String {
-        return formatRecentPlayTimestamp(timestamp)
+        return formatRecentPlayTimestamp(timestamp, context)
     }
 }

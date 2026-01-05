@@ -2,19 +2,21 @@
 <img src="icons/icon(new).png" width="200" alt="icon">
 </p>
 
-# Mosu — osu!-powered offline music player (Android) 
+# Mosu — osu!-powered offline music player (Android)
+
+**中文版**: [README_zh.md](README_zh.md)
 
 ## Introduction
 Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps, download them as songs, and play them offline with Media3/ExoPlayer. It uses mirrors for `.osz` downloads, extracts audio/cover art, and stores metadata in Room with cached search results for speed.
 
 ## UI and Page design
 <p align="center">
-  <img src="icons/backup/player_view.jpg" width="300" alt="player view">
-  <img src="icons/backup/search_page_1.jpg" width="300" alt="search page showing only played maps">
-  <img src="icons/backup/library_page_2.jpg" width="300" alt="library page">
-  <img src="icons/backup/playlist_page.jpg" width="300" alt="playlist page">
-  <img src="icons/backup/search_page_2.jpg" width="300" alt="search page showing all maps in osu">
-  <img src="icons/backup/config_page.jpg" width="300" alt="part of the config page">
+  <img src="icons/readme/en-profile.jpg" width="300" alt="profile page">
+  <img src="icons/readme/en-search-recentplayed.jpg" width="300" alt="search page showing recent played maps">
+  <img src="icons/readme/en-library.jpg" width="300" alt="library page">
+  <img src="icons/readme/en-playlist.jpg" width="300" alt="playlist page">
+  <img src="icons/readme/en-search-mostplayed.jpg" width="300" alt="search page showing most played maps">
+  <img src="icons/readme/en-profile-account.jpg" width="300" alt="account management page">
 </p>
 
 

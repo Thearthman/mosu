@@ -5,14 +5,14 @@
 
 
 
-# UI improvement (implement 3 first)
+# UI improvement
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
-2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions. 
-3. Remove Default Search Filter box in settings? I found it not that useful since we already stores and use when possible the last used filter mode. 
+2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 
 # New Feature
 0. Core Feature
-    Nothing as of present
+    1. Implement Equalizer
+    2. Implement activity heatmap. 
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
@@ -81,6 +81,7 @@
 9. In Search page, add gamemode labels (images are in icons folder) at the end of the mapper's name's row.
 10. Complete account management system overhaul: Removed "main" account hierarchy, implemented bottom sheet account switcher, added long-press credentials management, expired account status indicators with automatic login triggers, and swipe-to-delete functionality for account removal.
 11. Enhanced star rating display with precise color-coded backgrounds based on difficulty levels, featuring gradient backgrounds for beatmapsets that emphasize start and end difficulty colors.
+12. Commented out Default Search Filter box in settings as it was not useful since the app already stores and uses the last used filter mode.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

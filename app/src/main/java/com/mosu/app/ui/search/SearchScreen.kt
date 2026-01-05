@@ -189,7 +189,7 @@ fun SearchScreen(
     val downloader = remember { BeatmapDownloader(context) }
     val extractor = remember { ZipExtractor(context) }
     val coverDownloadService = remember { CoverDownloadService(context) }
-    val searchService = remember { BeatmapSearchService(repository, db) }
+    val searchService = remember { BeatmapSearchService(repository, db, context) }
     val uriHandler = LocalUriHandler.current
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
 
@@ -485,9 +485,16 @@ fun SearchScreen(
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Text(
                                                 text = optionLabels[filterMode] ?: stringResource(id = R.string.search_filter_select),
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                                ),
+                                                style = if (filterMode == "most_played") {
+                                                    MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f
+                                                    )
+                                                } else {
+                                                    MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                                    )
+                                                },
                                                 maxLines = 1
                                             )
                                             Icon(
@@ -955,7 +962,7 @@ fun SearchScreen(
                                                                 downloadStates =
                                                                     downloadStates + (map.id to DownloadProgress(
                                                                         0,
-                                                                        "Error: ${e.message}"
+                                                                        context.getString(R.string.search_download_error_prefix, e.message)
                                                                     ))
                                                             }
                                                         }
@@ -1239,7 +1246,7 @@ fun SearchScreen(
                                                                     downloadStates =
                                                                         downloadStates + (map.id to DownloadProgress(
                                                                             0,
-                                                                            "Error: ${e.message}"
+                                                                            context.getString(R.string.search_download_error_prefix, e.message)
                                                                         ))
                                                                 }
                                                             }
@@ -1320,7 +1327,7 @@ fun SearchScreen(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 enabled = !isLoadingMore
                             ) {
-                                Text(if (isLoadingMore) "Loading..." else "Load More")
+                                Text(if (isLoadingMore) stringResource(id = R.string.search_loading) else stringResource(id = R.string.search_load_more))
                             }
                         }
                     }

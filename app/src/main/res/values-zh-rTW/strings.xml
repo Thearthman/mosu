@@ -33,7 +33,6 @@
     <string name="playlist_add_songs_dialog_title">新增歌曲</string>
     <string name="playlist_add_button">新增</string>
     <string name="playlist_cancel_button">取消</string>
-    <string name="playlist_added_status">已新增</string>
     <string name="playlist_create_dialog_title">建立播放清單</string>
     <string name="playlist_name_label">名稱</string>
     <string name="playlist_create_button">建立</string>
@@ -55,7 +54,7 @@
     <string name="search_cd_search">搜尋</string>
     <string name="search_cd_clear">清除</string>
     <string name="search_filter_genre">依曲風篩選</string>
-    <string name="search_genre_not_available">「最常播放」檢視不提供曲風篩選</string>
+    <string name="search_genre_not_available">「最多遊玩」檢視不提供曲風篩選</string>
     <string name="search_playcount_label">次播放</string>
     <string name="search_status_refreshed">已更新</string>
     <string name="search_status_refresh_error">重新整理錯誤: %1$s</string>
@@ -139,5 +138,43 @@
     <string name="profile_restore_downloads_title">恢復下載</string>
     <string name="profile_restore_downloads_description">%1$d 首資料庫重置後之前下載的譜面</string>
     <string name="profile_restore_button">恢復</string>
+
+    <!-- Account Manager -->
+    <string name="profile_account_no_accounts">未配置帳戶</string>
+    <string name="profile_account_select_account">選擇一個帳戶繼續</string>
+    <string name="profile_account_access_description">添加帳戶以訪問 osu! 功能</string>
+    <string name="profile_account_switch_title">切換帳戶</string>
+    <string name="profile_account_manage_credentials_title">管理帳戶憑證</string>
+    <string name="profile_account_update_credentials">更新憑證</string>
+    <string name="profile_account_add_new_title">添加新帳戶</string>
+    <string name="profile_account_add_new_description">設置額外的 osu! 帳戶</string>
+    <string name="profile_account_logged_in">已登錄</string>
+    <string name="profile_account_not_logged_in">未登錄</string>
+    <string name="profile_account_needs_login">需要登錄 - 點擊登錄</string>
+    <string name="profile_account_expired_login">已過期 - 點擊登錄</string>
+    <string name="profile_account_add_button">添加帳戶</string>
+
+    <!-- Restore Downloads -->
+    <string name="profile_restore_description">首數據庫重置後之前下載的譜面</string>
+    <string name="profile_restore_starting">開始恢復...</string>
+    <string name="profile_restore_no_beatmaps">沒有譜面可恢復</string>
+    <string name="profile_restore_skipped">跳過已下載的譜面 %1$d</string>
+    <string name="profile_restore_downloading">正在下載譜面 %1$d...</string>
+    <string name="profile_restore_extracting">正在解壓譜面 %1$d...</string>
+    <string name="profile_restore_completed_toast">恢復完成！已恢復 %1$d 首譜面</string>
+    <string name="profile_restore_completed_progress">恢復完成！已恢復 %1$d/%2$d 首譜面</string>
+    <string name="profile_restore_failed_progress">恢復失敗: %1$s</string>
+    <string name="profile_restore_failed_toast">恢復失敗: %1$s</string>
+
+    <!-- Timestamp formatting -->
+    <string name="timestamp_today">今天</string>
+    <string name="timestamp_yesterday">昨天</string>
+    <string name="timestamp_three_days_ago">三天前</string>
+    <string name="timestamp_last_week">上週</string>
+    <string name="timestamp_one_month_ago">1個月前</string>
+    <string name="timestamp_two_months_ago">2個月前</string>
+    <string name="timestamp_three_months_ago">3個月前</string>
+    <string name="timestamp_six_months_ago">6個月前</string>
+    <string name="timestamp_one_year_ago">1年前</string>
 </resources>
 

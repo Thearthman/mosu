@@ -1,6 +1,7 @@
 package com.mosu.app.domain.model
 
 import androidx.compose.ui.graphics.Color
+import com.mosu.app.R
 import androidx.compose.ui.graphics.Color as ComposeColor
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.Covers
@@ -132,22 +133,22 @@ fun createGradientStops(colors: List<Color>): Array<Pair<Float, ComposeColor>> {
     return stops.toTypedArray()
 }
 
-fun formatRecentPlayTimestamp(timestamp: Long): String {
+fun formatRecentPlayTimestamp(timestamp: Long, context: android.content.Context): String {
     val now = LocalDateTime.now()
     val playedTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
 
     val daysDiff = ChronoUnit.DAYS.between(playedTime.toLocalDate(), now.toLocalDate())
 
     return when {
-        daysDiff == 0L -> "Today"
-        daysDiff == 1L -> "Yesterday"
-        daysDiff <= 3L -> "Three days ago"
-        daysDiff <= 7L -> "Last Week"
-        daysDiff <= 30L -> "1 month ago"
-        daysDiff <= 60L -> "2 months ago"
-        daysDiff <= 90L -> "3 months ago"
-        daysDiff <= 180L -> "6 months ago"
-        daysDiff <= 365L -> "1 year ago"
+        daysDiff == 0L -> context.getString(R.string.timestamp_today)
+        daysDiff == 1L -> context.getString(R.string.timestamp_yesterday)
+        daysDiff <= 3L -> context.getString(R.string.timestamp_three_days_ago)
+        daysDiff <= 7L -> context.getString(R.string.timestamp_last_week)
+        daysDiff <= 30L -> context.getString(R.string.timestamp_one_month_ago)
+        daysDiff <= 60L -> context.getString(R.string.timestamp_two_months_ago)
+        daysDiff <= 90L -> context.getString(R.string.timestamp_three_months_ago)
+        daysDiff <= 180L -> context.getString(R.string.timestamp_six_months_ago)
+        daysDiff <= 365L -> context.getString(R.string.timestamp_one_year_ago)
         else -> {
             // Format as "Month Year" for older dates
             val formatter = DateTimeFormatter.ofPattern("MMMM yyyy")

@@ -33,7 +33,6 @@
     <string name="playlist_add_songs_dialog_title">Add songs</string>
     <string name="playlist_add_button">Add</string>
     <string name="playlist_cancel_button">Cancel</string>
-    <string name="playlist_added_status">Added</string>
     <string name="playlist_create_dialog_title">Create playlist</string>
     <string name="playlist_name_label">Name</string>
     <string name="playlist_create_button">Create</string>
@@ -140,5 +139,43 @@
     <string name="profile_restore_downloads_title">Restore Downloads</string>
     <string name="profile_restore_downloads_description">%1$d previously downloaded beatmaps after database reset</string>
     <string name="profile_restore_button">Restore</string>
+
+    <!-- Account Manager -->
+    <string name="profile_account_no_accounts">No accounts configured</string>
+    <string name="profile_account_select_account">Select an account to continue</string>
+    <string name="profile_account_access_description">Add an account to access osu! features</string>
+    <string name="profile_account_switch_title">Switch Account</string>
+    <string name="profile_account_manage_credentials_title">Manage Account Credentials</string>
+    <string name="profile_account_update_credentials">Update Credentials</string>
+    <string name="profile_account_add_new_title">Add New Account</string>
+    <string name="profile_account_add_new_description">Set up additional osu! account</string>
+    <string name="profile_account_logged_in">Logged in</string>
+    <string name="profile_account_not_logged_in">Not logged in</string>
+    <string name="profile_account_needs_login">Needs login - tap to login</string>
+    <string name="profile_account_expired_login">Expired - click to login</string>
+    <string name="profile_account_add_button">Add Account</string>
+
+    <!-- Restore Downloads -->
+    <string name="profile_restore_description">previously downloaded beatmaps after database reset</string>
+    <string name="profile_restore_starting">Starting restore...</string>
+    <string name="profile_restore_no_beatmaps">No beatmaps to restore</string>
+    <string name="profile_restore_skipped">Skipped already downloaded beatmap %1$d</string>
+    <string name="profile_restore_downloading">Downloading beatmap %1$d...</string>
+    <string name="profile_restore_extracting">Extracting beatmap %1$d...</string>
+    <string name="profile_restore_completed_toast">Restore completed! Restored %1$d beatmaps</string>
+    <string name="profile_restore_completed_progress">Restore completed! Restored %1$d/%2$d beatmaps</string>
+    <string name="profile_restore_failed_progress">Restore failed: %1$s</string>
+    <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
+
+    <!-- Timestamp formatting -->
+    <string name="timestamp_today">Today</string>
+    <string name="timestamp_yesterday">Yesterday</string>
+    <string name="timestamp_three_days_ago">Three days ago</string>
+    <string name="timestamp_last_week">Last Week</string>
+    <string name="timestamp_one_month_ago">1 month ago</string>
+    <string name="timestamp_two_months_ago">2 months ago</string>
+    <string name="timestamp_three_months_ago">3 months ago</string>
+    <string name="timestamp_six_months_ago">6 months ago</string>
+    <string name="timestamp_one_year_ago">1 year ago</string>
 </resources>
 

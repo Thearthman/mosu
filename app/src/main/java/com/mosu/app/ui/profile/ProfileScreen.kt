@@ -63,11 +63,11 @@ suspend fun performRestore(
 ) {
     try {
         updateRestoring(true)
-        updateProgress(0, "Starting restore...")
+        updateProgress(0, context.getString(R.string.profile_restore_starting))
 
         val preservedSetIds = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().firstOrNull() ?: emptyList()
         if (preservedSetIds.isEmpty()) {
-            android.widget.Toast.makeText(context, "No beatmaps to restore", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, context.getString(R.string.profile_restore_no_beatmaps), android.widget.Toast.LENGTH_SHORT).show()
             updateRestoring(false)
             return
         }
@@ -86,11 +86,11 @@ suspend fun performRestore(
                 if (existingTracks.isNotEmpty()) {
                     completed++
                     val progress = (completed * 100) / total
-                    updateProgress(progress, "Skipped already downloaded beatmap ${preservedSetId.beatmapSetId}")
+                    updateProgress(progress, context.getString(R.string.profile_restore_skipped, preservedSetId.beatmapSetId))
                     continue
                 }
 
-                updateProgress(((completed * 100) / total), "Downloading beatmap ${preservedSetId.beatmapSetId}...")
+                updateProgress(((completed * 100) / total), context.getString(R.string.profile_restore_downloading, preservedSetId.beatmapSetId))
 
                 downloader.downloadBeatmap(preservedSetId.beatmapSetId, accessToken)
                     .collect { state ->
@@ -99,7 +99,7 @@ suspend fun performRestore(
                                 // Update progress within current beatmap
                             }
                             is com.mosu.app.domain.download.DownloadState.Downloaded -> {
-                                updateProgress(((completed * 100) / total), "Extracting beatmap ${preservedSetId.beatmapSetId}...")
+                                updateProgress(((completed * 100) / total), context.getString(R.string.profile_restore_extracting, preservedSetId.beatmapSetId))
                                 try {
                                     val extractedTracks = extractor.extractBeatmap(state.file, preservedSetId.beatmapSetId)
 
@@ -137,13 +137,13 @@ suspend fun performRestore(
             }
         }
 
-        updateProgress(100, "Restore completed! Restored $completed/$total beatmaps")
-        android.widget.Toast.makeText(context, "Restore completed! Restored $completed beatmaps", android.widget.Toast.LENGTH_LONG).show()
+        updateProgress(100, context.getString(R.string.profile_restore_completed_progress, completed, total))
+        android.widget.Toast.makeText(context, context.getString(R.string.profile_restore_completed_toast, completed), android.widget.Toast.LENGTH_LONG).show()
 
     } catch (e: Exception) {
         android.util.Log.e("ProfileScreen", "Restore failed", e)
-        updateProgress(0, "Restore failed: ${e.message}")
-        android.widget.Toast.makeText(context, "Restore failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+        updateProgress(0, context.getString(R.string.profile_restore_failed_progress, e.message))
+        android.widget.Toast.makeText(context, context.getString(R.string.profile_restore_failed_toast, e.message), android.widget.Toast.LENGTH_LONG).show()
     } finally {
         updateRestoring(false)
     }
@@ -368,16 +368,16 @@ fun ProfileScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         text = if (availableAccounts.isEmpty()) {
-                            "No accounts configured"
+                            stringResource(R.string.profile_account_no_accounts)
                         } else {
-                            "Select an account to continue"
+                            stringResource(R.string.profile_account_select_account)
                         },
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = if (availableAccounts.isEmpty()) {
-                            "Add an account to access osu! features"
+                            stringResource(R.string.profile_account_access_description)
                         } else {
                             "${availableAccounts.size} account${if (availableAccounts.size > 1) "s" else ""} available"
                         },
@@ -410,6 +410,7 @@ fun ProfileScreen(
             }
             
             // Default Search View - Fixed layout with consistent max width for text
+            /*
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -427,7 +428,7 @@ fun ProfileScreen(
                             .fillMaxWidth(0.7f)
                     ) {
                         Text(
-                            stringResource(R.string.profile_default_search_view_title), 
+                            stringResource(R.string.profile_default_search_view_title),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -437,7 +438,7 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.secondary
                         )
                     }
-                    
+
                     val isSupporter = userInfo?.isSupporter ?: false
                     val options = if (isSupporter) {
                         listOf("played", "recent", "favorite", "most_played", "all")
@@ -452,7 +453,7 @@ fun ProfileScreen(
                         "most_played" -> stringResource(R.string.search_filter_most_played)
                         else -> stringResource(R.string.search_filter_all)
                     }
-                    
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -490,6 +491,7 @@ fun ProfileScreen(
                     }
                 }
             }
+            */
 
             // Include Unranked/Loved/Any Status - Fixed layout with consistent max width for text
             Card(
@@ -532,6 +534,7 @@ fun ProfileScreen(
             }
 
             // Placeholder Cards
+            /*
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -543,7 +546,9 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_coming_soon), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
                 }
             }
+            */
 
+            /*
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -555,6 +560,7 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_coming_soon), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
                 }
             }
+            */
 
             // Restore Downloads Card (only show if there are preserved beatmapSetIds)
             if (preservedCount > 0) {
@@ -581,7 +587,8 @@ fun ProfileScreen(
                                     withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                                         append("$preservedCount")
                                     }
-                                    append(" previously downloaded beatmaps after database reset")
+                                    append(" ")
+                                    append(stringResource(R.string.profile_restore_description))
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.secondary
@@ -646,7 +653,7 @@ fun ProfileScreen(
                 showCredentialsDialog = false
                 selectedAccountForCredentials = null
             },
-            title = { Text("Manage Account Credentials") },
+            title = { Text(stringResource(R.string.profile_account_manage_credentials_title)) },
             text = {
                 Column {
                     Text(
@@ -694,7 +701,7 @@ fun ProfileScreen(
                     },
                     enabled = editClientId.isNotBlank() && editClientSecret.isNotBlank()
                 ) {
-                    Text("Update Credentials")
+                    Text(stringResource(R.string.profile_account_update_credentials))
                 }
             },
             dismissButton = {
@@ -833,7 +840,7 @@ fun ProfileScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    "Switch Account",
+                    stringResource(R.string.profile_account_switch_title),
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
@@ -963,7 +970,7 @@ fun ProfileScreen(
                                             )
                                             if (needsLogin) {
                                                 Text(
-                                                    text = "Expired - click to login",
+                                                    text = stringResource(R.string.profile_account_expired_login),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.error,
                                                     modifier = Modifier.padding(start = 8.dp)
@@ -978,9 +985,9 @@ fun ProfileScreen(
                                     }
                                 } else {
                                     val statusText = when {
-                                        needsLogin -> "Needs login - tap to login"
-                                        account.accessToken != null -> "Logged in"
-                                        else -> "Not logged in"
+                                        needsLogin -> stringResource(R.string.profile_account_needs_login)
+                                        account.accessToken != null -> stringResource(R.string.profile_account_logged_in)
+                                        else -> stringResource(R.string.profile_account_not_logged_in)
                                     }
 
                                     Row(
@@ -1030,12 +1037,12 @@ fun ProfileScreen(
                             )
                             Column(modifier = Modifier.padding(start = 12.dp)) {
                                 Text(
-                                    text = "Add New Account",
+                                    text = stringResource(R.string.profile_account_add_new_title),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
-                                    text = "Set up additional osu! account",
+                                    text = stringResource(R.string.profile_account_add_new_description),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                                 )
@@ -1051,7 +1058,7 @@ fun ProfileScreen(
     if (showAddAccountDialog) {
         AlertDialog(
             onDismissRequest = { showAddAccountDialog = false },
-            title = { Text("Add New Account") },
+            title = { Text(stringResource(R.string.profile_account_add_new_title)) },
             text = {
                 Column {
                     OutlinedTextField(
@@ -1088,7 +1095,7 @@ fun ProfileScreen(
                     },
                     enabled = newClientId.isNotBlank() && newClientSecret.isNotBlank()
                 ) {
-                    Text("Add Account")
+                    Text(stringResource(R.string.profile_account_add_button))
                 }
             },
             dismissButton = {

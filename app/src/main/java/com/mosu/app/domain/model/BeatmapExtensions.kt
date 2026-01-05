@@ -5,6 +5,12 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.db.RecentPlayEntity
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 fun RecentPlayEntity.toBeatmapset(): BeatmapsetCompact {
     val cover = coverUrl ?: ""
@@ -124,4 +130,38 @@ fun createGradientStops(colors: List<Color>): Array<Pair<Float, ComposeColor>> {
     }
 
     return stops.toTypedArray()
+}
+
+fun formatRecentPlayTimestamp(timestamp: Long): String {
+    val now = LocalDateTime.now()
+    val playedTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
+
+    val daysDiff = ChronoUnit.DAYS.between(playedTime.toLocalDate(), now.toLocalDate())
+
+    return when {
+        daysDiff == 0L -> "Today"
+        daysDiff == 1L -> "Yesterday"
+        daysDiff <= 3L -> "Three days ago"
+        daysDiff <= 7L -> "Last Week"
+        daysDiff <= 30L -> "1 month ago"
+        daysDiff <= 60L -> "2 months ago"
+        daysDiff <= 90L -> "3 months ago"
+        daysDiff <= 180L -> "6 months ago"
+        daysDiff <= 365L -> "1 year ago"
+        else -> {
+            // Format as "Month Year" for older dates
+            val formatter = DateTimeFormatter.ofPattern("MMMM yyyy")
+            playedTime.format(formatter)
+        }
+    }
+}
+
+fun formatPlayedAtTimestamp(timestamp: Long): String {
+    val playedTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
+
+    // Use different formatting based on system language
+    val isChinese = Locale.getDefault().language.startsWith("zh")
+    val datePattern = if (isChinese) "MMMdd" else "MMM dd"
+    val formatter = DateTimeFormatter.ofPattern("$datePattern, yyyy '@' HH:mm")
+    return playedTime.format(formatter)
 }

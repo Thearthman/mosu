@@ -8,7 +8,7 @@
 # UI improvement (implement 3 first)
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions. 
-
+3. Remove Default Search Filter box in settings? I found it not that useful since we already stores and use when possible the last used filter mode. 
 
 # New Feature
 0. Core Feature
@@ -23,7 +23,6 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    2. Add mode selection for recent play filter
     3. Maybe add timestamp to recent played music
 5. Library page update
     2. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
@@ -60,6 +59,7 @@
     7. add info popup in search page when clicking beatmaps, should account for the following factors: merged song, not merged song. Account for the fact that beatmaps could be merged and also have multiple difficulties at the same time. The popup should contain difficulties for all merged beatmaps in this situation. Regarding the UIUX of individual song boxes: For each beatmap, it's box simply shows beatmap author,  game mode, star rating range(not displaying individual difficulties now). They can have multiple game mode and corresponding star rating range. When the box is clicked, it brings you to the beatmap's osu website
     8. Change merge algorithm: prioritize to display songs already in the library when merging. Also, when merging, the condition changes to not only should the title match exactly, the author has to match as well.
     9. Change search page info popup to long press to trigger and reassign short press to play.
+    2. Add mode selection for recent play filter
 5. Library update
     1. Implement library filter. Same as the search genre filter.
     2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.

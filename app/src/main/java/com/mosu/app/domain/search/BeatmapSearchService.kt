@@ -6,9 +6,15 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.model.toBeatmapset
+import com.mosu.app.domain.model.formatRecentPlayTimestamp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.LinkedHashMap
+
+sealed class RecentItem {
+    data class Header(val timestamp: String) : RecentItem()
+    data class Song(val beatmapset: BeatmapsetCompact, val playedAt: Long) : RecentItem()
+}
 
 class BeatmapSearchService(
     private val repository: OsuRepository,
@@ -107,7 +113,7 @@ class BeatmapSearchService(
         accessToken: String?,
         userId: String?,
         forceRefresh: Boolean = false
-    ): Triple<List<BeatmapsetCompact>, Map<String, Set<Long>>, Map<Long, Pair<Int, Int>>> {
+    ): Triple<List<RecentItem>, Map<String, Set<Long>>, Map<Long, Long>> {
         // If database is empty or forceRefresh is true, fetch from API
         val recentFromDb = db.recentPlayDao().getRecentPlays()
         if ((recentFromDb.isEmpty() || forceRefresh) && accessToken != null && userId != null) {
@@ -123,7 +129,75 @@ class BeatmapSearchService(
         val recent = db.recentPlayDao().getRecentPlays()
         val beatmaps = recent.map { it.toBeatmapset() }
         val mergeGroups = buildMergeGroups(beatmaps)
+        val timestamps = recent.associate { it.beatmapSetId to it.playedAt }
 
-        return Triple(beatmaps, mergeGroups, emptyMap())
+        // Group beatmaps by time periods
+        val groupedItems = groupRecentByTimePeriods(recent)
+
+        return Triple(groupedItems, mergeGroups, timestamps)
+    }
+
+    suspend fun loadRecentFiltered(
+        accessToken: String?,
+        userId: String?,
+        searchQuery: String,
+        selectedGenreId: Int?,
+        forceRefresh: Boolean = false
+    ): Triple<List<RecentItem>, Map<String, Set<Long>>, Map<Long, Long>> {
+        // Load the raw recent entities first
+        val (_, _, _) = loadRecent(accessToken, userId, forceRefresh)
+        val recentPlays = db.recentPlayDao().getRecentPlays()
+
+        // Filter the recent plays by search query and genre
+        val filteredRecentPlays = recentPlays.filter { play ->
+            val beatmapset = play.toBeatmapset()
+            val matchesSearch = searchQuery.isBlank() ||
+                beatmapset.title.contains(searchQuery, ignoreCase = true) ||
+                beatmapset.artist.contains(searchQuery, ignoreCase = true) ||
+                beatmapset.creator.contains(searchQuery, ignoreCase = true)
+            val matchesGenre = selectedGenreId == null || beatmapset.genreId == selectedGenreId
+            matchesSearch && matchesGenre
+        }
+
+        // Group the filtered plays
+        val filteredGroupedItems = groupRecentByTimePeriods(filteredRecentPlays)
+        val mergeGroups = buildMergeGroups(filteredGroupedItems.filterIsInstance<RecentItem.Song>().map { it.beatmapset })
+        val filteredTimestamps = filteredRecentPlays.associate { it.beatmapSetId to it.playedAt }
+
+        return Triple(filteredGroupedItems, mergeGroups, filteredTimestamps)
+    }
+
+    private fun groupRecentByTimePeriods(recentPlays: List<RecentPlayEntity>): List<RecentItem> {
+        if (recentPlays.isEmpty()) return emptyList()
+
+        // First, deduplicate by beatmapSetId, keeping only the most recent play for each beatmap
+        val deduplicated = recentPlays
+            .groupBy { it.beatmapSetId }
+            .mapValues { (_, plays) -> plays.maxBy { it.playedAt } }
+            .values
+            .sortedByDescending { it.playedAt }
+
+        val grouped = LinkedHashMap<String, MutableList<RecentPlayEntity>>()
+
+        // Group by time periods
+        for (play in deduplicated) {
+            val timeLabel = getTimePeriodLabel(play.playedAt)
+            grouped.getOrPut(timeLabel) { mutableListOf() }.add(play)
+        }
+
+        // Convert to RecentItem list with headers
+        val result = mutableListOf<RecentItem>()
+        for ((timeLabel, plays) in grouped) {
+            result.add(RecentItem.Header(timeLabel))
+            plays.sortedByDescending { it.playedAt }.forEach { play ->
+                result.add(RecentItem.Song(play.toBeatmapset(), play.playedAt))
+            }
+        }
+
+        return result
+    }
+
+    private fun getTimePeriodLabel(timestamp: Long): String {
+        return formatRecentPlayTimestamp(timestamp)
     }
 }

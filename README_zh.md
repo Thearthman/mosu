@@ -7,6 +7,9 @@
 ## 简介
 Mosu 允许您使用 osu! 账号登录，获取您玩过/收藏的谱面，将它们下载为歌曲，并使用 Media3/ExoPlayer 进行离线播放。它使用镜像源下载 `.osz` 文件，提取音频和封面艺术，并将元数据存储在 Room 数据库中，同时缓存搜索结果以提升速度。
 
+## 下载
+📥 **最新版本**: [从 GitHub Releases 下载](https://github.com/Thearthman/mosu/releases/latest)
+
 ## UI 和页面设计
 <p align="center">
   <img src="icons/readme/zh-library.jpg" width="300" alt="曲库页面">

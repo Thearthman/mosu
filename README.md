@@ -9,6 +9,9 @@
 ## Introduction
 Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps, download them as songs, and play them offline with Media3/ExoPlayer. It uses mirrors for `.osz` downloads, extracts audio/cover art, and stores metadata in Room with cached search results for speed.
 
+## Download
+📥 **Latest Release**: [Download from GitHub Releases](https://github.com/Thearthman/mosu/releases/latest)
+
 ## UI and Page design
 <p align="center">
   <img src="icons/readme/en-library.jpg" width="300" alt="library page">

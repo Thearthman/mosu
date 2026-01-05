@@ -2,17 +2,18 @@
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
+4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 2. [important]
 
-
-
-# UI improvement
-1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up.
+# UIUX improvement
+1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. [important]
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
+3. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
+4. Back swipe gesture in android should not always return to library view but the last view. [important]
 
 # New Feature
 0. Core Feature
-    1. Implement Equalizer
-    2. Implement activity heatmap. 
+    1. Implement Equalizer 
+    2. Implement Activity Heatmap from recent play data (should have week, month, and year view). 
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
@@ -23,11 +24,10 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    3. Maybe add timestamp to recent played music
 5. Library page update
-    2. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
+    1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
 6. Playlist page update
-    1. Implement Playlist management system allowing for rearrangement(placement) of playlist and deletion of playlists.
+    1. Implement Playlist management system allowing for rearrangement(placement) of playlists.
 
 
 ---
@@ -59,7 +59,8 @@
     7. add info popup in search page when clicking beatmaps, should account for the following factors: merged song, not merged song. Account for the fact that beatmaps could be merged and also have multiple difficulties at the same time. The popup should contain difficulties for all merged beatmaps in this situation. Regarding the UIUX of individual song boxes: For each beatmap, it's box simply shows beatmap author,  game mode, star rating range(not displaying individual difficulties now). They can have multiple game mode and corresponding star rating range. When the box is clicked, it brings you to the beatmap's osu website
     8. Change merge algorithm: prioritize to display songs already in the library when merging. Also, when merging, the condition changes to not only should the title match exactly, the author has to match as well.
     9. Change search page info popup to long press to trigger and reassign short press to play.
-    2. Add mode selection for recent play filter
+    10. Add mode selection for recent play filter
+    11. Maybe add timestamp to recent played music
 5. Library update
     1. Implement library filter. Same as the search genre filter.
     2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.

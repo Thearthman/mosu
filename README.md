@@ -13,10 +13,10 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 <p align="center">
   <img src="icons/readme/en-library.jpg" width="300" alt="library page">
   <img src="icons/readme/en-playlist.jpg" width="300" alt="playlist page">
+  <img src="icons/readme/all-player.jpg" width="300" alt="player view">
   <img src="icons/readme/en-search-recentplayed.jpg" width="300" alt="search page showing recent played maps">
   <img src="icons/readme/en-search-mostplayed.jpg" width="300" alt="search page showing most played maps">
   <img src="icons/readme/en-profile.jpg" width="300" alt="profile page">
-  <img src="icons/readme/en-profile-account.jpg" width="300" alt="account management page">
 </p>
 
 

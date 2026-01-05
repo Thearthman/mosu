@@ -3,6 +3,7 @@
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
 4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 2. [important]
+5. deleting an account in account manager causes weird effect: the leftover of the deletion (the red background of the deleted account) overlapped with the existing account. The leftover should be complete removed. [important]
 
 # UIUX improvement
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. [important]

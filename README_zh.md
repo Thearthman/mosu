@@ -9,11 +9,11 @@ Mosu 允许您使用 osu! 账号登录，获取您玩过/收藏的谱面，将�
 
 ## UI 和页面设计
 <p align="center">
-  <img src="icons/readme/zh-profile.jpg" width="300" alt="个人资料页面">
-  <img src="icons/readme/zh-search-recentplayed.jpg" width="300" alt="搜索页面显示最近玩过的谱面">
   <img src="icons/readme/zh-library.jpg" width="300" alt="曲库页面">
   <img src="icons/readme/zh-playlist.jpg" width="300" alt="播放列表页面">
+  <img src="icons/readme/zh-search-recentplayed.jpg" width="300" alt="搜索页面显示最近玩过的谱面">
   <img src="icons/readme/zh-search-mostplayed.jpg" width="300" alt="搜索页面显示最常玩的谱面">
+  <img src="icons/readme/zh-profile.jpg" width="300" alt="个人资料页面">
   <img src="icons/readme/zh-profile-account.jpg" width="300" alt="账号管理页面">
 </p>
 

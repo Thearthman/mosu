@@ -3,10 +3,9 @@
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
 4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 2(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
-5. Deleting an account in account manager causes weird effect: the leftover of the deletion (the red background of the deleted account) overlapped with the existing account. The leftover should be complete removed. [important]
+5. Deleting an account in account manager causes weird effect: the leftover of the deletion (the red background of the deleted account) overlapped with the existing account. The leftover should be complete removed. 
 6. Find mirror sites that are fast in Mainland China for both fetching beatmap and downloading beatmaps. 
 7. Weird it requires include unranked to be false to refresh all filter mode query. [important]
-8. Navbar and miniplayer design did not account for different screen aspect ratio/height. [important]
 
 # UIUX improvement
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. [important]
@@ -119,3 +118,4 @@
 25. Searching `artist=miku` in search page crashes the app
 26. Do not move downloaded song to top, make them stay where they are default to the position of the returned list
 27. Pressing restore when the song already exist will still download the music one more time
+28. Navbar and miniplayer design did not account for system navigation bar presence - fixed positioning to maintain consistent 80.dp gap above navbar regardless of system nav bar

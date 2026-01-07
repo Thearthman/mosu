@@ -13,12 +13,11 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -58,8 +57,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.Alignment
 import com.mosu.app.data.AccountManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
@@ -78,7 +78,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
@@ -174,7 +173,7 @@ fun MainScreen(
 
             // If token exists, check if it's expired and try to refresh
             if (token != null) {
-                val isExpired = tokenManager.isTokenExpired().first() ?: false
+                val isExpired = tokenManager.isTokenExpired().first()
 
                 if (isExpired) {
                         val clientId = settingsManager.clientId.first()
@@ -239,8 +238,8 @@ fun MainScreen(
                     clientId = settingsClientId
                     clientSecret = settingsClientSecret
                 } else {
-                    clientId = cid ?: ""
-                    clientSecret = csecret ?: ""
+                    clientId = cid
+                    clientSecret = csecret
                 }
             }
         }
@@ -339,6 +338,10 @@ fun MainScreen(
             }
         }
         
+        val navigationBarInsets = WindowInsets.navigationBars.asPaddingValues()
+        val navigationBarHeight = navigationBarInsets.calculateBottomPadding()
+        val navigationBarHeightPx = with(LocalDensity.current) { navigationBarHeight.toPx() }
+
         // Animation Progress: 0f (Collapsed) -> 1f (Expanded)
         val progress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
         val miniPlayerAlpha = (1f - progress*4f).coerceIn(0f,1f)
@@ -346,7 +349,7 @@ fun MainScreen(
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
         // Move Nav Bar down as sheet expands. 200f is an arbitrary sufficient offset.
-        val navBarTranslationY = progress * 300f
+        val navBarTranslationY = progress * (300f + navigationBarHeightPx)
         val contentBottomPadding = when {
             currentRoute == "profile" -> 80.dp
             nowPlaying != null -> 144.dp
@@ -440,8 +443,8 @@ fun MainScreen(
                     modifier = Modifier
                         .zIndex(2f)
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 80.dp) // Initial position above NavBar
-                        .offset { IntOffset(0, (sheetOffset.value - collapsedOffset).roundToInt()) }
+                        .padding(bottom = 80.dp + navigationBarHeight) // Initial position above NavBar
+                        .offset { IntOffset(0, ((sheetOffset.value - collapsedOffset)*0.3).roundToInt()) }
                         .graphicsLayer {
                             alpha = miniPlayerAlpha
                             // Optimize rendering by only updating transform when alpha changes significantly

@@ -1,5 +1,6 @@
 package com.mosu.app.ui.playlist
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -116,6 +117,11 @@ fun PlaylistScreen(
     val dialogSelectionCache = remember { mutableStateMapOf<Long, Set<Long>>() }
 
     val scope = rememberCoroutineScope()
+
+    // Handle back gesture when inside a playlist - takes priority over main navigation
+    BackHandler(enabled = selectedPlaylistId != null) {
+        selectedPlaylistId = null
+    }
 
     fun playAlbum(tracks: List<BeatmapEntity>) {
         if (tracks.isEmpty()) return

@@ -2,15 +2,18 @@
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
-4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 2. [important]
+4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 2(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
 5. Deleting an account in account manager causes weird effect: the leftover of the deletion (the red background of the deleted account) overlapped with the existing account. The leftover should be complete removed. [important]
 6. Find mirror sites that are fast in Mainland China for both fetching beatmap and downloading beatmaps. 
+7. Weird it requires include unranked to be false to refresh all filter mode query. [important]
+8. Navbar and miniplayer design did not account for different screen aspect ratio/height. [important]
 
 # UIUX improvement
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. [important]
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 3. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-4. Back swipe gesture in android should not always return to library view but the last view. [important]
+4. Make long press to call out info popup a feature for all song item regardless of it's in search view or library or playlist view 
+5. include ranked status in info popup 
 
 # New Feature
 0. Core Feature
@@ -26,6 +29,7 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
+    2. Add preview to songs in search page. When song aren't downloaded but is clicked, preview is played. preview from osu api should be fine.
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
 6. Playlist page update
@@ -72,7 +76,7 @@
 6. Add Playlist page
     1. Add `Playlist` page which you can create album and put music into it. has a create album button on the top right. page view default to all album spreading out. Two albums per row and extends downwards. You can click into albums and the view changes to the album title on top with a play button next to it, with song list below. You can add song here, base on the add button on the top right. or play the album which when using loop/random will only loop the songs in the album.
 
-# Implemented UI improvements
+# Implemented UIUX improvements
 1. the "top bar" which is where the status bar of the phone sits, is now colored grey for some reason. Make it blend in.
 2. Add dark mode.
 3. remove black line below search bar. Also make genre bar sit closer to search bar and song list below, and make the genre buttons slightly smaller.
@@ -85,6 +89,7 @@
 10. Complete account management system overhaul: Removed "main" account hierarchy, implemented bottom sheet account switcher, added long-press credentials management, expired account status indicators with automatic login triggers, and swipe-to-delete functionality for account removal.
 11. Enhanced star rating display with precise color-coded backgrounds based on difficulty levels, featuring gradient backgrounds for beatmapsets that emphasize start and end difficulty colors.
 12. Commented out Default Search Filter box in settings as it was not useful since the app already stores and uses the last used filter mode.
+13. Back swipe gesture in android should not always return to library view but the last view
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

@@ -234,21 +234,25 @@ fun FullPlayer(
                     interactionSource = sliderInteraction,
                     colors = sliderColors,
                     thumb = {
-                        SliderDefaults.Thumb(
-                            interactionSource = sliderInteraction,
-                            colors = sliderColors,
-                            enabled = true,
-                            thumbSize = DpSize(28.dp, 28.dp),
-                            modifier = Modifier.alpha(0f)
+                        // Replace SliderDefaults.Thumb with an empty Box
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                // No background, no indication, no alpha needed
                         )
                     },
-                    track = { positions ->
+                    track = { sliderState ->
+                        val fraction = if (sliderRange.endInclusive > 0) {
+                            sliderState.value / sliderRange.endInclusive
+                        } else 0f
+
                         Track(
-                            sliderPositions = positions,
+                            activeRange = 0f..fraction,
                             activeTrackColor = activeTrackColor,
                             inactiveTrackColor = inactiveTrackColor,
                             activeTickColor = activeTrackColor.copy(alpha = 0.6f),
                             inactiveTickColor = inactiveTrackColor.copy(alpha = 0.6f),
+                            tickFractions = emptyList(),
                             trackHeight = 10.dp,
                             horizontalExpansion = 50f
                         )
@@ -451,12 +455,13 @@ private fun modMenuLabel(mod: PlaybackMod): String = when (mod) {
 
 @Composable
 fun Track(
-    sliderPositions: SliderPositions,
+    activeRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier,
     activeTrackColor: Color,
     inactiveTrackColor: Color,
     activeTickColor: Color = activeTrackColor,
     inactiveTickColor: Color = inactiveTrackColor,
+    tickFractions: List<Float> = emptyList(),
     trackHeight: Dp = 15.dp,
     horizontalExpansion: Float = 0f
 ) {
@@ -485,11 +490,11 @@ fun Track(
 
         // Draw active track
         val sliderValueEnd = Offset(
-            sliderStart.x + (sliderEnd.x - sliderStart.x) * sliderPositions.activeRange.endInclusive,
+            sliderStart.x + (sliderEnd.x - sliderStart.x) * activeRange.endInclusive,
             center.y
         )
         val sliderValueStart = Offset(
-            sliderStart.x + (sliderEnd.x - sliderStart.x) * sliderPositions.activeRange.start,
+            sliderStart.x + (sliderEnd.x - sliderStart.x) * activeRange.start,
             center.y
         )
 
@@ -502,10 +507,10 @@ fun Track(
         )
 
         // Optimize tick rendering - only render if there are ticks
-        if (sliderPositions.tickFractions.isNotEmpty()) {
-            sliderPositions.tickFractions.groupBy { fraction ->
-                fraction > sliderPositions.activeRange.endInclusive ||
-                        fraction < sliderPositions.activeRange.start
+        if (tickFractions.isNotEmpty()) {
+            tickFractions.groupBy { fraction ->
+                fraction > activeRange.endInclusive ||
+                        fraction < activeRange.start
             }.forEach { (outsideFraction, list) ->
                 drawPoints(
                     points = list.map { Offset(lerp(sliderStart, sliderEnd, it).x, center.y) },

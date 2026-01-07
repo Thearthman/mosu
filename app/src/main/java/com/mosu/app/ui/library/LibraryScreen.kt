@@ -292,116 +292,116 @@ fun LibraryScreen(
             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
         )
 
-            LazyColumn(state = listState) {
-            items(
-                items = groupedMaps.keys.toList(),
-                key = { setId -> setId } // Add unique key for proper state management
-            ) { setId ->
-                val tracks = groupedMaps[setId] ?: emptyList()
-                if (tracks.isEmpty()) return@items
+        LazyColumn(state = listState) {
+        items(
+            items = groupedMaps.keys.toList(),
+            key = { setId -> setId } // Add unique key for proper state management
+        ) { setId ->
+            val tracks = groupedMaps[setId] ?: emptyList()
+            if (tracks.isEmpty()) return@items
 
-                if (tracks.size > 1) {
-                    // Album Group
-                    val albumData = AlbumGroupData(
-                        title = tracks[0].title,
-                        artist = tracks[0].artist,
-                        coverPath = tracks[0].coverPath,
-                        trackCount = tracks.size,
-                        songs = tracks.map { track ->
-                            SongItemData(
-                                title = track.difficultyName,
-                                artist = track.creator,
-                                coverPath = track.coverPath,
-                                difficultyName = track.difficultyName,
-                                id = track.uid
-                            )
-                        },
-                        id = setId
-                    )
+            if (tracks.size > 1) {
+                // Album Group
+                val albumData = AlbumGroupData(
+                    title = tracks[0].title,
+                    artist = tracks[0].artist,
+                    coverPath = tracks[0].coverPath,
+                    trackCount = tracks.size,
+                    songs = tracks.map { track ->
+                        SongItemData(
+                            title = track.difficultyName,
+                            artist = track.creator,
+                            coverPath = track.coverPath,
+                            difficultyName = track.difficultyName,
+                            id = track.uid
+                        )
+                    },
+                    id = setId
+                )
 
-                    val albumActions = AlbumGroupActions(
-                        onAlbumPlay = {
-                            // Play the first track of the album
-                            musicController.playSong(tracks.first(), filteredMaps)
-                        },
-                        onTrackPlay = { songData ->
-                            // Find the actual BeatmapEntity and play it
-                            val track = tracks.find { it.uid == songData.id }
-                            if (track != null) {
-                                musicController.playSong(track, filteredMaps)
-                            }
-                        },
-                        onDelete = {
-                            scope.launch {
-                                tracks.forEach { track ->
-                                    TrackService.deleteTrack(track, db, context)
-                                }
-                            }
-                        },
-                        onAddToPlaylist = {
-                            openPlaylistDialog(tracks.first())
-                        },
-                        onTrackDelete = { songData ->
-                            scope.launch {
-                                val track = tracks.find { it.uid == songData.id }
-                                if (track != null) {
-                                    TrackService.deleteTrack(track, db, context)
-                                }
-                            }
-                        },
-                        onTrackAddToPlaylist = { songData ->
-                            val track = tracks.find { it.uid == songData.id }
-                            if (track != null) {
-                                openPlaylistDialog(track)
-                            }
+                val albumActions = AlbumGroupActions(
+                    onAlbumPlay = {
+                        // Play the first track of the album
+                        musicController.playSong(tracks.first(), filteredMaps)
+                    },
+                    onTrackPlay = { songData ->
+                        // Find the actual BeatmapEntity and play it
+                        val track = tracks.find { it.uid == songData.id }
+                        if (track != null) {
+                            musicController.playSong(track, filteredMaps)
                         }
-                    )
-
-                    AlbumGroup(
-                        album = albumData,
-                        actions = albumActions,
-                        highlight = highlightSetId == setId && nowPlaying != null,
-                        forceExpanded = expandedBeatmapSets.contains(setId),
-                        onExpansionChanged = { expanded ->
-                            expandedBeatmapSets = if (expanded) {
-                                expandedBeatmapSets + setId
-                            } else {
-                                expandedBeatmapSets - setId
-                            }
-                        },
-                        highlightTrackId = highlightTrackId
-                    )
-                } else {
-                    // Single Track
-                    val track = tracks[0]
-                    val songData = SongItemData(
-                        title = track.title,
-                        artist = track.artist,
-                        coverPath = track.coverPath,
-                        difficultyName = track.difficultyName,
-                        id = track.uid
-                    )
-
-                    val swipeActions = SwipeActions(
-                        onDelete = {
-                            scope.launch {
+                    },
+                    onDelete = {
+                        scope.launch {
+                            tracks.forEach { track ->
                                 TrackService.deleteTrack(track, db, context)
                             }
-                        },
-                        onAddToPlaylist = { openPlaylistDialog(track) }
-                    )
+                        }
+                    },
+                    onAddToPlaylist = {
+                        openPlaylistDialog(tracks.first())
+                    },
+                    onTrackDelete = { songData ->
+                        scope.launch {
+                            val track = tracks.find { it.uid == songData.id }
+                            if (track != null) {
+                                TrackService.deleteTrack(track, db, context)
+                            }
+                        }
+                    },
+                    onTrackAddToPlaylist = { songData ->
+                        val track = tracks.find { it.uid == songData.id }
+                        if (track != null) {
+                            openPlaylistDialog(track)
+                        }
+                    }
+                )
 
-                    SwipeToDismissSongItem(
-                        song = songData,
-                        onClick = { musicController.playSong(track, filteredMaps) },
-                        swipeActions = swipeActions,
-                        highlight = highlightSetId == setId && nowPlaying != null
-                    )
-                }
-                Divider(modifier = Modifier.padding(start = 64.dp)) // Apple style separator
+                AlbumGroup(
+                    album = albumData,
+                    actions = albumActions,
+                    highlight = highlightSetId == setId && nowPlaying != null,
+                    forceExpanded = expandedBeatmapSets.contains(setId),
+                    onExpansionChanged = { expanded ->
+                        expandedBeatmapSets = if (expanded) {
+                            expandedBeatmapSets + setId
+                        } else {
+                            expandedBeatmapSets - setId
+                        }
+                    },
+                    highlightTrackId = highlightTrackId
+                )
+            } else {
+                // Single Track
+                val track = tracks[0]
+                val songData = SongItemData(
+                    title = track.title,
+                    artist = track.artist,
+                    coverPath = track.coverPath,
+                    difficultyName = track.difficultyName,
+                    id = track.uid
+                )
+
+                val swipeActions = SwipeActions(
+                    onDelete = {
+                        scope.launch {
+                            TrackService.deleteTrack(track, db, context)
+                        }
+                    },
+                    onAddToPlaylist = { openPlaylistDialog(track) }
+                )
+
+                SwipeToDismissSongItem(
+                    song = songData,
+                    onClick = { musicController.playSong(track, filteredMaps) },
+                    swipeActions = swipeActions,
+                    highlight = highlightSetId == setId && nowPlaying != null
+                )
             }
+            Divider(modifier = Modifier.padding(start = 64.dp)) // Apple style separator
         }
         }
+        }   
 
         if (showPlaylistDialog && dialogTrack != null) {
             val track = dialogTrack!!

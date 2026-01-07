@@ -41,7 +41,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
         resources {
@@ -58,9 +58,10 @@ dependencies {
     // Compose
     implementation("androidx.compose.ui:ui:1.5.0")
     implementation("androidx.compose.ui:ui-graphics:1.5.0")
+    implementation("androidx.graphics:graphics-path:1.0.1") // Fix for 16KB alignment warning
     implementation("androidx.compose.ui:ui-tooling-preview:1.5.0")
     implementation("androidx.compose.material:material:1.5.0")
-    implementation("androidx.compose.material3:material3:1.1.1")
+    implementation("androidx.compose.material3:material3:1.3.1")
     implementation("androidx.compose.material:material-icons-extended:1.5.0")
     
     // Navigation

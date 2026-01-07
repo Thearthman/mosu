@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,9 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import java.io.File
+import androidx.compose.material3.Divider
 
 /**
  * Data class representing a song item that can be displayed in the UI
@@ -39,11 +42,17 @@ fun SongItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     backgroundColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
-    showDifficulty: Boolean = false
+    showDifficulty: Boolean = false,
+    coverStartPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    textEndPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    coverSize: androidx.compose.ui.unit.Dp = 50.dp,
+    titleTextStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.titleMedium,
+    subtitleTextStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .height(66.dp) // Fixed height to ensure consistent item height
             .background(backgroundColor)
             .clickable { onClick() }
             .padding(vertical = 8.dp),
@@ -54,7 +63,8 @@ fun SongItem(
             model = File(song.coverPath),
             contentDescription = null,
             modifier = Modifier
-                .size(50.dp)
+                .padding(start = coverStartPadding)
+                .size(coverSize)
                 .clip(RoundedCornerShape(4.dp)),
             contentScale = ContentScale.Crop
         )
@@ -62,24 +72,30 @@ fun SongItem(
         // Title & Artist/Difficulty
         Column(
             modifier = Modifier
-                .padding(start = 16.dp)
+                .padding(start = 16.dp, end = textEndPadding)
                 .weight(1f)
         ) {
             Text(
                 text = song.title,
-                style = MaterialTheme.typography.titleMedium
+                style = titleTextStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             if (showDifficulty && song.difficultyName != null) {
                 Text(
                     text = song.difficultyName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
+                    style = subtitleTextStyle,
+                    color = MaterialTheme.colorScheme.secondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             } else {
                 Text(
                     text = song.artist,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
+                    style = subtitleTextStyle,
+                    color = MaterialTheme.colorScheme.secondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

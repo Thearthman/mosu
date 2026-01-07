@@ -3,7 +3,7 @@
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
 4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 2(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
-5. Deleting an account in account manager causes weird effect: the leftover of the deletion (the red background of the deleted account) overlapped with the existing account. The leftover should be complete removed. 
+5. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 6. Find mirror sites that are fast in Mainland China for both fetching beatmap and downloading beatmaps. 
 7. Weird it requires include unranked to be false to refresh all filter mode query. [important]
 
@@ -11,8 +11,8 @@
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. [important]
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 3. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-4. Make long press to call out info popup a feature for all song item regardless of it's in search view or library or playlist view 
-5. include ranked status in info popup 
+4. Make long press to call out info popup a feature for all song item regardless of it's in search view or library or playlist view
+5. include ranked status in info popup [important]
 
 # New Feature
 0. Core Feature
@@ -28,7 +28,7 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    2. Add preview to songs in search page. When song aren't downloaded but is clicked, preview is played. preview from osu api should be fine.
+    2. Add preview to songs in search page. When song aren't downloaded but is clicked, preview is played. preview from osu api should be fine. [important]
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
 6. Playlist page update
@@ -89,6 +89,11 @@
 11. Enhanced star rating display with precise color-coded backgrounds based on difficulty levels, featuring gradient backgrounds for beatmapsets that emphasize start and end difficulty colors.
 12. Commented out Default Search Filter box in settings as it was not useful since the app already stores and uses the last used filter mode.
 13. Back swipe gesture in android should not always return to library view but the last view
+14. Changed playlist left swipe icon from delete to remove (minus sign).
+15. Eliminated margin between bottom track and miniplayer inside playlist for seamless UI.
+16. Implemented fixed height (66dp) and text truncation with ellipsis for SwipeableSongList items.
+17. Added compact "tiny config" for SelectableSongItem with optimized spacing and background for dialog displays.
+18. Added fixed height (56dp) and text ellipsis overflow handling to TrackRowWithSwipe for consistent UI.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -119,3 +124,11 @@
 26. Do not move downloaded song to top, make them stay where they are default to the position of the returned list
 27. Pressing restore when the song already exist will still download the music one more time
 28. Navbar and miniplayer design did not account for system navigation bar presence - fixed positioning to maintain consistent 80.dp gap above navbar regardless of system nav bar
+29. Fixed SwipeToDismissBox background colors and action handling for both left and right swipes.
+30. Restored album collapse functionality when clicking expanded album headers.
+
+# Codebase Maintenances
+1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.
+2. Updated to Material Design 3 and resolved all compilation errors from SwipeToDismissBox migration.
+3. Created generic SwipeToDismissWrapper component for reusable swipe-to-dismiss functionality.
+4. Refactored AlbumGroup.kt to use SwipeToDismissSongItem.kt components, consolidating swipe logic and improving code maintainability.

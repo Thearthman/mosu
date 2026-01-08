@@ -96,6 +96,7 @@
 18. Added fixed height (56dp) and text ellipsis overflow handling to TrackRowWithSwipe for consistent UI.
 19. Implemented long press info popup feature across all song items in Search, Library, and Playlist views with refactored reusable InfoPopup component.
 20. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. Include ranked status in info popup 
+21. Applied monospace font with tabular (fixed-width) numbers to star rating displays in InfoPopup for consistent alignment and spacing 
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

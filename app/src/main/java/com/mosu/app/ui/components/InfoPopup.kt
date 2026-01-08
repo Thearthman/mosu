@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.material3.AlertDialog
@@ -319,9 +320,13 @@ fun InfoPopup(
                                                 // Single difficulty: background matches difficulty
                                                 Text(
                                                     text = "%.1f".format(starMin),
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = FontWeight.Normal, // Force Normal weight to ensure Monospace applies
+                                                        fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
+                                                    ),
                                                     color = Color.White,
-                                                    modifier = Modifier.padding(end=4.dp)
+                                                    modifier = Modifier.padding(end = 4.dp)
                                                 )
                                                 Icon(
                                                     imageVector = Icons.Filled.Star,
@@ -332,10 +337,14 @@ fun InfoPopup(
                                             } else {
                                                 // Range: background matches max difficulty
                                                 Text(
-                                                    text = "%.1f - %.1f".format(starMin, starMax),
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    text = "%.1f-%.1f".format(starMin, starMax),
+                                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = FontWeight.Normal, // Force Normal weight to ensure Monospace applies
+                                                        fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
+                                                    ),
                                                     color = Color.White,
-                                                    modifier = Modifier.padding(end=4.dp)
+                                                    modifier = Modifier.padding(end = 4.dp)
                                                 )
                                                 Icon(
                                                     imageVector = Icons.Filled.Star,

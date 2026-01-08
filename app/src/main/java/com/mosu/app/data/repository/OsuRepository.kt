@@ -7,6 +7,8 @@ import com.mosu.app.data.api.model.BeatmapPlaycount
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.OsuTokenResponse
 import com.mosu.app.data.api.model.OsuUserCompact
+import com.mosu.app.data.api.model.SearchResponse
+import com.mosu.app.data.api.model.SayobotSearchResponse
 import com.mosu.app.data.db.SearchCacheDao
 import com.mosu.app.data.db.SearchCacheEntity
 import com.mosu.app.data.db.RecentPlayEntity
@@ -38,17 +40,19 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
     suspend fun searchBeatmapsetsByTitleArtist(title: String, artist: String): List<BeatmapsetCompact> {
         // Search using title and artist as query
         val query = "\"$title\" \"$artist\""
+        
         val response = RetrofitClient.api.searchBeatmapsets(
             authHeader = "", // No auth needed for public search
             query = query,
             status = "any" // Include ranked, loved, qualified, etc.
         )
+        val beatmapsets = response.beatmapsets
 
         // Filter results to ensure exact title/artist matches (case-insensitive, trimmed)
         val targetTitle = title.trim().lowercase()
         val targetArtist = artist.trim().lowercase()
 
-        return response.beatmapsets.filter { beatmapset ->
+        return beatmapsets.filter { beatmapset ->
             beatmapset.title.trim().lowercase() == targetTitle &&
             beatmapset.artist.trim().lowercase() == targetArtist
         }

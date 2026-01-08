@@ -177,5 +177,8 @@
     <string name="timestamp_three_months_ago">3 months ago</string>
     <string name="timestamp_six_months_ago">6 months ago</string>
     <string name="timestamp_one_year_ago">1 year ago</string>
+    <string name="profile_region_title">Detected Region</string>
+    <string name="profile_region_unknown">Unknown</string>
+    <string name="profile_api_source_title">API Source</string>
 </resources>
 

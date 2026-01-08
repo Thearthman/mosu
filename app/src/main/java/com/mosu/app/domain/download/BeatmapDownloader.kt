@@ -5,6 +5,10 @@ import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.IOException
+import kotlinx.coroutines.flow.emitAll
+import com.mosu.app.data.SettingsManager
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -14,14 +18,26 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.util.concurrent.TimeUnit
 
+import com.mosu.app.data.api.model.BeatmapDetail
+import com.mosu.app.data.api.model.BeatmapsetDetail
+import com.mosu.app.data.api.model.SayobotDetailResponse
+import com.google.gson.Gson
+
+import com.mosu.app.domain.model.ExtractedTrack
+
 sealed class DownloadState {
     object Idle : DownloadState()
     data class Downloading(val progress: Int, val source: String) : DownloadState()
     data class Downloaded(val file: File) : DownloadState()
     data class Error(val message: String) : DownloadState()
+    data class Completed(val tracks: List<ExtractedTrack>, val beatmapSetId: Long) : DownloadState()
 }
 
-class BeatmapDownloader(private val context: Context) {
+class BeatmapDownloader(
+    private val context: Context,
+    private val settingsManager: SettingsManager
+) {
+    // ... (rest of the file)
     
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -29,21 +45,119 @@ class BeatmapDownloader(private val context: Context) {
         .followRedirects(true)
         .build()
 
+    private val gson = Gson()
+
     private val nerinyanQueryParams = "?noVideo=true&noBg=false&NoHitsound=true&NoStoryboard=false"
 
     // Mirrors - Using well-known public mirrors
-    private val mirrors = listOf(
+    private val sayobotMirror = "https://dl.sayobot.cn/beatmaps/download/full/%s"
+    private val sayobotAudio = "https://dl.sayobot.cn/beatmaps/files/%s/%s"
+    private val sayobotImage = "https://dl.sayobot.cn/beatmaps/files/%s/%s"
+    
+    private val defaultMirrors = listOf(
         // Nerinyan - Fast on campus/Eduroam
         "https://api.nerinyan.moe/d/%s$nerinyanQueryParams",
         // Nerinyan backup
         "https://ko2.nerinyan.moe/d/%s$nerinyanQueryParams",
         // Sayobot - Direct download (very reliable)
-        "https://dl.sayobot.cn/beatmaps/download/full/%s",
+        sayobotMirror,
         // Mino (Catboy) - Standard mirror
         "https://catboy.best/d/%s"
     )
 
+    private suspend fun getOrderedMirrors(): List<String> {
+        val apiSource = settingsManager.apiSource.first()
+        return if (apiSource == "sayobot") {
+            listOf(sayobotMirror) + defaultMirrors.filter { it != sayobotMirror }
+        } else {
+            defaultMirrors
+        }
+    }
+
+    suspend fun downloadDirectlyFromSayobot(beatmapSetId: Long): Flow<DownloadState> = flow {
+        emit(DownloadState.Downloading(0, "Fetching file list..."))
+        
+        try {
+            // 1. Fetch Sayobot detail to get file names
+            val infoUrl = "https://api.sayobot.cn/v2/beatmapinfo?K=$beatmapSetId&T=0"
+            val infoRequest = Request.Builder().url(infoUrl).build()
+            val infoResponse = client.newCall(infoRequest).execute()
+            
+            if (!infoResponse.isSuccessful) throw IOException("Failed to fetch beatmap info")
+            
+            val jsonStr = infoResponse.body?.string() ?: throw IOException("Empty info body")
+            val detailResponse = gson.fromJson(jsonStr, SayobotDetailResponse::class.java)
+            val detailData = detailResponse.data
+            
+            // Collect unique files to download
+            val filesToDownload = mutableSetOf<String>()
+            detailData.bidData.forEach { bid ->
+                bid.audio?.let { if (it.isNotEmpty()) filesToDownload.add(it) }
+                bid.bg?.let { if (it.isNotEmpty()) filesToDownload.add(it) }
+            }
+
+            val targetDir = File(context.getExternalFilesDir(null), "beatmaps/$beatmapSetId")
+            if (!targetDir.exists()) targetDir.mkdirs()
+
+            // Download unique files
+            val totalFiles = filesToDownload.size
+            var completedFilesCount = 0
+            for (filename in filesToDownload) {
+                val downloadUrl = sayobotAudio.format(beatmapSetId, filename)
+                val targetFile = File(targetDir, filename)
+                
+                if (!targetFile.exists() || targetFile.length() == 0L) {
+                    emit(DownloadState.Downloading((completedFilesCount * 100) / totalFiles, "Downloading $filename"))
+                    val request = Request.Builder().url(downloadUrl).build()
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful && response.body != null) {
+                        saveToFile(response.body!!.byteStream(), response.body!!.contentLength(), targetFile) { _ -> }
+                    }
+                }
+                completedFilesCount++
+            }
+            
+            // 2. Register one track for each UNIQUE audio file (matching ZipExtractor logic)
+            val extractedTracks = mutableListOf<ExtractedTrack>()
+            val uniqueAudioFiles = mutableSetOf<String>()
+            
+            detailData.bidData.forEach { bid ->
+                val audioFilename = bid.audio
+                if (!audioFilename.isNullOrEmpty() && !uniqueAudioFiles.contains(audioFilename)) {
+                    uniqueAudioFiles.add(audioFilename)
+                    
+                    val audioFile = File(targetDir, audioFilename)
+                    val coverFile = if (!bid.bg.isNullOrEmpty()) File(targetDir, bid.bg) else null
+                    
+                    if (audioFile.exists()) {
+                        extractedTracks.add(ExtractedTrack(
+                            audioFile = audioFile,
+                            coverFile = if (coverFile?.exists() == true) coverFile else null,
+                            title = detailData.title,
+                            artist = detailData.artist,
+                            difficultyName = bid.version
+                        ))
+                    }
+                }
+            }
+            
+            emit(DownloadState.Completed(extractedTracks, beatmapSetId))
+
+        } catch (e: Exception) {
+            Log.e("Downloader", "Direct download failed", e)
+            emit(DownloadState.Error("Direct download failed: ${e.message}"))
+        }
+    }
+
     fun downloadBeatmap(beatmapSetId: Long, accessToken: String? = null): Flow<DownloadState> = flow {
+        val apiSource = settingsManager.apiSource.first()
+        
+        // Use direct file download for Sayobot
+        if (apiSource == "sayobot") {
+             emitAll(downloadDirectlyFromSayobot(beatmapSetId))
+             return@flow
+        }
+
         emit(DownloadState.Downloading(0, "Initializing..."))
         
         var success = false
@@ -51,7 +165,8 @@ class BeatmapDownloader(private val context: Context) {
         val targetFile = File(context.cacheDir, "$beatmapSetId.osz")
 
         // Try mirrors sequentially
-        for (mirrorUrl in mirrors) {
+        val orderedMirrors = getOrderedMirrors()
+        for (mirrorUrl in orderedMirrors) {
             try {
                 val url = mirrorUrl.format(beatmapSetId)
                 Log.d("Downloader", "Trying mirror: $url")

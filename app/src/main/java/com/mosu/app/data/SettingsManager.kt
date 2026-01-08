@@ -26,6 +26,42 @@ class SettingsManager(private val context: Context) {
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
+        private val API_SOURCE_KEY = stringPreferencesKey("api_source") // "osu" or "sayobot"
+        private val REGION_CHECKED_KEY = booleanPreferencesKey("region_checked")
+        private val DETECTED_REGION_KEY = stringPreferencesKey("detected_region")
+    }
+
+    val detectedRegion: Flow<String?> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[DETECTED_REGION_KEY]
+        }
+
+    suspend fun setDetectedRegion(region: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[DETECTED_REGION_KEY] = region
+        }
+    }
+
+    val apiSource: Flow<String> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[API_SOURCE_KEY] ?: "osu"
+        }
+
+    suspend fun setApiSource(source: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[API_SOURCE_KEY] = source
+        }
+    }
+
+    val regionChecked: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[REGION_CHECKED_KEY] ?: false
+        }
+
+    suspend fun setRegionChecked(checked: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[REGION_CHECKED_KEY] = checked
+        }
     }
 
     val clientId: Flow<String> = context.settingsDataStore.data

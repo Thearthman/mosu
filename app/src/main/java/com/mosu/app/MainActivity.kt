@@ -63,7 +63,8 @@ import androidx.compose.ui.Alignment
 import com.mosu.app.data.AccountManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
-import com.mosu.app.data.api.RetrofitClient
+import com.mosu.app.utils.RegionUtils
+import com.mosu.app.utils.RegionInfo
 import com.mosu.app.data.api.TokenAuthenticator
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
@@ -79,6 +80,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
+import com.mosu.app.data.api.RetrofitClient
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
@@ -114,11 +116,11 @@ class MainActivity : ComponentActivity() {
 
         val db = AppDatabase.getDatabase(this)
         val repository = OsuRepository(db.searchCacheDao())
-        val beatmapDownloader = BeatmapDownloader(this)
+        val settingsManager = SettingsManager(this)
+        val beatmapDownloader = BeatmapDownloader(this, settingsManager)
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
         val accountManager = AccountManager(this, tokenManager)
-        val settingsManager = SettingsManager(this)
 
 
         setContent {
@@ -215,6 +217,28 @@ fun MainScreen(
 
     // Initialize accounts and migrate settings on first launch
     LaunchedEffect(Unit) {
+        // Region check for automatic API switching
+        launch {
+            val isChecked = settingsManager.regionChecked.first()
+            val storedRegion = settingsManager.detectedRegion.first()
+            
+            // Re-check if never checked OR if previous check failed (unknown)
+            if (!isChecked || storedRegion == null) {
+                val region = RegionUtils.getDeviceRegion()
+                if (region != null) {
+                    settingsManager.setDetectedRegion(region.countryCode)
+                    if (region.countryCode == "CN") {
+                        settingsManager.setApiSource("sayobot")
+                        android.util.Log.d("MainActivity", "Region detected as CN, switched to Sayobot API")
+                    } else {
+                        settingsManager.setApiSource("osu")
+                        android.util.Log.d("MainActivity", "Region detected as ${region.countryCode}, using official API")
+                    }
+                }
+                settingsManager.setRegionChecked(true)
+            }
+        }
+
         val availableAccountIds = tokenManager.getAvailableAccountIds()
 
         // If no accounts exist but settings have credentials, migrate to first account
@@ -254,6 +278,12 @@ fun MainScreen(
         }
     }
     val language by settingsManager.language.collectAsState(initial = "en")
+    val apiSource by settingsManager.apiSource.collectAsState(initial = "osu")
+
+    // Update RetrofitClient when apiSource changes
+    LaunchedEffect(apiSource) {
+        RetrofitClient.setApiSource(apiSource)
+    }
     
     
     // Listen for token changes (e.g., after OAuth login or account switch)

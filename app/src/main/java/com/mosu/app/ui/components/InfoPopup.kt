@@ -179,7 +179,7 @@ fun InfoPopup(
                                         val (leftContent, centerModeIcons, rightStarRating) = createRefs()
 
                                         // Create a guideline at 55% of the width
-                                        val biasGuideline = createGuidelineFromStart(0.67f)
+                                        val biasGuideline = createGuidelineFromStart(0.64f)
 
                                         // 1. LEFT CONTENT (Status + Playcount)
                                         Row(
@@ -314,7 +314,7 @@ fun InfoPopup(
                                                         }
                                                     }
                                                 )
-                                                .padding(start=9.dp,end=2.dp,top=1.dp,bottom=1.dp)
+                                                .padding(start=5.dp,end=2.dp,top=1.dp,bottom=1.dp)
                                         ) {
                                             if (sortedList.size == 1) {
                                                 // Single difficulty: background matches difficulty
@@ -322,10 +322,14 @@ fun InfoPopup(
                                                     text = "%.1f".format(starMin),
                                                     style = MaterialTheme.typography.bodyMedium.copy(
                                                         fontFamily = FontFamily.Monospace,
-                                                        fontWeight = FontWeight.Normal, // Force Normal weight to ensure Monospace applies
+                                                        fontWeight = FontWeight.Bold, // Force Normal weight to ensure Monospace applies
                                                         fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
                                                     ),
-                                                    color = Color.White,
+                                                    color = if (starMin>3f){
+                                                        Color.White
+                                                    }else{
+                                                        Color.Gray
+                                                    },
                                                     modifier = Modifier.padding(end = 4.dp)
                                                 )
                                                 Icon(
@@ -337,13 +341,30 @@ fun InfoPopup(
                                             } else {
                                                 // Range: background matches max difficulty
                                                 Text(
-                                                    text = "%.1f-%.1f".format(starMin, starMax),
+                                                    text = "%.1f-".format(starMin),
                                                     style = MaterialTheme.typography.bodyMedium.copy(
                                                         fontFamily = FontFamily.Monospace,
-                                                        fontWeight = FontWeight.Normal, // Force Normal weight to ensure Monospace applies
+                                                        fontWeight = FontWeight.Bold, // Force Normal weight to ensure Monospace applies
                                                         fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
                                                     ),
-                                                    color = Color.White,
+                                                    color = if (starMin>3f){
+                                                        Color.White
+                                                    }else{
+                                                        Color.Gray
+                                                    }
+                                                )
+                                                Text(
+                                                    text = "%.1f".format(starMax),
+                                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = FontWeight.Bold, // Force Normal weight to ensure Monospace applies
+                                                        fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
+                                                    ),
+                                                    color = if (starMax>3f){
+                                                        Color.White
+                                                    }else{
+                                                        Color.Gray
+                                                    },
                                                     modifier = Modifier.padding(end = 4.dp)
                                                 )
                                                 Icon(

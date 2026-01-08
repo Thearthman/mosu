@@ -176,5 +176,8 @@
     <string name="timestamp_three_months_ago">3個月前</string>
     <string name="timestamp_six_months_ago">6個月前</string>
     <string name="timestamp_one_year_ago">1年前</string>
+    <string name="profile_region_title">檢測到的地區</string>
+    <string name="profile_region_unknown">未知</string>
+    <string name="profile_api_source_title">API 來源</string>
 </resources>
 

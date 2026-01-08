@@ -17,6 +17,7 @@ import androidx.compose.material.SwipeToDismiss
 import androidx.compose.material.rememberDismissState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.foundation.layout.Arrangement
@@ -48,16 +49,19 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.domain.download.ZipExtractor
+import com.mosu.app.utils.RegionUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 suspend fun performRestore(
     context: Context,
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
+    settingsManager: SettingsManager,
     updateProgress: (Int, String) -> Unit,
     updateRestoring: (Boolean) -> Unit
 ) {
@@ -72,7 +76,7 @@ suspend fun performRestore(
             return
         }
 
-        val downloader = BeatmapDownloader(context)
+        val downloader = BeatmapDownloader(context, settingsManager)
         val extractor = ZipExtractor(context)
         val accessToken = tokenManager.getCurrentAccessToken()
 
@@ -126,6 +130,30 @@ suspend fun performRestore(
                                     android.util.Log.e("ProfileScreen", "Failed to extract beatmap ${preservedSetId.beatmapSetId}", e)
                                 }
                             }
+                            is com.mosu.app.domain.download.DownloadState.Completed -> {
+                                // Handle direct download completion for restore
+                                try {
+                                    state.tracks.forEach { track ->
+                                        val entity = com.mosu.app.data.db.BeatmapEntity(
+                                            beatmapSetId = state.beatmapSetId,
+                                            title = track.title,
+                                            artist = track.artist,
+                                            creator = "", // Metadata might be limited during restore
+                                            difficultyName = track.difficultyName,
+                                            audioPath = track.audioFile.absolutePath,
+                                            coverPath = track.coverFile?.absolutePath ?: "",
+                                            genreId = null
+                                        )
+                                        db.beatmapDao().insertBeatmap(entity)
+                                    }
+                                    
+                                    completed++
+                                    val progress = (completed * 100) / total
+                                    updateProgress(progress, "Restored $completed/$total beatmaps")
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ProfileScreen", "Failed to register restored beatmap ${state.beatmapSetId}", e)
+                                }
+                            }
                             is com.mosu.app.domain.download.DownloadState.Error -> {
                                 android.util.Log.e("ProfileScreen", "Failed to download beatmap ${preservedSetId.beatmapSetId}: ${state.message}")
                             }
@@ -177,6 +205,8 @@ fun ProfileScreen(
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     val language by settingsManager.language.collectAsState(initial = "en")
+    val detectedRegion by settingsManager.detectedRegion.collectAsState(initial = null)
+    val apiSource by settingsManager.apiSource.collectAsState(initial = "osu")
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val languageOptions = listOf(
@@ -403,6 +433,69 @@ fun ProfileScreen(
             }
         }
 
+        // Region and API Source Indicator
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.profile_region_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = detectedRegion ?: stringResource(R.string.profile_region_unknown),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    val region = RegionUtils.getDeviceRegion()
+                                    if (region != null) {
+                                        settingsManager.setDetectedRegion(region.countryCode)
+                                        if (region.countryCode == "CN") {
+                                            settingsManager.setApiSource("sayobot")
+                                        } else {
+                                            settingsManager.setApiSource("osu")
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.size(24.dp).padding(start = 4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Re-check region",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        stringResource(R.string.profile_api_source_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = apiSource.uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
 
             // Info Cover Toggle Card (已符合设计，使用InfoCoverToggleCard)
             InfoCoverToggleCard(infoCoverEnabled = infoCoverEnabled) { checked ->
@@ -604,6 +697,7 @@ fun ProfileScreen(
                                             repository,
                                             db,
                                             tokenManager,
+                                            settingsManager,
                                             { progress, message ->
                                                 restoreProgress = progress
                                                 restoreMessage = message

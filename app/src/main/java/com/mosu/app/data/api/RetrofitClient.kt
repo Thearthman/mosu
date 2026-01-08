@@ -8,7 +8,16 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
-    private const val BASE_URL = "https://osu.ppy.sh/"
+    private const val OSU_BASE_URL = "https://osu.ppy.sh/"
+    private const val SAYOBOT_BASE_URL = "https://api.sayobot.cn/"
+
+    private var apiSource = "osu"
+
+    fun setApiSource(source: String) {
+        apiSource = source
+    }
+
+    fun getApiSource(): String = apiSource
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -30,11 +39,19 @@ object RetrofitClient {
 
     val api: OsuApi
         get() = Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(OSU_BASE_URL)
             .client(authenticatedClient ?: baseClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(OsuApi::class.java)
+
+    val sayobotApi: SayobotApi
+        get() = Retrofit.Builder()
+            .baseUrl(SAYOBOT_BASE_URL)
+            .client(baseClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(SayobotApi::class.java)
 
     val okHttpClient: OkHttpClient
         get() = authenticatedClient ?: baseClient

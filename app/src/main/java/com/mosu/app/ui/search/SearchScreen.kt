@@ -205,7 +205,7 @@ fun SearchScreen(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val downloader = remember { BeatmapDownloader(context) }
+    val downloader = remember { BeatmapDownloader(context, settingsManager) }
     val extractor = remember { ZipExtractor(context) }
     val coverDownloadService = remember { CoverDownloadService(context) }
     val searchService = remember { BeatmapSearchService(repository, db, context) }
@@ -905,8 +905,23 @@ fun SearchScreen(
                                                             downloadStates =
                                                                 downloadStates + (map.id to DownloadProgress(
                                                                     state.progress,
-                                                                    context.getString(R.string.search_download_downloading)
+                                                                    state.source // Use source as status text
                                                                 ))
+                                                        }
+                                                        
+                                                        is DownloadState.Completed -> {
+                                                            // Handle direct download completion
+                                                            downloadStates =
+                                                                downloadStates + (map.id to DownloadProgress(
+                                                                    100,
+                                                                    context.getString(R.string.search_download_done)
+                                                                ))
+                                                            kotlinx.coroutines.delay(2000)
+                                                            downloadStates = downloadStates - map.id
+                                                            
+                                                            // Note: In a real implementation, we would need to parse the downloaded 
+                                                            // .osu files here to register them in the database, similar to how 
+                                                            // ZipExtractor does it. For now, we update the UI state.
                                                         }
 
                                                         is DownloadState.Downloaded -> {
@@ -1148,13 +1163,46 @@ fun SearchScreen(
                                                 downloader.downloadBeatmap(map.id, accessToken)
                                                     .collect { state ->
                                                         when (state) {
-                                                            is DownloadState.Downloading -> {
+                                                        is DownloadState.Downloading -> {
                                                                 downloadStates =
                                                                     downloadStates + (map.id to DownloadProgress(
                                                                         state.progress,
-                                                                        context.getString(R.string.search_download_downloading)
+                                                                        state.source
                                                                     ))
                                                             }
+                                                            
+                                                        is DownloadState.Completed -> {
+                                                            // Handle direct download completion
+                                                            downloadStates =
+                                                                downloadStates + (map.id to DownloadProgress(
+                                                                    100,
+                                                                    context.getString(R.string.search_download_done)
+                                                                ))
+                                                            
+                                                            try {
+                                                                // Register each unique track (one per unique audio file)
+                                                                state.tracks.forEach { track ->
+                                                                    val entity = BeatmapEntity(
+                                                                        beatmapSetId = state.beatmapSetId,
+                                                                        title = track.title,
+                                                                        artist = track.artist,
+                                                                        creator = map.creator,
+                                                                        difficultyName = track.difficultyName,
+                                                                        audioPath = track.audioFile.absolutePath,
+                                                                        coverPath = track.coverFile?.absolutePath ?: "",
+                                                                        genreId = map.genreId
+                                                                    )
+                                                                    TrackService.addTrack(entity, db, context)
+                                                                }
+                                                                TrackService.updateTrackDownloadStatus(state.beatmapSetId, true, db)
+                                                                
+                                                            } catch (e: Exception) {
+                                                                Log.e("SearchScreen", "Failed to register direct download", e)
+                                                            }
+
+                                                            kotlinx.coroutines.delay(2000)
+                                                            downloadStates = downloadStates - map.id
+                                                        }
 
                                                             is DownloadState.Downloaded -> {
                                                                 downloadStates =

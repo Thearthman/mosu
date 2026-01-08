@@ -21,7 +21,8 @@ fun RecentPlayEntity.toBeatmapset(): BeatmapsetCompact {
         artist = artist,
         creator = creator,
         covers = Covers(coverUrl = cover, listUrl = cover),
-        genreId = genreId
+        genreId = genreId,
+        status = "unknown"
     )
 }
 

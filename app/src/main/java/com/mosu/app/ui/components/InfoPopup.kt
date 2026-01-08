@@ -3,6 +3,7 @@ package com.mosu.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.text.font.FontWeight
+
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +45,10 @@ import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.BeatmapDetail
+import com.mosu.app.domain.model.modeLabel
+import com.mosu.app.domain.model.getStarRatingColor
+import com.mosu.app.domain.model.getGradientColorsForRange
+import com.mosu.app.domain.model.createGradientStops
 
 /**
  * Data class for info popup configuration
@@ -53,77 +60,6 @@ data class InfoPopupConfig(
     val onRestoreClick: ((BeatmapsetCompact) -> Unit)? = null,
     val onPlayClick: ((BeatmapsetCompact) -> Unit)? = null
 )
-
-/**
- * Helper function to get star rating color based on difficulty
- */
-fun getStarRatingColor(stars: Float): Color {
-    return when {
-        stars <= 2f -> Color(0xFF4CAF50) // Green
-        stars <= 2.7f -> Color(0xFF8BC34A) // Light Green
-        stars <= 4f -> Color(0xFFFFC107) // Yellow
-        stars <= 5.3f -> Color(0xFFFF9800) // Orange
-        stars <= 6.5f -> Color(0xFFFF5722) // Deep Orange
-        else -> Color(0xFFE91E63) // Pink
-    }
-}
-
-/**
- * Helper function to get gradient colors for a star rating range
- */
-fun getGradientColorsForRange(minStars: Float, maxStars: Float): List<Color> {
-    val colors = mutableListOf<Color>()
-
-    // Define difficulty ranges and their colors
-    val ranges = listOf(
-        0f to Color(0xFF4CAF50), // Green
-        2f to Color(0xFF8BC34A), // Light Green
-        2.7f to Color(0xFFFFC107), // Yellow
-        4f to Color(0xFFFF9800), // Orange
-        5.3f to Color(0xFFFF5722), // Deep Orange
-        6.5f to Color(0xFFE91E63) // Pink
-    )
-
-    // Find colors for the range
-    val minColor = ranges.lastOrNull { minStars >= it.first }?.second ?: ranges.first().second
-    val maxColor = ranges.lastOrNull { maxStars >= it.first }?.second ?: ranges.last().second
-
-    colors.add(minColor)
-    if (minColor != maxColor) {
-        colors.add(maxColor)
-    }
-
-    return colors
-}
-
-/**
- * Helper function to create gradient stops
- */
-fun createGradientStops(colors: List<Color>): Array<Pair<Float, Color>> {
-    if (colors.size <= 1) return arrayOf(0f to (colors.firstOrNull() ?: Color.Gray))
-
-    val stops = mutableListOf<Pair<Float, Color>>()
-    val step = 1f / (colors.size - 1)
-
-    colors.forEachIndexed { index, color ->
-        stops.add((index * step) to color)
-    }
-
-    return stops.toTypedArray()
-}
-
-/**
- * Helper function to get mode label
- */
-fun modeLabel(mode: String): String {
-    return when (mode) {
-        "osu" -> "Standard"
-        "taiko" -> "Taiko"
-        "mania" -> "Mania"
-        "fruits" -> "Catch the Beat"
-        else -> mode
-    }
-}
 
 /**
  * Reusable Info Popup component that shows beatmap details
@@ -209,11 +145,13 @@ fun InfoPopup(
                     }
                 } else {
                     val bySet = beatmaps.groupBy { it.beatmapsetId }
-                    items(bySet.entries.toList()) { (setId, list) ->
-                        val modes = list.groupBy { it.mode }
-                        val starMin = list.minOfOrNull { it.difficultyRating } ?: 0f
-                        val starMax = list.maxOfOrNull { it.difficultyRating } ?: 0f
-                        val url = list.firstOrNull()?.url ?: "https://osu.ppy.sh/beatmapsets/$setId"
+                    val sortedSets = bySet.entries.toList().sortedByDescending { it.value.sumOf { b -> b.playCount } }
+                    items(sortedSets) { (setId, list) ->
+                        val sortedList = list.sortedByDescending { it.playCount }
+                        val modes = sortedList.groupBy { it.mode }
+                        val starMin = sortedList.minOfOrNull { it.difficultyRating } ?: 0f
+                        val starMax = sortedList.maxOfOrNull { it.difficultyRating } ?: 0f
+                        val url = sortedList.firstOrNull()?.url ?: "https://osu.ppy.sh/beatmapsets/$setId"
                         val author = setCreators[setId] ?: target.creator
                         Card(
                             modifier = Modifier
@@ -224,55 +162,134 @@ fun InfoPopup(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(horizontal = 4.dp)
+                                    .height(50.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    // Replace the main Row with ConstraintLayout for precise positioning
+                                    ConstraintLayout(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start=4.dp, end=2.dp, top = 3.dp)
+                                            
                                     ) {
-                                        Text(
-                                            text = stringResource(id = R.string.search_author_prefix, author),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                        Spacer(modifier = Modifier.weight(1f))
-                                        // Add gamemode icons at the rightmost position
-                                        modes.keys.forEach { mode ->
-                                            val iconRes = when (mode) {
-                                                "osu" -> R.drawable.std_icon
-                                                "taiko" -> R.drawable.taiko_icon
-                                                "mania" -> R.drawable.mania_icon
-                                                "fruits" -> R.drawable.cth_icon
-                                                else -> null
+                                        // Create references for the three main sections
+                                        val (leftContent, centerModeIcons, rightStarRating) = createRefs()
+
+                                        // Create a guideline at 55% of the width
+                                        val biasGuideline = createGuidelineFromStart(0.67f)
+
+                                        // 1. LEFT CONTENT (Status + Playcount)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.constrainAs(leftContent) {
+                                                start.linkTo(parent.start)
+                                                top.linkTo(parent.top)
+                                                bottom.linkTo(parent.bottom)
                                             }
-                                            iconRes?.let {
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Icon(
-                                                    painter = painterResource(id = it),
-                                                    contentDescription = modeLabel(mode),
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurface
-                                                )
+                                        ) {
+                                            // Status Icon
+                                            val setStatus = if (sortedList.isNotEmpty()) sortedList.first().status else "unknown"
+                                            if (setStatus.isNotEmpty() && setStatus != "unknown") {
+                                                val statusIcon = when (setStatus.lowercase()) {
+                                                    "ranked" -> R.drawable.status_ranked
+                                                    "loved" -> R.drawable.status_loved
+                                                    "qualified" -> R.drawable.status_qualified
+                                                    "graveyard", "wip", "pending" -> R.drawable.status_graveyard_wip_pending
+                                                    else -> null
+                                                }
+
+                                                if (statusIcon != null) {
+                                                    Icon(
+                                                        painter = painterResource(id = statusIcon),
+                                                        contentDescription = setStatus,
+                                                        modifier = Modifier.height(14.dp).width(14.dp), // Increased size for visibility
+                                                        tint = Color.Unspecified
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = setStatus.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() },
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.tertiary,
+                                                        modifier = Modifier
+                                                            .background(
+                                                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                                                shape = RoundedCornerShape(4.dp)
+                                                            )
+                                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.width(8.dp))
+
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.circle_play_solid_full),
+                                                contentDescription = "Playcount",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.secondary
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (list.isNotEmpty()) {
+                                                    val totalPlaycount = list.sumOf { it.playCount }
+                                                    if (totalPlaycount >= 1_000_000) {
+                                                        "%.1fM".format(totalPlaycount / 1_000_000f)
+                                                    } else if (totalPlaycount >= 1_000) {
+                                                        "%.1fk".format(totalPlaycount / 1_000f)
+                                                    } else {
+                                                        totalPlaycount.toString()
+                                                    }
+                                                } else "0",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
+                                        }
+
+                                        // 2. CENTER BIASED CONTENT (Mode Icons)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.constrainAs(centerModeIcons) {
+                                                // Anchor the right end of this row to the guideline at 55%
+                                                end.linkTo(biasGuideline)
+                                                top.linkTo(parent.top)
+                                                bottom.linkTo(parent.bottom)
+                                            }
+                                        ) {
+                                            modes.keys.forEach { mode ->
+                                                val iconRes = when (mode) {
+                                                    "osu" -> R.drawable.std_icon
+                                                    "taiko" -> R.drawable.taiko_icon
+                                                    "mania" -> R.drawable.mania_icon
+                                                    "fruits" -> R.drawable.cth_icon
+                                                    else -> null
+                                                }
+
+                                                iconRes?.let {
+                                                    Icon(
+                                                        painter = painterResource(id = it),
+                                                        contentDescription = modeLabel(mode),
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                }
                                             }
                                         }
-                                    }
-                                    Row(
-                                        modifier = Modifier.padding(start=4.dp, end=2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ){
-                                        Text(
-                                            text = stringResource(id = R.string.info_diff_count, list.size),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                        Spacer(modifier=Modifier.weight(1f))
+
+                                        // 3. RIGHT CONTENT (Star Rating)
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier
+                                                .constrainAs(rightStarRating) {
+                                                    end.linkTo(parent.end)
+                                                    top.linkTo(parent.top)
+                                                    bottom.linkTo(parent.bottom)
+                                                }
+                                                // ... (Keep your existing background logic for star rating) ...
                                                 .then(
-                                                    if (list.size == 1) {
+                                                    if (sortedList.size == 1) {
                                                         // Single difficulty: solid color background
                                                         Modifier.background(
                                                             color = getStarRatingColor(starMin),
@@ -284,9 +301,7 @@ fun InfoPopup(
                                                         if (gradientColors.size >= 2) {
                                                             val colorStops = createGradientStops(gradientColors)
                                                             Modifier.background(
-                                                                brush = Brush.horizontalGradient(
-                                                                    colorStops = colorStops
-                                                                ),
+                                                                brush = Brush.horizontalGradient(*colorStops),
                                                                 shape = RoundedCornerShape(8.dp)
                                                             )
                                                         } else {
@@ -300,7 +315,7 @@ fun InfoPopup(
                                                 )
                                                 .padding(start=9.dp,end=2.dp,top=1.dp,bottom=1.dp)
                                         ) {
-                                            if (list.size == 1) {
+                                            if (sortedList.size == 1) {
                                                 // Single difficulty: background matches difficulty
                                                 Text(
                                                     text = "%.1f".format(starMin),
@@ -330,6 +345,25 @@ fun InfoPopup(
                                                 )
                                             }
                                         }
+                                    }
+                                    
+                                    Row(
+                                        modifier = Modifier.padding(start=4.dp, end=4.dp, top=2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ){
+                                        Text(
+                                            text = stringResource(id = R.string.search_author_prefix, author),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+
+                                        Spacer(modifier = Modifier.weight(1f)) 
+
+                                        Text(
+                                            text = stringResource(id = R.string.info_diff_count, sortedList.size),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )                                        
                                     }
                                 }
                             }

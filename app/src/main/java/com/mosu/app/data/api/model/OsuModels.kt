@@ -40,7 +40,8 @@ data class BeatmapsetCompact(
     @SerializedName("artist") val artist: String,
     @SerializedName("creator") val creator: String,
     @SerializedName("covers") val covers: Covers,
-    @SerializedName("genre_id") val genreId: Int? = null
+    @SerializedName("genre_id") val genreId: Int? = null,
+    @SerializedName("status") val status: String
 )
 
 data class Covers(
@@ -54,7 +55,9 @@ data class BeatmapDetail(
     @SerializedName("mode") val mode: String,
     @SerializedName("difficulty_rating") val difficultyRating: Float,
     @SerializedName("url") val url: String?,
-    @SerializedName("beatmapset_id") val beatmapsetId: Long
+    @SerializedName("beatmapset_id") val beatmapsetId: Long,
+    @SerializedName("playcount") val playCount: Int,
+    @SerializedName("status") val status: String
 )
 
 data class BeatmapsetDetail(
@@ -63,7 +66,8 @@ data class BeatmapsetDetail(
     @SerializedName("artist") val artist: String,
     @SerializedName("creator") val creator: String,
     @SerializedName("covers") val covers: Covers,
-    @SerializedName("beatmaps") val beatmaps: List<BeatmapDetail> = emptyList()
+    @SerializedName("beatmaps") val beatmaps: List<BeatmapDetail> = emptyList(),
+    @SerializedName("status") val status: String
 )
 
 data class SearchResponse(

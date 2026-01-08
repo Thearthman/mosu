@@ -199,8 +199,46 @@ fun SearchScreen(
     var infoError by remember { mutableStateOf<String?>(null) }
     var infoTarget by remember { mutableStateOf<BeatmapsetCompact?>(null) }
     var infoBeatmaps by remember { mutableStateOf<List<BeatmapDetail>>(emptyList()) }
-    var infoMergedSetIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+
+    // Effect to fetch info details when target changes and dialog is visible
+    LaunchedEffect(infoTarget, infoDialogVisible) {
+        if (infoDialogVisible && infoTarget != null) {
+            val target = infoTarget!!
+            infoLoading = true
+            infoError = null
+            infoBeatmaps = emptyList()
+            infoSetCreators = emptyMap()
+
+            try {
+                // Search for all beatmapsets with matching title/artist from osu API
+                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(target.title, target.artist)
+
+                val allBeatmaps = mutableListOf<BeatmapDetail>()
+                val creators = mutableMapOf<Long, String>()
+
+                matchingBeatmapsets.forEach { beatmapset ->
+                    try {
+                        val detail = repository.getBeatmapsetDetail(
+                            beatmapsetId = beatmapset.id
+                        )
+                        allBeatmaps += detail.beatmaps
+                        creators[detail.id] = detail.creator
+                    } catch (e: Exception) {
+                        // keep going, surface error at end
+                        infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
+                    }
+                }
+
+                infoBeatmaps = allBeatmaps
+                infoSetCreators = creators
+            } catch (e: Exception) {
+                infoError = e.message ?: context.getString(R.string.search_info_load_error)
+            } finally {
+                infoLoading = false
+            }
+        }
+    }
 
 
 
@@ -754,45 +792,8 @@ fun SearchScreen(
                                         Log.d("SearchScreen", "Long press detected, showing info dialog")
                                         // Temporarily remove vibration to test if it's the cause of crash
                                         // vibrate()
-                                        infoDialogVisible = true
-                                        infoLoading = true
-                                        infoError = null
                                         infoTarget = map
-                                        infoBeatmaps = emptyList()
-                                        infoMergedSetIds = emptyList()
-                                        infoSetCreators = emptyMap()
-                                        scope.launch {
-                                            try {
-                                                // Search for all beatmapsets with matching title/artist from osu API
-                                                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(map.title, map.artist)
-
-                                                val allBeatmaps = mutableListOf<BeatmapDetail>()
-                                                val creators = mutableMapOf<Long, String>()
-                                                val setIds = mutableListOf<Long>()
-
-                                                matchingBeatmapsets.forEach { beatmapset ->
-                                                    try {
-                                                        val detail = repository.getBeatmapsetDetail(
-                                                            beatmapsetId = beatmapset.id
-                                                        )
-                                                        allBeatmaps += detail.beatmaps
-                                                        creators[detail.id] = detail.creator
-                                                        setIds.add(detail.id)
-                                                    } catch (e: Exception) {
-                                                        // keep going, surface error at end
-                                                        infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
-                                                    }
-                                                }
-
-                                                infoMergedSetIds = setIds
-                                                infoBeatmaps = allBeatmaps
-                                                infoSetCreators = creators
-                                            } catch (e: Exception) {
-                                                infoError = e.message ?: context.getString(R.string.search_info_load_error)
-                                            } finally {
-                                                infoLoading = false
-                                            }
-                                        }
+                                        infoDialogVisible = true
                                     }
                                 )
                                 .padding(vertical = 8.dp)
@@ -1044,45 +1045,8 @@ fun SearchScreen(
                                             Log.d("SearchScreen", "Long press detected, showing info dialog")
                                             // Temporarily remove vibration to test if it's the cause of crash
                                             // vibrate()
-                                            infoDialogVisible = true
-                                            infoLoading = true
-                                            infoError = null
                                             infoTarget = map
-                                            infoBeatmaps = emptyList()
-                                            infoMergedSetIds = emptyList()
-                                            infoSetCreators = emptyMap()
-                                            scope.launch {
-                                                try {
-                                                    // Search for all beatmapsets with matching title/artist from osu API
-                                                    val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(map.title, map.artist)
-
-                                                    val allBeatmaps = mutableListOf<BeatmapDetail>()
-                                                    val creators = mutableMapOf<Long, String>()
-                                                    val setIds = mutableListOf<Long>()
-
-                                                    matchingBeatmapsets.forEach { beatmapset ->
-                                                        try {
-                                                            val detail = repository.getBeatmapsetDetail(
-                                                                beatmapsetId = beatmapset.id
-                                                            )
-                                                            allBeatmaps += detail.beatmaps
-                                                            creators[detail.id] = detail.creator
-                                                            setIds.add(detail.id)
-                                                        } catch (e: Exception) {
-                                                            // keep going, surface error at end
-                                                            infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
-                                                        }
-                                                    }
-
-                                                    infoMergedSetIds = setIds
-                                                    infoBeatmaps = allBeatmaps
-                                                    infoSetCreators = creators
-                                                } catch (e: Exception) {
-                                                    infoError = e.message ?: context.getString(R.string.search_info_load_error)
-                                                } finally {
-                                                    infoLoading = false
-                                                }
-                                            }
+                                            infoDialogVisible = true
                                         }
                                     )
                                     .padding(vertical = 8.dp)

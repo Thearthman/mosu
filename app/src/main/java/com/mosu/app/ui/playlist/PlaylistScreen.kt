@@ -137,7 +137,6 @@ fun PlaylistScreen(
     var infoError by remember { mutableStateOf<String?>(null) }
     var infoTarget by remember { mutableStateOf<BeatmapsetCompact?>(null) }
     var infoBeatmaps by remember { mutableStateOf<List<BeatmapDetail>>(emptyList()) }
-    var infoMergedSetIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
 
     val scope = rememberCoroutineScope()
@@ -154,25 +153,29 @@ fun PlaylistScreen(
                 coverUrl = "", // Not available in local data
                 listUrl = ""   // Not available in local data
             ),
-            genreId = track.genreId
+            genreId = track.genreId,
+            status = "unknown"
         )
 
-        infoDialogVisible = true
-        infoLoading = true
-        infoError = null
         infoTarget = beatmapset
-        infoBeatmaps = emptyList()
-        infoMergedSetIds = emptyList()
-        infoSetCreators = emptyMap()
+        infoDialogVisible = true
+    }
 
-        scope.launch {
+    // Effect to fetch info details when target changes and dialog is visible
+    LaunchedEffect(infoTarget, infoDialogVisible) {
+        if (infoDialogVisible && infoTarget != null) {
+            val target = infoTarget!!
+            infoLoading = true
+            infoError = null
+            infoBeatmaps = emptyList()
+            infoSetCreators = emptyMap()
+
             try {
                 // Search for all beatmapsets with matching title/artist from osu API
-                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(track.title, track.artist)
+                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(target.title, target.artist)
 
                 val allBeatmaps = mutableListOf<BeatmapDetail>()
                 val creators = mutableMapOf<Long, String>()
-                val setIds = mutableListOf<Long>()
 
                 matchingBeatmapsets.forEach { beatmapset ->
                     try {
@@ -181,14 +184,12 @@ fun PlaylistScreen(
                         )
                         allBeatmaps += detail.beatmaps
                         creators[detail.id] = detail.creator
-                        setIds.add(detail.id)
                     } catch (e: Exception) {
                         // keep going, surface error at end
                         infoError = "Failed to load some beatmap details"
                     }
                 }
 
-                infoMergedSetIds = setIds
                 infoBeatmaps = allBeatmaps
                 infoSetCreators = creators
             } catch (e: Exception) {

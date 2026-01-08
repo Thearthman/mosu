@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -77,7 +77,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -98,6 +97,8 @@ import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.domain.download.DownloadState
+import com.mosu.app.ui.components.InfoPopup
+import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.domain.download.ZipExtractor
 import com.mosu.app.domain.download.CoverDownloadService
 import com.mosu.app.domain.search.BeatmapSearchService
@@ -129,6 +130,7 @@ fun SearchScreen(
     accessToken: String?,
     settingsManager: com.mosu.app.data.SettingsManager,
     musicController: com.mosu.app.player.MusicController,
+    beatmapDownloader: BeatmapDownloader,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {}
 ) {
@@ -190,7 +192,6 @@ fun SearchScreen(
     val extractor = remember { ZipExtractor(context) }
     val coverDownloadService = remember { CoverDownloadService(context) }
     val searchService = remember { BeatmapSearchService(repository, db, context) }
-    val uriHandler = LocalUriHandler.current
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
 
     var infoDialogVisible by remember { mutableStateOf(false) }
@@ -704,7 +705,7 @@ fun SearchScreen(
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                         )
-                                        Divider(
+                                        HorizontalDivider(
                                             modifier = Modifier.padding(top = 4.dp),
                                             color = MaterialTheme.colorScheme.outlineVariant
                                         )
@@ -850,7 +851,7 @@ fun SearchScreen(
                                     Column(modifier = Modifier.padding(top = 4.dp)) {
                                         if (downloadProgress.status == "Downloading" && downloadProgress.progress < 100) {
                                             LinearProgressIndicator(
-                                                progress = downloadProgress.progress / 100f,
+                                                progress = { downloadProgress.progress / 100f },
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         } else {
@@ -1134,7 +1135,7 @@ fun SearchScreen(
                                         Column(modifier = Modifier.padding(top = 4.dp)) {
                                             if (downloadProgress.status == "Downloading" && downloadProgress.progress < 100) {
                                                 LinearProgressIndicator(
-                                                    progress = downloadProgress.progress / 100f,
+                                                    progress = { downloadProgress.progress / 100f },
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             } else {
@@ -1347,218 +1348,38 @@ fun SearchScreen(
         if (infoDialogVisible && infoTarget != null) {
             val target = infoTarget!!
             val downloaded = downloadedBeatmapSetIds.contains(target.id)
-            val grouped = infoBeatmaps.groupBy { it.mode }
-            AlertDialog(
-                onDismissRequest = { infoDialogVisible = false },
-                title = {
-                    Column {
-                        Text(
-                            text = target.title,
-                            style = MaterialTheme.typography.titleLarge,
-                            maxLines = 2
-                        )
-                        Text(
-                            text = target.artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                },
-                text = {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 400.dp),
-                        state = rememberLazyListState()
-                    ) {
-                        if (infoCoverEnabled) {
-                            item {
-                                AsyncImage(
-                                    model = target.covers.listUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(160.dp)
-                                        .clip(RoundedCornerShape(8.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
+            // Info Popup
+            InfoPopup(
+                visible = true,
+                onDismiss = { infoDialogVisible = false },
+                target = target,
+                beatmaps = infoBeatmaps,
+                loading = infoLoading,
+                error = infoError,
+                setCreators = infoSetCreators,
+                downloaded = downloaded,
+                config = InfoPopupConfig(
+                    infoCoverEnabled = infoCoverEnabled,
+                    onDownloadClick = { beatmapset ->
+                        scope.launch {
+                            beatmapDownloader.downloadBeatmap(beatmapset.id)
+                        }
+                    },
+                    onRestoreClick = { beatmapset ->
+                        scope.launch {
+                            beatmapDownloader.downloadBeatmap(beatmapset.id)
+                        }
+                    },
+                    onPlayClick = if (downloaded) { beatmapset ->
+                        scope.launch {
+                            val tracks = db.beatmapDao().getTracksForSet(beatmapset.id)
+                            if (tracks.isNotEmpty()) {
+                                val allDownloaded = db.beatmapDao().getAllBeatmaps().first()
+                                musicController.playSong(tracks[0], allDownloaded)
                             }
                         }
-                        
-                        if (infoLoading) {
-                            item {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                                }
-                            }
-                        } else if (infoError != null) {
-                            item {
-                                Text(
-                                    text = infoError ?: "",
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        } else if (grouped.isEmpty()) {
-                            item {
-                                Text(
-                                    text = stringResource(id = R.string.info_no_details),
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                            }
-                        } else {
-                            val bySet = infoBeatmaps.groupBy { it.beatmapsetId }
-                            items(bySet.entries.toList()) { (setId, list) ->
-                                val modes = list.groupBy { it.mode }
-                                val starMin = list.minOfOrNull { it.difficultyRating } ?: 0f
-                                val starMax = list.maxOfOrNull { it.difficultyRating } ?: 0f
-                                val url = list.firstOrNull()?.url ?: "https://osu.ppy.sh/beatmapsets/$setId"
-                                val author = infoSetCreators[setId] ?: target.creator
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clickable { uriHandler.openUri(url) }
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = stringResource(id = R.string.search_author_prefix, author),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.secondary
-                                                )
-                                                Spacer(modifier = Modifier.weight(1f))
-                                                // Add gamemode icons at the rightmost position
-                                                modes.keys.forEach { mode ->
-                                                    val iconRes = when (mode) {
-                                                        "osu" -> R.drawable.std_icon
-                                                        "taiko" -> R.drawable.taiko_icon
-                                                        "mania" -> R.drawable.mania_icon
-                                                        "fruits" -> R.drawable.cth_icon
-                                                        else -> null
-                                                    }
-                                                    iconRes?.let {
-                                                        Spacer(modifier = Modifier.width(4.dp))
-                                                        Icon(
-                                                            painter = painterResource(id = it),
-                                                            contentDescription = modeLabel(mode),
-                                                            modifier = Modifier.size(16.dp),
-                                                            tint = MaterialTheme.colorScheme.onSurface
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                            Row(
-                                                modifier = Modifier.padding(start=4.dp, end=2.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ){
-                                                Text(
-                                                    text = stringResource(id = R.string.info_diff_count, list.size),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.secondary
-                                                )
-                                                Spacer(modifier=Modifier.weight(1f))
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier
-                                                        .then(
-                                                            if (list.size == 1) {
-                                                                // Single difficulty: solid color background
-                                                                Modifier.background(
-                                                                    color = getStarRatingColor(starMin),
-                                                                    shape = RoundedCornerShape(8.dp)
-                                                                )
-                                                            } else {
-                                                                // Multiple difficulties: gradient background if range spans multiple colors, solid otherwise
-                                                                val gradientColors = getGradientColorsForRange(starMin, starMax)
-                                                                if (gradientColors.size >= 2) {
-                                                                    val colorStops = createGradientStops(gradientColors)
-                                                                    Modifier.background(
-                                                                        brush = Brush.horizontalGradient(
-                                                                            colorStops = colorStops
-                                                                        ),
-                                                                        shape = RoundedCornerShape(8.dp)
-                                                                    )
-                                                                } else {
-                                                                    // Fall back to solid color if range is too narrow
-                                                                    Modifier.background(
-                                                                        color = gradientColors.firstOrNull() ?: getStarRatingColor(starMax),
-                                                                        shape = RoundedCornerShape(8.dp)
-                                                                    )
-                                                                }
-                                                            }
-                                                        )
-                                                        .padding(start=9.dp,end=2.dp,top=1.dp,bottom=1.dp)
-                                                ) {
-                                                    if (list.size == 1) {
-                                                        // Single difficulty: background matches difficulty
-                                                        Text(
-                                                            text = "%.1f".format(starMin),
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            color = Color.White,
-                                                            modifier = Modifier.padding(end=4.dp)
-                                                        )
-                                                        Icon(
-                                                            imageVector = Icons.Filled.Star,
-                                                            contentDescription = "Star rating",
-                                                            modifier = Modifier.size(16.dp),
-                                                            tint = Color.White
-                                                        )
-                                                    } else {
-                                                        // Range: background matches max difficulty
-                                                        Text(
-                                                            text = "%.1f - %.1f".format(starMin, starMax),
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            color = Color.White,
-                                                            modifier = Modifier.padding(end=4.dp)
-                                                        )
-                                                        Icon(
-                                                            imageVector = Icons.Filled.Star,
-                                                            contentDescription = "Star rating",
-                                                            modifier = Modifier.size(16.dp),
-                                                            tint = Color.White
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    if (downloaded) {
-                        TextButton(
-                            onClick = {
-                                scope.launch {
-                                    val tracks = db.beatmapDao().getTracksForSet(target.id)
-                                    if (tracks.isNotEmpty()) {
-                                        val allDownloaded =
-                                            db.beatmapDao().getAllBeatmaps().first()
-                                        musicController.playSong(tracks[0], allDownloaded)
-                                    }
-                                }
-                            }
-                        ) {
-                            Text(stringResource(id = R.string.search_play))
-                        }
-                    }
-                },
-                dismissButton = {}
+                    } else null
+                )
             )
         }
         

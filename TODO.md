@@ -11,8 +11,10 @@
 1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. [important]
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 3. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-4. Make long press to call out info popup a feature for all song item regardless of it's in search view or library or playlist view
 5. include ranked status in info popup [important]
+
+# Pending Refactors
+1. Refactor all songlists into the same file SongLists.kt
 
 # New Feature
 0. Core Feature
@@ -94,6 +96,7 @@
 16. Implemented fixed height (66dp) and text truncation with ellipsis for SwipeableSongList items.
 17. Added compact "tiny config" for SelectableSongItem with optimized spacing and background for dialog displays.
 18. Added fixed height (56dp) and text ellipsis overflow handling to TrackRowWithSwipe for consistent UI.
+19. Implemented long press info popup feature across all song items in Search, Library, and Playlist views with refactored reusable InfoPopup component.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

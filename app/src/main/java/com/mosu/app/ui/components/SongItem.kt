@@ -1,7 +1,9 @@
 package com.mosu.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,10 +38,12 @@ data class SongItemData(
 /**
  * A reusable component for displaying a song item with cover art, title, and artist
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongItem(
     song: SongItemData,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     backgroundColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     showDifficulty: Boolean = false,
@@ -54,7 +58,10 @@ fun SongItem(
             .fillMaxWidth()
             .height(66.dp) // Fixed height to ensure consistent item height
             .background(backgroundColor)
-            .clickable { onClick() }
+            .combinedClickable(
+                onClick = { onClick() },
+                onLongClick = onLongClick
+            )
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

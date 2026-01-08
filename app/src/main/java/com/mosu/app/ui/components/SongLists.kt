@@ -30,13 +30,15 @@ sealed class SongListActions {
     data class LibraryActions(
         val onDelete: (SongItemData) -> Unit,
         val onAddToPlaylist: (SongItemData) -> Unit,
-        val onClick: (SongItemData) -> Unit = { }
+        val onClick: (SongItemData) -> Unit = { },
+        val onLongClick: (SongItemData) -> Unit = { }
     ) : SongListActions()
 
     data class PlaylistActions(
         val onRemove: (SongItemData) -> Unit,
         val onAddToOtherPlaylist: (SongItemData) -> Unit,
         val onClick: (SongItemData) -> Unit = { },
+        val onLongClick: (SongItemData) -> Unit = { },
         val isUndownloaded: (SongItemData) -> Boolean = { false }
     ) : SongListActions()
 }
@@ -93,6 +95,7 @@ fun SwipeableSongList(
                     SwipeToDismissSongItem(
                         song = song,
                         onClick = { actions.onClick(song) },
+                        onLongClick = { actions.onLongClick(song) },
                         swipeActions = SwipeActions(
                             onDelete = { actions.onDelete(song) },
                             onAddToPlaylist = { actions.onAddToPlaylist(song) }
@@ -111,6 +114,7 @@ fun SwipeableSongList(
                     SwipeToDismissSongItem(
                         song = song,
                         onClick = { actions.onClick(song) },
+                        onLongClick = { actions.onLongClick(song) },
                         swipeActions = SwipeActions(
                             onDelete = { actions.onRemove(song) },
                             onAddToPlaylist = { actions.onAddToOtherPlaylist(song) }

@@ -182,6 +182,7 @@ fun SwipeToDismissWrapper(
 fun SwipeToDismissSongItem(
     song: SongItemData,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     swipeActions: SwipeActions,
     modifier: Modifier = Modifier,
     highlight: Boolean = false,
@@ -205,8 +206,9 @@ fun SwipeToDismissSongItem(
             song = song,
             // FIX: Pass the real onClick here directly
             onClick = onClick,
+            onLongClick = onLongClick,
             // FIX: Remove Modifier.clickable { onClick() } to avoid conflict
-            modifier = Modifier, 
+            modifier = Modifier,
             backgroundColor = Color.Transparent, // Background handled by wrapper
             coverStartPadding = coverStartPadding,
             textEndPadding = textEndPadding

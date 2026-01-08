@@ -67,6 +67,7 @@ import com.mosu.app.data.api.RetrofitClient
 import com.mosu.app.data.api.TokenAuthenticator
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
+import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
@@ -113,6 +114,7 @@ class MainActivity : ComponentActivity() {
 
         val db = AppDatabase.getDatabase(this)
         val repository = OsuRepository(db.searchCacheDao())
+        val beatmapDownloader = BeatmapDownloader(this)
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
         val accountManager = AccountManager(this, tokenManager)
@@ -128,6 +130,7 @@ class MainActivity : ComponentActivity() {
                     tokenManager = tokenManager,
                     accountManager = accountManager,
                     settingsManager = settingsManager,
+                    beatmapDownloader = beatmapDownloader,
                     redirectUri = redirectUri
                 )
             }
@@ -149,6 +152,7 @@ fun MainScreen(
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
+    beatmapDownloader: BeatmapDownloader,
     redirectUri: String
 ) {
     val navController = rememberNavController()
@@ -370,10 +374,10 @@ fun MainScreen(
                         .padding(bottom = contentBottomPadding) // Manual padding for MiniPlayer + NavBar
                 ) {
                     composable("library") {
-                        LibraryScreen(db, musicController)
+                        LibraryScreen(db, musicController, repository, beatmapDownloader)
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController)
+                        PlaylistScreen(db, musicController, repository, beatmapDownloader)
                     }
                     composable("search") {
                         SearchScreen(
@@ -382,6 +386,7 @@ fun MainScreen(
                             accessToken = accessToken,
                             settingsManager = settingsManager,
                             musicController = musicController,
+                            beatmapDownloader = beatmapDownloader,
                             scrollToTop = scrollSearchToTop,
                             onScrolledToTop = { scrollSearchToTop = false }
                         )

@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -63,16 +64,23 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mosu.app.data.api.model.BeatmapDetail
+import com.mosu.app.data.api.model.BeatmapsetCompact
+import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
+import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.data.db.PlaylistTrackWithBeatmap
+import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.R
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.AlbumGroup
 import com.mosu.app.ui.components.AlbumGroupActions
 import com.mosu.app.ui.components.AlbumGroupData
+import com.mosu.app.ui.components.InfoPopup
+import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.SongItemData
@@ -87,13 +95,16 @@ import java.io.File
 @Composable
 fun PlaylistScreen(
     db: AppDatabase,
-    musicController: MusicController
+    musicController: MusicController,
+    repository: OsuRepository,
+    beatmapDownloader: BeatmapDownloader
 ) {
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
     val downloadedTracks by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
     val playlistTrackRefs by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val beatmapBySetId = remember(downloadedTracks) { downloadedTracks.associateBy { it.beatmapSetId } }
+    val downloadedBeatmapSetIds = remember(downloadedTracks) { downloadedTracks.map { it.beatmapSetId }.toSet() }
     val playlistMembership = playlistTrackRefs
         .groupBy { it.playlistId }
         .mapValues { entry -> entry.value.map { it.beatmapSetId }.toSet() }
@@ -120,7 +131,73 @@ fun PlaylistScreen(
     var dialogSelection by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val dialogSelectionCache = remember { mutableStateMapOf<Long, Set<Long>>() }
 
+    // Info Popup State
+    var infoDialogVisible by remember { mutableStateOf(false) }
+    var infoLoading by remember { mutableStateOf(false) }
+    var infoError by remember { mutableStateOf<String?>(null) }
+    var infoTarget by remember { mutableStateOf<BeatmapsetCompact?>(null) }
+    var infoBeatmaps by remember { mutableStateOf<List<BeatmapDetail>>(emptyList()) }
+    var infoMergedSetIds by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+
     val scope = rememberCoroutineScope()
+
+    // Long press handler for song items
+    val onSongLongPress: (BeatmapEntity) -> Unit = { track ->
+        // Create a BeatmapsetCompact from the track data
+        val beatmapset = BeatmapsetCompact(
+            id = track.beatmapSetId,
+            title = track.title,
+            artist = track.artist,
+            creator = track.creator,
+            covers = Covers(
+                coverUrl = "", // Not available in local data
+                listUrl = ""   // Not available in local data
+            ),
+            genreId = track.genreId
+        )
+
+        infoDialogVisible = true
+        infoLoading = true
+        infoError = null
+        infoTarget = beatmapset
+        infoBeatmaps = emptyList()
+        infoMergedSetIds = emptyList()
+        infoSetCreators = emptyMap()
+
+        scope.launch {
+            try {
+                // Search for all beatmapsets with matching title/artist from osu API
+                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(track.title, track.artist)
+
+                val allBeatmaps = mutableListOf<BeatmapDetail>()
+                val creators = mutableMapOf<Long, String>()
+                val setIds = mutableListOf<Long>()
+
+                matchingBeatmapsets.forEach { beatmapset ->
+                    try {
+                        val detail = repository.getBeatmapsetDetail(
+                            beatmapsetId = beatmapset.id
+                        )
+                        allBeatmaps += detail.beatmaps
+                        creators[detail.id] = detail.creator
+                        setIds.add(detail.id)
+                    } catch (e: Exception) {
+                        // keep going, surface error at end
+                        infoError = "Failed to load some beatmap details"
+                    }
+                }
+
+                infoMergedSetIds = setIds
+                infoBeatmaps = allBeatmaps
+                infoSetCreators = creators
+            } catch (e: Exception) {
+                infoError = "Failed to load beatmap information"
+            } finally {
+                infoLoading = false
+            }
+        }
+    }
 
     // Handle back gesture when inside a playlist - takes priority over main navigation
     BackHandler(enabled = selectedPlaylistId != null) {
@@ -234,7 +311,7 @@ fun PlaylistScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { selectedPlaylistId = null }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(id = R.string.playlist_cd_back))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.playlist_cd_back))
                 }
                 Column {
                     Text(
@@ -330,12 +407,23 @@ fun PlaylistScreen(
                         onClick = { songData ->
                             // Find the beatmap entity for this song
                             val beatmapEntity = playlistTracksWithStatus
-                                .find {             
-                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id  
+                                .find {
+                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id
                                     }
                                 ?.toBeatmapEntity()
                             if (beatmapEntity != null) {
                                 musicController.playSong(beatmapEntity, playlistTracks)
+                            }
+                        },
+                        onLongClick = { songData ->
+                            // Find the beatmap entity for this song
+                            val beatmapEntity = playlistTracksWithStatus
+                                .find {
+                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id
+                                    }
+                                ?.toBeatmapEntity()
+                            if (beatmapEntity != null) {
+                                onSongLongPress(beatmapEntity)
                             }
                         },
                         isUndownloaded = { songData ->
@@ -477,6 +565,32 @@ fun PlaylistScreen(
             onDismiss = { showPlaylistDialog = false }
         )
     }
+
+    // Info Popup
+    InfoPopup(
+        visible = infoDialogVisible,
+        onDismiss = { infoDialogVisible = false },
+        target = infoTarget,
+        beatmaps = infoBeatmaps,
+        loading = infoLoading,
+        error = infoError,
+        setCreators = infoSetCreators,
+        downloaded = infoTarget?.let { downloadedBeatmapSetIds.contains(it.id) } ?: false,
+        config = InfoPopupConfig(
+            infoCoverEnabled = false, // Disable cover in playlist popup
+            showConfirmButton = false, // Hide confirm button in playlist
+            onDownloadClick = { beatmapset ->
+                scope.launch {
+                    beatmapDownloader.downloadBeatmap(beatmapset.id)
+                }
+            },
+            onRestoreClick = { beatmapset ->
+                scope.launch {
+                    beatmapDownloader.downloadBeatmap(beatmapset.id)
+                }
+            }
+        )
+    )
 }
 
 @Composable

@@ -210,33 +210,16 @@ fun SearchScreen(
             infoBeatmaps = emptyList()
             infoSetCreators = emptyMap()
 
-            try {
-                // Search for all beatmapsets with matching title/artist from osu API
-                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(target.title, target.artist)
-
-                val allBeatmaps = mutableListOf<BeatmapDetail>()
-                val creators = mutableMapOf<Long, String>()
-
-                matchingBeatmapsets.forEach { beatmapset ->
-                    try {
-                        val detail = repository.getBeatmapsetDetail(
-                            beatmapsetId = beatmapset.id
-                        )
-                        allBeatmaps += detail.beatmaps
-                        creators[detail.id] = detail.creator
-                    } catch (e: Exception) {
-                        // keep going, surface error at end
-                        infoError = e.message ?: context.getString(R.string.search_info_load_partial_error)
-                    }
-                }
-
-                infoBeatmaps = allBeatmaps
+            val result = searchService.loadInfoPopup(target.title, target.artist)
+            
+            result.onSuccess { (beatmaps, creators) ->
+                infoBeatmaps = beatmaps
                 infoSetCreators = creators
-            } catch (e: Exception) {
+            }.onFailure { e ->
                 infoError = e.message ?: context.getString(R.string.search_info_load_error)
-            } finally {
-                infoLoading = false
             }
+            
+            infoLoading = false
         }
     }
 

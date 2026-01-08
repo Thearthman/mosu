@@ -168,6 +168,26 @@ class BeatmapSearchService(
         return Triple(filteredGroupedItems, mergeGroups, filteredTimestamps)
     }
 
+    suspend fun loadInfoPopup(
+        title: String,
+        artist: String
+    ): Result<Pair<List<com.mosu.app.data.api.model.BeatmapDetail>, Map<Long, String>>> = withContext(Dispatchers.IO) {
+        try {
+            val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(title, artist)
+            val allBeatmaps = mutableListOf<com.mosu.app.data.api.model.BeatmapDetail>()
+            val creators = mutableMapOf<Long, String>()
+
+            matchingBeatmapsets.forEach { beatmapset ->
+                allBeatmaps += beatmapset.beatmaps
+                creators[beatmapset.id] = beatmapset.creator
+            }
+
+            Result.success(allBeatmaps to creators)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun groupRecentByTimePeriods(recentPlays: List<RecentPlayEntity>): List<RecentItem> {
         if (recentPlays.isEmpty()) return emptyList()
 

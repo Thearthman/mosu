@@ -41,7 +41,8 @@ data class BeatmapsetCompact(
     @SerializedName("creator") val creator: String,
     @SerializedName("covers") val covers: Covers,
     @SerializedName("genre_id") val genreId: Int? = null,
-    @SerializedName("status") val status: String
+    @SerializedName("status") val status: String,
+    @SerializedName("beatmaps") val beatmaps: List<BeatmapDetail> = emptyList()
 )
 
 data class Covers(

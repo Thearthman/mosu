@@ -43,6 +43,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
+import com.mosu.app.domain.search.BeatmapSearchService
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -140,6 +142,8 @@ fun PlaylistScreen(
     var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
 
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val searchService = remember { BeatmapSearchService(repository, db, context) }
 
     // Long press handler for song items
     val onSongLongPress: (BeatmapEntity) -> Unit = { track ->
@@ -154,7 +158,8 @@ fun PlaylistScreen(
                 listUrl = ""   // Not available in local data
             ),
             genreId = track.genreId,
-            status = "unknown"
+            status = "unknown",
+            beatmaps = emptyList()
         )
 
         infoTarget = beatmapset
@@ -170,33 +175,16 @@ fun PlaylistScreen(
             infoBeatmaps = emptyList()
             infoSetCreators = emptyMap()
 
-            try {
-                // Search for all beatmapsets with matching title/artist from osu API
-                val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(target.title, target.artist)
-
-                val allBeatmaps = mutableListOf<BeatmapDetail>()
-                val creators = mutableMapOf<Long, String>()
-
-                matchingBeatmapsets.forEach { beatmapset ->
-                    try {
-                        val detail = repository.getBeatmapsetDetail(
-                            beatmapsetId = beatmapset.id
-                        )
-                        allBeatmaps += detail.beatmaps
-                        creators[detail.id] = detail.creator
-                    } catch (e: Exception) {
-                        // keep going, surface error at end
-                        infoError = "Failed to load some beatmap details"
-                    }
-                }
-
-                infoBeatmaps = allBeatmaps
+            val result = searchService.loadInfoPopup(target.title, target.artist)
+            
+            result.onSuccess { (beatmaps, creators) ->
+                infoBeatmaps = beatmaps
                 infoSetCreators = creators
-            } catch (e: Exception) {
-                infoError = "Failed to load beatmap information"
-            } finally {
-                infoLoading = false
+            }.onFailure { e ->
+                infoError = e.message ?: context.getString(R.string.search_info_load_error)
             }
+            
+            infoLoading = false
         }
     }
 

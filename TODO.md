@@ -8,7 +8,6 @@
 7. Weird it requires include unranked to be false to refresh all filter mode query. [important]
 
 # UIUX improvement
-1. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. Include ranked status in info popup [important]
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 3. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
 
@@ -96,6 +95,7 @@
 17. Added compact "tiny config" for SelectableSongItem with optimized spacing and background for dialog displays.
 18. Added fixed height (56dp) and text ellipsis overflow handling to TrackRowWithSwipe for consistent UI.
 19. Implemented long press info popup feature across all song items in Search, Library, and Playlist views with refactored reusable InfoPopup component.
+20. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. Include ranked status in info popup 
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -128,6 +128,7 @@
 28. Navbar and miniplayer design did not account for system navigation bar presence - fixed positioning to maintain consistent 80.dp gap above navbar regardless of system nav bar
 29. Fixed SwipeToDismissBox background colors and action handling for both left and right swipes.
 30. Restored album collapse functionality when clicking expanded album headers.
+31. Fixed extremely slow InfoPopup loading by utilizing nested beatmap data in search results instead of making sequential API calls for each beatmapset, reducing load times from ~25s to ~1s.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

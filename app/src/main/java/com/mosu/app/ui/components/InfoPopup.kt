@@ -325,18 +325,22 @@ fun InfoPopup(
                                                         fontWeight = FontWeight.Bold, // Force Normal weight to ensure Monospace applies
                                                         fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
                                                     ),
-                                                    color = if (starMin>3f){
+                                                    color = if (starMin>3.25f){
                                                         Color.White
                                                     }else{
                                                         Color.Gray
                                                     },
-                                                    modifier = Modifier.padding(end = 4.dp)
+//                                                    modifier = Modifier.padding(end = 1.dp)
                                                 )
                                                 Icon(
                                                     imageVector = Icons.Filled.Star,
                                                     contentDescription = "Star rating",
                                                     modifier = Modifier.size(16.dp),
-                                                    tint = Color.White
+                                                    tint = if (starMin>3.25f){
+                                                        Color.White
+                                                    }else{
+                                                        Color.Gray
+                                                    },
                                                 )
                                             } else {
                                                 // Range: background matches max difficulty
@@ -347,7 +351,7 @@ fun InfoPopup(
                                                         fontWeight = FontWeight.Bold, // Force Normal weight to ensure Monospace applies
                                                         fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
                                                     ),
-                                                    color = if (starMin>3f){
+                                                    color = if (starMin>3.25f){
                                                         Color.White
                                                     }else{
                                                         Color.Gray
@@ -360,18 +364,22 @@ fun InfoPopup(
                                                         fontWeight = FontWeight.Bold, // Force Normal weight to ensure Monospace applies
                                                         fontFeatureSettings = "tnum"    // Force tabular (fixed-width) numbers
                                                     ),
-                                                    color = if (starMax>3f){
+                                                    color = if (starMax>3.25f){
                                                         Color.White
                                                     }else{
                                                         Color.Gray
                                                     },
-                                                    modifier = Modifier.padding(end = 4.dp)
+//                                                    modifier = Modifier.padding(end = 1.dp)
                                                 )
                                                 Icon(
                                                     imageVector = Icons.Filled.Star,
                                                     contentDescription = "Star rating",
                                                     modifier = Modifier.size(16.dp),
-                                                    tint = Color.White
+                                                    tint = if (starMax>3.25f){
+                                                        Color.White
+                                                    }else{
+                                                        Color.Gray
+                                                    },
                                                 )
                                             }
                                         }

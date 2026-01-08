@@ -113,7 +113,7 @@ fun createGradientStops(colors: List<Color>): Array<Pair<Float, ComposeColor>> {
 
     // Make start and end colors take up more space
     val totalColors = colors.size
-    val startEndWeight = 0.35f // Start and end colors take 35% each
+    val startEndWeight = 0.30f // Start and end colors take 35% each
 
     for (i in colors.indices) {
         val position = when (i) {
@@ -122,7 +122,7 @@ fun createGradientStops(colors: List<Color>): Array<Pair<Float, ComposeColor>> {
             else -> {
                 // Distribute middle colors evenly in the middle section
                 val middleStart = startEndWeight
-                val middleEnd = 1.0f - startEndWeight
+                val middleEnd = 0.85f - startEndWeight
                 val middleRange = middleEnd - middleStart
                 val middleColors = totalColors - 2
                 val middleIndex = i - 1

@@ -142,7 +142,7 @@ fun SearchScreen(
     // Played filter mode from settings
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val playedFilterMode by settingsManager.playedFilterMode.collectAsState(initial = "url")
-    val searchAnyEnabled by settingsManager.searchAnyEnabled.collectAsState(initial = false)
+    val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     
     val currentAccount by accountManager.currentAccount.collectAsState(initial = null)
     var isSupporterKnown by remember { mutableStateOf(false) }
@@ -335,7 +335,7 @@ fun SearchScreen(
                                     playedFilterMode = playedFilterMode,
                                     userId = userId,
                                     isSupporter = isSupporter,
-                                    searchAny = searchAnyEnabled,
+                                    searchAny = !onlyLeaderboardEnabled,
                                     forceRefresh = true
                                 )
                                 val incoming = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
@@ -576,7 +576,7 @@ fun SearchScreen(
                                                                     playedFilterMode,
                                                                     userId,
                                                                     isSupporter,
-                                                                    searchAnyEnabled
+                                                                    !onlyLeaderboardEnabled
                                                                 )
                                                                 val deduped =
                                                                     searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
@@ -620,7 +620,7 @@ fun SearchScreen(
                                                         playedFilterMode,
                                                         userId,
                                                         isSupporter,
-                                                        searchAnyEnabled
+                                                        !onlyLeaderboardEnabled
                                                     )
                                                     val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
                                                     mergeGroups = searchService.buildMergeGroups(result.beatmaps)
@@ -683,7 +683,7 @@ fun SearchScreen(
                                                                     playedFilterMode,
                                                                     userId,
                                                                     isSupporter,
-                                                                    searchAnyEnabled
+                                                                    !onlyLeaderboardEnabled
                                                                 )
                                                             val deduped =
                                                                 searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
@@ -1265,7 +1265,7 @@ fun SearchScreen(
                                                 playedFilterMode,
                                                 userId,
                                                 isSupporter,
-                                                searchAnyEnabled
+                                                !onlyLeaderboardEnabled
                                             )
                                             if (result.beatmaps.isNotEmpty()) {
                                                 val merged =
@@ -1358,7 +1358,7 @@ fun SearchScreen(
         }
             
         // Initial Load - Show cached data immediately, then refresh
-        LaunchedEffect(accessToken, filterMode, userId) {
+        LaunchedEffect(accessToken, filterMode, userId, onlyLeaderboardEnabled) {
             if (accessToken != null && userId != null) {
                 val uid = userId ?: return@LaunchedEffect
                 try {
@@ -1377,7 +1377,8 @@ fun SearchScreen(
                             searchQuery = null,
                             filterMode = filterMode,
                             playedFilterMode = playedFilterMode,
-                            userId = uid
+                            userId = uid,
+                            searchAny = !onlyLeaderboardEnabled
                         )
                         if (cachedResult != null) {
                             val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds)
@@ -1390,7 +1391,7 @@ fun SearchScreen(
                         // Then refresh with fresh data in background for all filter modes
                         scope.launch {
                             try {
-                                val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, searchAnyEnabled)
+                                val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, !onlyLeaderboardEnabled)
                                 val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
                                 mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                 searchResults = deduped

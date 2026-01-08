@@ -175,7 +175,7 @@ fun ProfileScreen(
     val clientId by settingsManager.clientId.collectAsState(initial = "")
     val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
-    val searchAnyEnabled by settingsManager.searchAnyEnabled.collectAsState(initial = false)
+    val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     val language by settingsManager.language.collectAsState(initial = "en")
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
     var languageMenuExpanded by remember { mutableStateOf(false) }
@@ -525,9 +525,9 @@ fun ProfileScreen(
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Switch(
-                        checked = searchAnyEnabled,
+                        checked = onlyLeaderboardEnabled,
                         onCheckedChange = { enabled ->
-                            scope.launch { settingsManager.saveSearchAnyEnabled(enabled) }
+                            scope.launch { settingsManager.saveOnlyLeaderboardEnabled(enabled) }
                         }
                     )
                 }

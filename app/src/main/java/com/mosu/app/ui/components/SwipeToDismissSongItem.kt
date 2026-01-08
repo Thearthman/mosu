@@ -83,40 +83,7 @@ fun SwipeToDismissWrapper(
         }
     )
 
-    // REMOVE: LaunchedEffect(dismissState.progress) { ... }
 
-    // var currentProgress by remember { mutableStateOf(0f) }
-
-    // val dismissState = rememberSwipeToDismissBoxState(
-    //     confirmValueChange = { value ->
-    //         when (value) {
-    //             SwipeToDismissBoxValue.StartToEnd -> {
-    //                 // Custom threshold for add: require 40% progress
-    //                 if (currentProgress >= SwipeThresholds.ADD_TO_PLAYLIST) {
-    //                     swipeActions.onAddToPlaylist?.invoke()
-    //                     false // Don't dismiss, just execute action
-    //                 } else {
-    //                     false // Cancel dismissal
-    //                 }
-    //             }
-    //             SwipeToDismissBoxValue.EndToStart -> {
-    //                 // Custom threshold for delete: require 70% progress
-    //                 if (currentProgress >= SwipeThresholds.DELETE) {
-    //                     swipeActions.onDelete?.invoke()
-    //                     dismissOnDelete // Allow dismissal only if specified
-    //                 } else {
-    //                     false // Cancel dismissal
-    //                 }
-    //             }
-    //             else -> false
-    //         }
-    //     }
-    // )
-
-    // Track the current progress
-//    androidx.compose.runtime.LaunchedEffect(dismissState.progress) {
-//        currentProgress = dismissState.progress
-//    }
 
     SwipeToDismissBox(
         state = dismissState,

@@ -4,11 +4,11 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Find mirror sites that are fast in Mainland China for both fetching beatmap and downloading beatmaps. 
-6. Weird it requires include unranked to be false to refresh all filter mode query. [important]
 
 # UIUX improvement
-2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
-3. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
+1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
+2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
+3. SwipeToDismissSongItem should have parameter for left & right swipe icons. For example, in Library left swipe should reveal a delete icon, while in playlist it should be a minus icon. 
 
 # Pending Refactors
 1. Refactor all songlists into the same file SongLists.kt
@@ -130,6 +130,7 @@
 30. Restored album collapse functionality when clicking expanded album headers.
 31. Fixed extremely slow InfoPopup loading by utilizing nested beatmap data in search results instead of making sequential API calls for each beatmapset, reducing load times from ~25s to ~1s.
 32. Optimized supporter status checking to perform only once upon app startup for all logged-in accounts with valid tokens, instead of checking every time search screen loads, significantly improving search screen loading speed.
+33. Fixed unranked maps visibility logic: Renamed "Include unranked maps" toggle to "Only songs with Leaderboard" and aligned API search status with the toggle state (enabled = leaderboard only, disabled = s=any).
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

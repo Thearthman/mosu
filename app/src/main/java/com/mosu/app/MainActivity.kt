@@ -12,7 +12,6 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -50,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -319,12 +319,16 @@ fun MainScreen(
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val navbarHeightPx = 280f
-        val screenHeight = maxHeight
-        val screenHeightPx = with(LocalDensity.current) { screenHeight.toPx() }
-        val collapsedOffset = screenHeightPx - navbarHeightPx
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val navbarHeightPx = 280f
+    val collapsedOffset = screenHeightPx - navbarHeightPx
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        val screenHeight = configuration.screenHeightDp.dp
+        val screenHeightPxLocal = screenHeightPx // Using the value calculated above
+        
         // Sheet Offset: collapsedOffset (Collapsed) -> 0f (Expanded)
         val sheetOffset = remember { Animatable(collapsedOffset) }
         val scope = rememberCoroutineScope()
@@ -365,12 +369,10 @@ fun MainScreen(
             else -> 80.dp
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            
-            // 1. Content Layer (Scaffold without BottomBar)
-            Scaffold(
-                // No bottomBar here
-            ) { innerPadding ->
+        // 1. Content Layer (Scaffold without BottomBar)
+        Scaffold(
+            // No bottomBar here
+        ) { innerPadding ->
                 NavHost(
                     navController = navController,
                     startDestination = "library",
@@ -550,7 +552,6 @@ fun MainScreen(
                         }
                     }
                 )
-            }
-        }
+                }
     }
 }

@@ -115,7 +115,8 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         searchQuery: String? = null,
         filterMode: String = "played",
         playedFilterMode: String = "url",
-        userId: String? = null
+        userId: String? = null,
+        searchAny: Boolean = false
     ): PlayedBeatmapsResult? {
         val safeQuery = sanitizeQuery(searchQuery)
 
@@ -123,8 +124,8 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         val cacheKey = when (filterMode) {
             "favorite" -> "favorite_user_${userId}_offset_0"
             "most_played" -> "most_played_user_${userId}"
-            "played" -> "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_initial"
-            else -> "search_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_initial"
+            "played" -> "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_searchAny_${searchAny}_initial"
+            else -> "search_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_searchAny_${searchAny}_initial"
         }
 
         // Check cache for initial load conditions (no cursor/query for most modes)
@@ -257,7 +258,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         
         // Otherwise use URL-based filtering (original logic)
         // Generate cache key (only cache first page without search query)
-        val cacheKey = "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_initial"
+        val cacheKey = "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_searchAny_${searchAny}_initial"
         
         // Only use cache for initial load (no cursor) without search query
         if (cursorString == null && safeQuery.isNullOrEmpty() && !forceRefresh) {

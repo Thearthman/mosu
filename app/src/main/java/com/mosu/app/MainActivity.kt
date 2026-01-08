@@ -227,6 +227,11 @@ fun MainScreen(
                 tokenManager.setCurrentAccount("account1")
             }
         }
+
+        // Refresh supporter status for all accounts on startup
+        launch(Dispatchers.IO) {
+            accountManager.refreshSupporterStatusForAllAccounts()
+        }
     }
 
     // Update credentials when account changes
@@ -384,6 +389,7 @@ fun MainScreen(
                             repository = repository,
                             db = db,
                             accessToken = accessToken,
+                            accountManager = accountManager,
                             settingsManager = settingsManager,
                             musicController = musicController,
                             beatmapDownloader = beatmapDownloader,

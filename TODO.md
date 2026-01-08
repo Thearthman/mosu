@@ -1,11 +1,10 @@
 # Bugs
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
-2. There is still a significant delay when you open search page between when the filter mode changes from default to last used. The followed is another delay before the song list actually shows. There is no significant delay when you are in the search page itself and switching between filter mode.
-3. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
-4. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
-5. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
-6. Find mirror sites that are fast in Mainland China for both fetching beatmap and downloading beatmaps. 
-7. Weird it requires include unranked to be false to refresh all filter mode query. [important]
+2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
+3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
+4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
+5. Find mirror sites that are fast in Mainland China for both fetching beatmap and downloading beatmaps. 
+6. Weird it requires include unranked to be false to refresh all filter mode query. [important]
 
 # UIUX improvement
 2. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
@@ -13,6 +12,7 @@
 
 # Pending Refactors
 1. Refactor all songlists into the same file SongLists.kt
+2. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
 
 # New Feature
 0. Core Feature
@@ -129,6 +129,7 @@
 29. Fixed SwipeToDismissBox background colors and action handling for both left and right swipes.
 30. Restored album collapse functionality when clicking expanded album headers.
 31. Fixed extremely slow InfoPopup loading by utilizing nested beatmap data in search results instead of making sequential API calls for each beatmapset, reducing load times from ~25s to ~1s.
+32. Optimized supporter status checking to perform only once upon app startup for all logged-in accounts with valid tokens, instead of checking every time search screen loads, significantly improving search screen loading speed.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

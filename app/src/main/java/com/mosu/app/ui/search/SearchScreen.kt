@@ -128,6 +128,7 @@ fun SearchScreen(
     repository: OsuRepository,
     db: AppDatabase,
     accessToken: String?,
+    accountManager: com.mosu.app.data.AccountManager,
     settingsManager: com.mosu.app.data.SettingsManager,
     musicController: com.mosu.app.player.MusicController,
     beatmapDownloader: BeatmapDownloader,
@@ -142,11 +143,27 @@ fun SearchScreen(
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val playedFilterMode by settingsManager.playedFilterMode.collectAsState(initial = "url")
     val searchAnyEnabled by settingsManager.searchAnyEnabled.collectAsState(initial = false)
+    
+    val currentAccount by accountManager.currentAccount.collectAsState(initial = null)
     var isSupporterKnown by remember { mutableStateOf(false) }
+    var userId by remember { mutableStateOf<String?>(null) }
+    var isSupporter by remember { mutableStateOf(false) }
+    
+    // Update user info from current account
+    LaunchedEffect(currentAccount) {
+        val user = currentAccount?.userInfo
+        if (user != null) {
+            userId = user.id.toString()
+            isSupporter = user.isSupporter
+            isSupporterKnown = true
+        } else {
+            userId = null
+            isSupporter = false
+            isSupporterKnown = false
+        }
+    }
     
     var filterMode by remember { mutableStateOf(defaultSearchView) }
-    var userId by remember { mutableStateOf<String?>(null) }
-    var isSupporter by remember { mutableStateOf(false) } // Default to false (safer for non-supporters)
     
     // Sync filter with default view once user info is available
     LaunchedEffect(defaultSearchView, isSupporter, isSupporterKnown) {
@@ -1330,24 +1347,9 @@ fun SearchScreen(
             )
         }
         
-        // Fetch user info when access token changes (login/logout)
+        // Reset results on logout
         LaunchedEffect(accessToken) {
-            if (accessToken != null) {
-                try {
-                    val user = repository.getMe()
-                    userId = user.id.toString()
-                    isSupporter = user.isSupporter
-                    isSupporterKnown = true
-                } catch (e: Exception) {
-                    Log.e("SearchScreen", "Failed to get user info", e)
-                    isSupporter = false // Default to non-supporter on error
-                    isSupporterKnown = true
-                }
-            } else {
-                // Reset state on logout
-                userId = null
-                isSupporter = false
-                isSupporterKnown = false
+            if (accessToken == null) {
                 searchResults = emptyList()
                 recentGroupedResults = emptyList()
                 searchResultsMetadata = emptyMap()

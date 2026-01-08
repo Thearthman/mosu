@@ -154,4 +154,54 @@ class AccountManager(
             }
         }
     }
+
+    /**
+     * Refreshes supporter status for all logged-in accounts.
+     * Only performs checks for accounts with valid tokens.
+     */
+    suspend fun refreshSupporterStatusForAllAccounts() {
+        val accountIds = context.accountDataStore.data.first().asMap().keys
+            .filter { it.name.startsWith("user_info_") }
+            .map { it.name.removePrefix("user_info_") }
+
+        accountIds.forEach { accountId ->
+            try {
+                // Get token for this account
+                var token = tokenManager.getAccessToken(accountId)
+                if (token != null) {
+                    // Check if token is expired and refresh if needed
+                    if (tokenManager.doesAccountNeedLogin(accountId)) {
+                        val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
+                        if (clientId != null && clientSecret != null) {
+                            val refreshed = tokenManager.refreshAccessTokenForAccount(accountId, clientId, clientSecret)
+                            if (refreshed) {
+                                token = tokenManager.getAccessToken(accountId)
+                            } else {
+                                token = null
+                            }
+                        } else {
+                            token = null
+                        }
+                    }
+
+                    if (token != null) {
+                        // Fetch fresh user info with this token using base client to avoid AuthInterceptor interference
+                        val baseClient = RetrofitClient.getBaseClient()
+                        val tempApi = retrofit2.Retrofit.Builder()
+                            .baseUrl("https://osu.ppy.sh/")
+                            .client(baseClient)
+                            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+                            .build()
+                            .create(com.mosu.app.data.api.OsuApi::class.java)
+                        
+                        val userInfo = tempApi.getMe("Bearer $token")
+                        saveUserInfo(accountId, userInfo)
+                        android.util.Log.d("AccountManager", "Refreshed supporter status for $accountId: ${userInfo.isSupporter}")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AccountManager", "Failed to refresh supporter status for $accountId", e)
+            }
+        }
+    }
 }

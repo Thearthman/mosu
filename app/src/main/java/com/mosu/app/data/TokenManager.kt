@@ -64,6 +64,11 @@ class TokenManager(private val context: Context) {
             accountId?.let { preferences[accessTokenKey(it)] }
         }
 
+    // Access to token for specific account
+    suspend fun getAccessToken(accountId: String): String? {
+        return context.dataStore.data.first()[accessTokenKey(accountId)]
+    }
+
     // Synchronous access to current token for interceptors
     suspend fun getCurrentAccessToken(): String? {
         val accountId = getCurrentAccountId()
@@ -186,6 +191,13 @@ class TokenManager(private val context: Context) {
      */
     suspend fun refreshAccessToken(clientId: String, clientSecret: String): Boolean {
         val accountId = getCurrentAccountId() ?: return false // No current account
+        return refreshAccessTokenForAccount(accountId, clientId, clientSecret)
+    }
+
+    /**
+     * Refreshes the access token for a specific account
+     */
+    suspend fun refreshAccessTokenForAccount(accountId: String, clientId: String, clientSecret: String): Boolean {
         val refreshToken = context.dataStore.data.first()[refreshTokenKey(accountId)]
         if (refreshToken.isNullOrEmpty()) {
             return false
@@ -208,12 +220,25 @@ class TokenManager(private val context: Context) {
                 refreshToken = refreshToken
             )
 
-            // Save the new tokens (refresh token rotation - always replace with new one)
-            saveTokens(tokenResponse.accessToken, tokenResponse.refreshToken ?: refreshToken, tokenResponse.expiresIn)
+            // Save the new tokens
+            val expiryTime = System.currentTimeMillis() + (tokenResponse.expiresIn * 1000)
+            context.dataStore.edit { preferences ->
+                preferences[accessTokenKey(accountId)] = tokenResponse.accessToken
+                preferences[refreshTokenKey(accountId)] = tokenResponse.refreshToken ?: refreshToken
+                preferences[tokenExpiryKey(accountId)] = expiryTime
+            }
             return true
         } catch (e: Exception) {
-            // Refresh failed, clear tokens for current account
-            clearCurrentAccountToken()
+            // If it's the current account, clear its tokens
+            if (getCurrentAccountId() == accountId) {
+                clearCurrentAccountToken()
+            } else {
+                context.dataStore.edit { preferences ->
+                    preferences.remove(accessTokenKey(accountId))
+                    preferences.remove(refreshTokenKey(accountId))
+                    preferences.remove(tokenExpiryKey(accountId))
+                }
+            }
             return false
         }
     }

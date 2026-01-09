@@ -29,12 +29,14 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,7 +76,8 @@ import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.data.db.PlaylistTrackWithBeatmap
-import com.mosu.app.domain.download.BeatmapDownloader
+import com.mosu.app.domain.download.BeatmapDownloadService
+import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.R
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.AlbumGroup
@@ -89,6 +92,8 @@ import com.mosu.app.ui.components.SongListActions
 import com.mosu.app.ui.components.SongListConfig
 import com.mosu.app.ui.components.SwipeableSongList
 import com.mosu.app.ui.components.SelectableSongList
+import com.mosu.app.ui.components.SwipeToDismissSongItem
+import com.mosu.app.ui.components.SwipeActions
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -98,7 +103,8 @@ fun PlaylistScreen(
     db: AppDatabase,
     musicController: MusicController,
     repository: OsuRepository,
-    beatmapDownloader: BeatmapDownloader
+    downloadService: BeatmapDownloadService,
+    accessToken: String? = null
 ) {
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
@@ -106,9 +112,12 @@ fun PlaylistScreen(
     val playlistTrackRefs by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val beatmapBySetId = remember(downloadedTracks) { downloadedTracks.associateBy { it.beatmapSetId } }
     val downloadedBeatmapSetIds = remember(downloadedTracks) { downloadedTracks.map { it.beatmapSetId }.toSet() }
+    val downloadedKeys = remember(downloadedTracks) {
+        downloadedTracks.map { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }.toSet()
+    }
     val playlistMembership = playlistTrackRefs
         .groupBy { it.playlistId }
-        .mapValues { entry -> entry.value.map { it.beatmapSetId }.toSet() }
+        .mapValues { entry -> entry.value.map { "${it.beatmapSetId}|${it.difficultyName}" }.toSet() }
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
     val playlistTracksWithStatus: List<PlaylistTrackWithBeatmap> by if (selectedPlaylistId != null) {
@@ -201,7 +210,7 @@ fun PlaylistScreen(
         dialogTrack = track
         dialogSelection = dialogSelectionCache[track.uid]
             ?: playlists
-                .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
+                .filter { playlistMembership[it.id]?.contains("${track.beatmapSetId}|${track.difficultyName}") == true }
                 .map { it.id }
                 .toSet()
         showPlaylistDialog = true
@@ -211,7 +220,7 @@ fun PlaylistScreen(
     LaunchedEffect(playlistTrackRefs, dialogTrack, playlists) {
         val track = dialogTrack ?: return@LaunchedEffect
         val latest = playlists
-            .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
+            .filter { playlistMembership[it.id]?.contains("${track.beatmapSetId}|${track.difficultyName}") == true }
             .map { it.id }
             .toSet()
         dialogSelection = latest
@@ -333,7 +342,7 @@ fun PlaylistScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (playlistTracks.isEmpty()) {
+            if (playlistTracksWithStatus.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -341,97 +350,133 @@ fun PlaylistScreen(
                     Text(text = stringResource(id = R.string.playlist_no_songs))
                 }
             } else {
-                // Convert tracks to SongItemData for SwipeableSongList
-                val songItems = playlistTracksWithStatus.map { trackWithStatus ->
-                    val beatmapEntity = trackWithStatus.toBeatmapEntity()
-                    if (beatmapEntity != null) {
-                        SongItemData(
-                            title = beatmapEntity.title,
-                            artist = beatmapEntity.artist,
-                            coverPath = beatmapEntity.coverPath,
-                            difficultyName = beatmapEntity.difficultyName,
-                            id = beatmapEntity.uid
-                        )
-                    } else {
-                        // Undownloaded track
-                        SongItemData(
-                            title = trackWithStatus.storedTitle,
-                            artist = trackWithStatus.storedArtist,
-                            coverPath = "",
-                            difficultyName = "",
-                            id = trackWithStatus.beatmapSetId
-                        )
-                    }
+                val groupedTracks = remember(playlistTracksWithStatus) {
+                    playlistTracksWithStatus.groupBy { it.beatmapSetId }
                 }
 
-                SwipeableSongList(
-                    songs = songItems,
-                    actions = SongListActions.PlaylistActions(
-                        onRemove = { songData ->
-                            scope.launch {
-                                // FIX: Find the correct beatmapSetId by looking up the track first
-                                val track = playlistTracksWithStatus.find { 
-                                    // Match against either Set ID (undownloaded) or UID (downloaded)
-                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id 
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 80.dp) // Space for miniplayer
+                ) {
+                    groupedTracks.forEach { (setId, tracksInGroup) ->
+                        val firstTrack = tracksInGroup.first()
+                        val isActuallyAlbum = firstTrack.isAlbum ?: false
+                        
+                        item(key = setId) {
+                            val albumData = AlbumGroupData(
+                                title = firstTrack.beatmapTitle ?: firstTrack.storedTitle,
+                                artist = firstTrack.beatmapArtist ?: firstTrack.storedArtist,
+                                coverPath = firstTrack.coverPath ?: "",
+                                trackCount = tracksInGroup.size,
+                                id = setId,
+                                songs = tracksInGroup.map { track ->
+                                    SongItemData(
+                                        title = track.difficultyName ?: track.storedTitle,
+                                        artist = track.creator ?: track.storedArtist,
+                                        coverPath = track.coverPath ?: "",
+                                        difficultyName = track.difficultyName ?: "",
+                                        id = track.uid ?: track.beatmapSetId // Use UID if downloaded, else Set ID
+                                    )
                                 }
+                            )
 
-                                if (track != null) {
-                                    // Always pass the beatmapSetId to the service
-                                    TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, db)
+                            val albumActions = AlbumGroupActions(
+                                onAlbumPlay = {
+                                    val entities = tracksInGroup.mapNotNull { it.toBeatmapEntity() }
+                                    if (entities.isNotEmpty()) {
+                                        musicController.playSong(entities.first(), entities)
+                                    }
+                                },
+                                onTrackPlay = { songData ->
+                                    val track = tracksInGroup.find { it.uid == songData.id || it.beatmapSetId == songData.id }
+                                    track?.toBeatmapEntity()?.let {
+                                        musicController.playSong(it, playlistTracks)
+                                    }
+                                },
+                                onDelete = {
+                                    scope.launch {
+                                        tracksInGroup.forEach { track ->
+                                            // Removal from playlist
+                                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
+                                        }
+                                    }
+                                },
+                                onAddToPlaylist = {
+                                    tracksInGroup.firstOrNull()?.toBeatmapEntity()?.let {
+                                        openPlaylistDialog(it)
+                                    }
+                                },
+                                onTrackDelete = { songData ->
+                                    scope.launch {
+                                        val track = tracksInGroup.find { it.uid == songData.id || it.beatmapSetId == songData.id }
+                                        track?.let {
+                                            // Removal from playlist
+                                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, it.beatmapSetId, it.storedDifficultyName, db)
+                                        }
+                                    }
+                                },
+                                onTrackAddToPlaylist = { songData ->
+                                    val track = tracksInGroup.find { it.uid == songData.id || it.beatmapSetId == songData.id }
+                                    track?.toBeatmapEntity()?.let {
+                                        openPlaylistDialog(it)
+                                    }
+                                },
+                                onLongClick = {
+                                    tracksInGroup.firstOrNull()?.toBeatmapEntity()?.let {
+                                        onSongLongPress(it)
+                                    }
+                                }
+                            )
+
+                            if (isActuallyAlbum) {
+                                AlbumGroup(
+                                    album = albumData,
+                                    actions = albumActions,
+                                    highlight = false, // Add highlight logic if needed
+                                    endToStartIcon = Icons.Default.Remove
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
+                            } else {
+                                // For non-album tracks in playlist, show each track individually
+                                tracksInGroup.forEach { track ->
+                                    val beatmapEntity = track.toBeatmapEntity()
+                                    val individualSongData = SongItemData(
+                                        title = track.storedTitle,
+                                        artist = track.storedArtist,
+                                        coverPath = track.coverPath ?: "",
+                                        difficultyName = track.difficultyName ?: "",
+                                        id = track.uid ?: track.beatmapSetId
+                                    )
+                                    
+                                    SwipeToDismissSongItem(
+                                        song = individualSongData,
+                                        onClick = { 
+                                            beatmapEntity?.let { 
+                                                musicController.playSong(it, playlistTracks) 
+                                            }
+                                        },
+                                        onLongClick = {
+                                            beatmapEntity?.let { onSongLongPress(it) }
+                                        },
+                                        swipeActions = SwipeActions(
+                                            onDelete = {
+                                                scope.launch {
+                                                    // Removal from playlist
+                                                    TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
+                                                }
+                                            },
+                                            onAddToPlaylist = {
+                                                beatmapEntity?.let { openPlaylistDialog(it) }
+                                            }
+                                        ),
+                                        endToStartIcon = Icons.Default.Remove
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
                                 }
                             }
-                        },
-                        onAddToOtherPlaylist = { songData ->
-                            // Find the beatmap entity for this song
-                            val beatmapEntity = playlistTracksWithStatus
-                                .find { 
-                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id 
-                                    }
-                                ?.toBeatmapEntity()
-                            if (beatmapEntity != null) {
-                                openPlaylistDialog(beatmapEntity)
-                            }
-                        },
-                        onClick = { songData ->
-                            // Find the beatmap entity for this song
-                            val beatmapEntity = playlistTracksWithStatus
-                                .find {
-                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id
-                                    }
-                                ?.toBeatmapEntity()
-                            if (beatmapEntity != null) {
-                                musicController.playSong(beatmapEntity, playlistTracks)
-                            }
-                        },
-                        onLongClick = { songData ->
-                            // Find the beatmap entity for this song
-                            val beatmapEntity = playlistTracksWithStatus
-                                .find {
-                                    it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id
-                                    }
-                                ?.toBeatmapEntity()
-                            if (beatmapEntity != null) {
-                                onSongLongPress(beatmapEntity)
-                            }
-                        },
-                        isUndownloaded = { songData ->
-                            // Check if track is undownloaded by finding the corresponding track
-                            val trackWithStatus = playlistTracksWithStatus.find {
-                                // For downloaded tracks, songData.id is beatmapEntity.uid
-                                // For undownloaded tracks, songData.id is beatmapSetId
-                                it.beatmapSetId == songData.id || it.toBeatmapEntity()?.uid == songData.id
-                            }
-                            trackWithStatus?.toBeatmapEntity() == null
                         }
-                    ),
-                    config = SongListConfig(
-                        showDividers = true, // Show dividers like library view
-                        coverStartPadding = 16.dp,
-                        textEndPadding = 60.dp,
-                        lastItemModifier = Modifier.padding(bottom = 0.dp) // Remove bottom padding for last item
-                    ),
-                    modifier = Modifier.fillMaxSize()
-                )
+                    }
+                }
             }
 
             if (showAddDialog) {
@@ -473,7 +518,7 @@ fun PlaylistScreen(
                                     addSelection.forEach { uid ->
                                         val track = downloadedTracks.find { it.uid == uid }
                                         if (track != null) {
-                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, track.title, track.artist, db)
+                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, track.title, track.artist, track.difficultyName, db)
                                         }
                                     }
                                 }
@@ -539,16 +584,16 @@ fun PlaylistScreen(
                 dialogSelection = newSelection
                 dialogSelectionCache[track.uid] = newSelection
             },
-            onAddToPlaylist = { playlistId, beatmapSetId ->
-                scope.launch {
-                    TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, db)
-                }
-            },
-            onRemoveFromPlaylist = { playlistId, beatmapSetId ->
-                scope.launch {
-                    TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, db)
-                }
-            },
+                onAddToPlaylist = { playlistId, beatmapSetId ->
+                    scope.launch {
+                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, track.difficultyName, db)
+                    }
+                },
+                onRemoveFromPlaylist = { playlistId, beatmapSetId ->
+                    scope.launch {
+                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, track.difficultyName, db)
+                    }
+                },
             beatmapSetId = track.beatmapSetId,
             onDismiss = { showPlaylistDialog = false }
         )
@@ -563,18 +608,49 @@ fun PlaylistScreen(
         loading = infoLoading,
         error = infoError,
         setCreators = infoSetCreators,
-        downloaded = infoTarget?.let { downloadedBeatmapSetIds.contains(it.id) } ?: false,
+        downloaded = infoTarget?.let { target ->
+            val targetKey = "${target.title.trim().lowercase()}|${target.artist.trim().lowercase()}"
+            downloadedBeatmapSetIds.contains(target.id) || downloadedKeys.contains(targetKey)
+        } ?: false,
         config = InfoPopupConfig(
             infoCoverEnabled = false, // Disable cover in playlist popup
             showConfirmButton = false, // Hide confirm button in playlist
             onDownloadClick = { beatmapset ->
                 scope.launch {
-                    beatmapDownloader.downloadBeatmap(beatmapset.id)
+                    downloadService.downloadBeatmap(
+                        beatmapSetId = beatmapset.id,
+                        accessToken = accessToken,
+                        title = beatmapset.title,
+                        artist = beatmapset.artist,
+                        creator = beatmapset.creator,
+                        genreId = beatmapset.genreId,
+                        coversListUrl = beatmapset.covers.listUrl
+                    ).collect { state ->
+                        if (state is UnifiedDownloadState.Error) {
+                            android.widget.Toast.makeText(context, state.message, android.widget.Toast.LENGTH_SHORT).show()
+                        } else if (state is UnifiedDownloadState.Success) {
+                            android.widget.Toast.makeText(context, context.getString(R.string.search_download_done), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             },
             onRestoreClick = { beatmapset ->
                 scope.launch {
-                    beatmapDownloader.downloadBeatmap(beatmapset.id)
+                    downloadService.downloadBeatmap(
+                        beatmapSetId = beatmapset.id,
+                        accessToken = accessToken,
+                        title = beatmapset.title,
+                        artist = beatmapset.artist,
+                        creator = beatmapset.creator,
+                        genreId = beatmapset.genreId,
+                        coversListUrl = beatmapset.covers.listUrl
+                    ).collect { state ->
+                        if (state is UnifiedDownloadState.Error) {
+                            android.widget.Toast.makeText(context, state.message, android.widget.Toast.LENGTH_SHORT).show()
+                        } else if (state is UnifiedDownloadState.Success) {
+                            android.widget.Toast.makeText(context, context.getString(R.string.search_download_done), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         )

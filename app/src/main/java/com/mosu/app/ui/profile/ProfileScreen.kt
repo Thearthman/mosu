@@ -39,6 +39,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.AccountManager
@@ -47,7 +49,8 @@ import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
-import com.mosu.app.domain.download.BeatmapDownloader
+import com.mosu.app.domain.download.BeatmapDownloadService
+import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.domain.download.ZipExtractor
 import com.mosu.app.utils.RegionUtils
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +64,7 @@ suspend fun performRestore(
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
-    settingsManager: SettingsManager,
+    downloadService: BeatmapDownloadService,
     updateProgress: (Int, String) -> Unit,
     updateRestoring: (Boolean) -> Unit
 ) {
@@ -76,8 +79,6 @@ suspend fun performRestore(
             return
         }
 
-        val downloader = BeatmapDownloader(context, settingsManager)
-        val extractor = ZipExtractor(context)
         val accessToken = tokenManager.getCurrentAccessToken()
 
         var completed = 0
@@ -96,70 +97,29 @@ suspend fun performRestore(
 
                 updateProgress(((completed * 100) / total), context.getString(R.string.profile_restore_downloading, preservedSetId.beatmapSetId))
 
-                downloader.downloadBeatmap(preservedSetId.beatmapSetId, accessToken)
-                    .collect { state ->
-                        when (state) {
-                            is com.mosu.app.domain.download.DownloadState.Downloading -> {
-                                // Update progress within current beatmap
-                            }
-                            is com.mosu.app.domain.download.DownloadState.Downloaded -> {
-                                updateProgress(((completed * 100) / total), context.getString(R.string.profile_restore_extracting, preservedSetId.beatmapSetId))
-                                try {
-                                    val extractedTracks = extractor.extractBeatmap(state.file, preservedSetId.beatmapSetId)
-
-                                    // For each track, create beatmap entity and save
-                                    extractedTracks.forEach { track ->
-                                        val entity = com.mosu.app.data.db.BeatmapEntity(
-                                            beatmapSetId = preservedSetId.beatmapSetId,
-                                            title = track.title,
-                                            artist = track.artist,
-                                            creator = "", // We don't have creator info from preserved data
-                                            difficultyName = track.difficultyName,
-                                            audioPath = track.audioFile.absolutePath,
-                                            coverPath = track.coverFile?.absolutePath ?: "",
-                                            genreId = null // We don't have genre info from preserved data
-                                        )
-                                        db.beatmapDao().insertBeatmap(entity)
-                                    }
-
-                                    completed++
-                                    val progress = (completed * 100) / total
-                                    updateProgress(progress, "Restored $completed/$total beatmaps")
-
-                                } catch (e: Exception) {
-                                    android.util.Log.e("ProfileScreen", "Failed to extract beatmap ${preservedSetId.beatmapSetId}", e)
-                                }
-                            }
-                            is com.mosu.app.domain.download.DownloadState.Completed -> {
-                                // Handle direct download completion for restore
-                                try {
-                                    state.tracks.forEach { track ->
-                                        val entity = com.mosu.app.data.db.BeatmapEntity(
-                                            beatmapSetId = state.beatmapSetId,
-                                            title = track.title,
-                                            artist = track.artist,
-                                            creator = "", // Metadata might be limited during restore
-                                            difficultyName = track.difficultyName,
-                                            audioPath = track.audioFile.absolutePath,
-                                            coverPath = track.coverFile?.absolutePath ?: "",
-                                            genreId = null
-                                        )
-                                        db.beatmapDao().insertBeatmap(entity)
-                                    }
-                                    
-                                    completed++
-                                    val progress = (completed * 100) / total
-                                    updateProgress(progress, "Restored $completed/$total beatmaps")
-                                } catch (e: Exception) {
-                                    android.util.Log.e("ProfileScreen", "Failed to register restored beatmap ${state.beatmapSetId}", e)
-                                }
-                            }
-                            is com.mosu.app.domain.download.DownloadState.Error -> {
-                                android.util.Log.e("ProfileScreen", "Failed to download beatmap ${preservedSetId.beatmapSetId}: ${state.message}")
-                            }
-                            else -> {}
+                downloadService.downloadBeatmap(
+                    beatmapSetId = preservedSetId.beatmapSetId,
+                    accessToken = accessToken,
+                    title = "", // Metadata will be fetched or handled by downloader
+                    artist = "",
+                    creator = "",
+                    genreId = null,
+                    coversListUrl = null
+                ).collect { state ->
+                    when (state) {
+                        is UnifiedDownloadState.Progress -> {
+                            updateProgress(((completed * 100) / total), "${context.getString(R.string.profile_restore_downloading, preservedSetId.beatmapSetId)}: ${state.status}")
+                        }
+                        is UnifiedDownloadState.Success -> {
+                            completed++
+                            val progress = (completed * 100) / total
+                            updateProgress(progress, "Restored $completed/$total beatmaps")
+                        }
+                        is UnifiedDownloadState.Error -> {
+                            android.util.Log.e("ProfileScreen", "Failed to restore beatmap ${preservedSetId.beatmapSetId}: ${state.message}")
                         }
                     }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("ProfileScreen", "Failed to restore beatmap ${preservedSetId.beatmapSetId}", e)
             }
@@ -187,6 +147,7 @@ fun ProfileScreen(
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
+    downloadService: BeatmapDownloadService,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -198,6 +159,17 @@ fun ProfileScreen(
     var restoreProgress by remember { mutableStateOf(0) }
     var restoreMessage by remember { mutableStateOf("") }
     
+    var isRegionRefreshing by remember { mutableStateOf(false) }
+    val regionRefreshRotation by rememberInfiniteTransition(label = "regionRefresh").animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "regionRotation"
+    )
+
     // Settings State
     var showSettingsDialog by remember { mutableStateOf(false) }
     val clientId by settingsManager.clientId.collectAsState(initial = "")
@@ -458,25 +430,37 @@ fun ProfileScreen(
                         )
                         IconButton(
                             onClick = {
-                                scope.launch {
-                                    val region = RegionUtils.getDeviceRegion()
-                                    if (region != null) {
-                                        settingsManager.setDetectedRegion(region.countryCode)
-                                        if (region.countryCode == "CN") {
-                                            settingsManager.setApiSource("sayobot")
-                                        } else {
-                                            settingsManager.setApiSource("osu")
+                                if (!isRegionRefreshing) {
+                                    scope.launch {
+                                        isRegionRefreshing = true
+                                        try {
+                                            val region = RegionUtils.getDeviceRegion()
+                                            if (region != null) {
+                                                settingsManager.setDetectedRegion(region.countryCode)
+                                                if (region.countryCode == "CN") {
+                                                    settingsManager.setApiSource("sayobot")
+                                                } else {
+                                                    settingsManager.setApiSource("osu")
+                                                }
+                                            }
+                                        } finally {
+                                            isRegionRefreshing = false
                                         }
                                     }
                                 }
                             },
-                            modifier = Modifier.size(24.dp).padding(start = 4.dp)
+                            modifier = Modifier.size(24.dp).padding(start = 4.dp),
+                            enabled = !isRegionRefreshing
                         ) {
                             Icon(
                                 Icons.Default.Refresh,
                                 contentDescription = "Re-check region",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .graphicsLayer {
+                                        rotationZ = if (isRegionRefreshing) regionRefreshRotation else 0f
+                                    },
+                                tint = if (isRegionRefreshing) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -697,7 +681,7 @@ fun ProfileScreen(
                                             repository,
                                             db,
                                             tokenManager,
-                                            settingsManager,
+                                            downloadService,
                                             { progress, message ->
                                                 restoreProgress = progress
                                                 restoreMessage = message

@@ -41,11 +41,11 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         // Search using title and artist as query
         val query = "\"$title\" \"$artist\""
         
-        val response = RetrofitClient.api.searchBeatmapsets(
-            authHeader = "", // No auth needed for public search
-            query = query,
-            status = "any" // Include ranked, loved, qualified, etc.
-        )
+            val response = RetrofitClient.api.searchBeatmapsets(
+                authHeader = "", // No auth needed for public search
+                query = query,
+                status = "any" // Include ranked, loved, qualified, etc.
+            )
         val beatmapsets = response.beatmapsets
 
         // Filter results to ensure exact title/artist matches (case-insensitive, trimmed)

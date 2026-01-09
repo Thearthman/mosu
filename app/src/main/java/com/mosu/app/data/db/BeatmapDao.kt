@@ -16,6 +16,9 @@ interface BeatmapDao {
     @Query("SELECT * FROM beatmaps WHERE beatmapSetId = :setId")
     suspend fun getTracksForSet(setId: Long): List<BeatmapEntity>
 
+    @Query("SELECT * FROM beatmaps WHERE LOWER(TRIM(title)) = LOWER(TRIM(:title)) AND LOWER(TRIM(artist)) = LOWER(TRIM(:artist))")
+    suspend fun getTracksByTitleArtist(title: String, artist: String): List<BeatmapEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBeatmap(beatmap: BeatmapEntity)
 

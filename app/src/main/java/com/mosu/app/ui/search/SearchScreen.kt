@@ -95,7 +95,8 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
-import com.mosu.app.domain.download.BeatmapDownloader
+import com.mosu.app.domain.download.BeatmapDownloadService
+import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.domain.download.DownloadState
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
@@ -131,7 +132,7 @@ fun SearchScreen(
     accountManager: com.mosu.app.data.AccountManager,
     settingsManager: com.mosu.app.data.SettingsManager,
     musicController: com.mosu.app.player.MusicController,
-    beatmapDownloader: BeatmapDownloader,
+    downloadService: BeatmapDownloadService,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {}
 ) {
@@ -194,20 +195,19 @@ fun SearchScreen(
     
     // Downloaded BeatmapSet IDs (from database)
     var downloadedBeatmapSetIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var downloadedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var mergeGroups by remember { mutableStateOf<Map<String, Set<Long>>>(emptyMap()) } // key -> setIds
     
     // Load downloaded beatmap IDs from database
     LaunchedEffect(Unit) {
         db.beatmapDao().getAllBeatmaps().collect { beatmaps ->
             downloadedBeatmapSetIds = beatmaps.map { it.beatmapSetId }.toSet()
+            downloadedKeys = beatmaps.map { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }.toSet()
         }
     }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val downloader = remember { BeatmapDownloader(context, settingsManager) }
-    val extractor = remember { ZipExtractor(context) }
-    val coverDownloadService = remember { CoverDownloadService(context) }
     val searchService = remember { BeatmapSearchService(repository, db, context) }
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
 
@@ -338,13 +338,13 @@ fun SearchScreen(
                                     searchAny = !onlyLeaderboardEnabled,
                                     forceRefresh = true
                                 )
-                                val incoming = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                val incoming = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                 if (filterMode == "favorite") {
                                     searchResults = incoming
                                     currentCursor = result.cursor
                                     searchResultsMetadata = searchService.filterMetadataFor(incoming, result.metadata)
                                 } else {
-                                    val merged = searchService.mergeByTitle(searchResults, incoming, downloadedBeatmapSetIds)
+                                    val merged = searchService.mergeByTitle(searchResults, incoming, downloadedBeatmapSetIds, downloadedKeys)
                                     val mergedIds = merged.map { it.id }.toSet()
                                     searchResults = merged
                                     currentCursor = result.cursor
@@ -431,7 +431,7 @@ fun SearchScreen(
                                                                     isSupporter
                                                                 )
                                 val deduped =
-                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                 mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                 searchResults = deduped
                                                             currentCursor = result.cursor
@@ -579,7 +579,7 @@ fun SearchScreen(
                                                                     !onlyLeaderboardEnabled
                                                                 )
                                                                 val deduped =
-                                                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                                 searchResults = deduped
                                                                 currentCursor = result.cursor
                                                                 searchResultsMetadata =
@@ -622,7 +622,7 @@ fun SearchScreen(
                                                         isSupporter,
                                                         !onlyLeaderboardEnabled
                                                     )
-                                                    val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                                    val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                     mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                     searchResults = deduped
                                                     currentCursor = result.cursor
@@ -686,7 +686,7 @@ fun SearchScreen(
                                                                     !onlyLeaderboardEnabled
                                                                 )
                                                             val deduped =
-                                                                searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                                                searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                             searchResults = deduped
                                                             currentCursor = result.cursor
                                                             searchResultsMetadata =
@@ -752,7 +752,8 @@ fun SearchScreen(
                                 is RecentItem.Song -> {
                                     val map = item.beatmapset
                                     val downloadProgress = downloadStates[map.id]
-                                    val isDownloaded = downloadedBeatmapSetIds.contains(map.id)
+                                    val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
+                                    val isDownloaded = downloadedBeatmapSetIds.contains(map.id) || downloadedKeys.contains(mapKey)
                                     val metadata = searchResultsMetadata[map.id] // (rank, playcount) or null
 
                         Row(
@@ -766,7 +767,12 @@ fun SearchScreen(
                                             scope.launch {
                                                 // Get the beatmap entities for this set from database
                                                 val beatmaps = withContext(Dispatchers.IO) {
-                                                    db.beatmapDao().getTracksForSet(map.id)
+                                                    val tracks = db.beatmapDao().getTracksForSet(map.id)
+                                                    if (tracks.isEmpty()) {
+                                                        db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
+                                                    } else {
+                                                        tracks
+                                                    }
                                                 }
                                                 if (beatmaps.isNotEmpty()) {
                                                     // Play the first track and use the whole list as playlist
@@ -898,103 +904,38 @@ fun SearchScreen(
                                                     0,
                                                     context.getString(R.string.search_download_starting)
                                                 ))
-                                            downloader.downloadBeatmap(map.id, accessToken)
-                                                .collect { state ->
-                                                    when (state) {
-                                                        is DownloadState.Downloading -> {
-                                                            downloadStates =
-                                                                downloadStates + (map.id to DownloadProgress(
-                                                                    state.progress,
-                                                                    state.source // Use source as status text
-                                                                ))
-                                                        }
-                                                        
-                                                        is DownloadState.Completed -> {
-                                                            // Handle direct download completion
-                                                            downloadStates =
-                                                                downloadStates + (map.id to DownloadProgress(
-                                                                    100,
-                                                                    context.getString(R.string.search_download_done)
-                                                                ))
-                                                            kotlinx.coroutines.delay(2000)
-                                                            downloadStates = downloadStates - map.id
-                                                            
-                                                            // Note: In a real implementation, we would need to parse the downloaded 
-                                                            // .osu files here to register them in the database, similar to how 
-                                                            // ZipExtractor does it. For now, we update the UI state.
-                                                        }
-
-                                                        is DownloadState.Downloaded -> {
-                                                            downloadStates =
-                                                                downloadStates + (map.id to DownloadProgress(
-                                                                    100,
-                                                                    context.getString(R.string.search_download_extracting)
-                                                                ))
-                                                            try {
-                                                                val extractedTracks =
-                                                                    extractor.extractBeatmap(
-                                                                        state.file,
-                                                                        map.id
-                                                                    )
-                                                                val fallbackCoverPath =
-                                                                    if (extractedTracks.any { track ->
-                                                                            track.coverFile == null || !track.coverFile.exists()
-                                                                        }
-                                                                    ) {
-                                                                        coverDownloadService.downloadFallbackCoverImage(
-                                                                            map.id,
-                                                                            map.covers.listUrl
-                                                                        )
-                                                                    } else {
-                                                                        null
-                                                                    }
-                                                                extractedTracks.forEach { track ->
-                                                                    val coverPath = track.coverFile?.takeIf { it.exists() }?.absolutePath
-                                                                        ?: fallbackCoverPath
-                                                                        ?: ""
-                                                                val entity = BeatmapEntity(
-                                                                    beatmapSetId = map.id,
-                                                                    title = track.title,
-                                                                    artist = track.artist,
-                                                                    creator = map.creator,
-                                                                    difficultyName = track.difficultyName,
-                                                                    audioPath = track.audioFile.absolutePath,
-                                                                    coverPath = coverPath,
-                                                                    genreId = map.genreId
-                                                                )
-                                                                TrackService.addTrack(entity, db, context)
-                                                                // Mark this track as downloaded in any playlists that contain it
-                                                                TrackService.updateTrackDownloadStatus(entity.beatmapSetId, true, db)
-                                                                }
-                                                                downloadStates =
-                                                                    downloadStates + (map.id to DownloadProgress(
-                                                                        100,
-                                                                        context.getString(R.string.search_download_done)
-                                                                    ))
-                                                                // Remove from download states after 2 seconds
-                                                                kotlinx.coroutines.delay(2000)
-                                                                downloadStates =
-                                                                    downloadStates - map.id
-                                                            } catch (e: Exception) {
-                                                                downloadStates =
-                                                                    downloadStates + (map.id to DownloadProgress(
-                                                                        0,
-                                                                        context.getString(R.string.search_download_error_prefix, e.message)
-                                                                    ))
-                                                            }
-                                                        }
-
-                                                        is DownloadState.Error -> {
-                                                            downloadStates =
-                                                                downloadStates + (map.id to DownloadProgress(
-                                                                    0,
-                                                                    context.getString(R.string.search_download_failed)
-                                                                ))
-                                                        }
-
-                                                        else -> {}
+                                            downloadService.downloadBeatmap(
+                                                beatmapSetId = map.id,
+                                                accessToken = accessToken,
+                                                title = map.title,
+                                                artist = map.artist,
+                                                creator = map.creator,
+                                                genreId = map.genreId,
+                                                coversListUrl = map.covers.listUrl
+                                            ).collect { state ->
+                                                when (state) {
+                                                    is UnifiedDownloadState.Progress -> {
+                                                        downloadStates =
+                                                            downloadStates + (map.id to DownloadProgress(
+                                                                state.progress,
+                                                                state.status
+                                                            ))
+                                                    }
+                                                    is UnifiedDownloadState.Success -> {
+                                                        downloadStates =
+                                                            downloadStates + (map.id to DownloadProgress(
+                                                                100,
+                                                                context.getString(R.string.search_download_done)
+                                                            ))
+                                                        kotlinx.coroutines.delay(2000)
+                                                        downloadStates = downloadStates - map.id
+                                                    }
+                                                    is UnifiedDownloadState.Error -> {
+                                                        Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                                                        downloadStates = downloadStates - map.id
                                                     }
                                                 }
+                                            }
                                         }
                                     }
                                 },
@@ -1020,7 +961,8 @@ fun SearchScreen(
                         // Non-recent modes (original logic)
                         items(sortedResults, key = { it.id }) { map ->
                             val downloadProgress = downloadStates[map.id]
-                            val isDownloaded = downloadedBeatmapSetIds.contains(map.id)
+                            val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
+                            val isDownloaded = downloadedBeatmapSetIds.contains(map.id) || downloadedKeys.contains(mapKey)
                             val metadata = searchResultsMetadata[map.id] // (rank, playcount) or null
 
                             Row(
@@ -1034,7 +976,12 @@ fun SearchScreen(
                                                 scope.launch {
                                                     // Get the beatmap entities for this set from database
                                                     val beatmaps = withContext(Dispatchers.IO) {
-                                                        db.beatmapDao().getTracksForSet(map.id)
+                                                        val tracks = db.beatmapDao().getTracksForSet(map.id)
+                                                        if (tracks.isEmpty()) {
+                                                            db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
+                                                        } else {
+                                                            tracks
+                                                        }
                                                     }
                                                     if (beatmaps.isNotEmpty()) {
                                                         // Play the first track and use the whole list as playlist
@@ -1160,121 +1107,38 @@ fun SearchScreen(
                                                         0,
                                                         context.getString(R.string.search_download_starting)
                                                     ))
-                                                downloader.downloadBeatmap(map.id, accessToken)
-                                                    .collect { state ->
-                                                        when (state) {
-                                                        is DownloadState.Downloading -> {
-                                                                downloadStates =
-                                                                    downloadStates + (map.id to DownloadProgress(
-                                                                        state.progress,
-                                                                        state.source
-                                                                    ))
-                                                            }
-                                                            
-                                                        is DownloadState.Completed -> {
-                                                            // Handle direct download completion
+                                                downloadService.downloadBeatmap(
+                                                    beatmapSetId = map.id,
+                                                    accessToken = accessToken,
+                                                    title = map.title,
+                                                    artist = map.artist,
+                                                    creator = map.creator,
+                                                    genreId = map.genreId,
+                                                    coversListUrl = map.covers.listUrl
+                                                ).collect { state ->
+                                                    when (state) {
+                                                        is com.mosu.app.domain.download.UnifiedDownloadState.Progress -> {
+                                                            downloadStates =
+                                                                downloadStates + (map.id to DownloadProgress(
+                                                                    state.progress,
+                                                                    state.status
+                                                                ))
+                                                        }
+                                                        is com.mosu.app.domain.download.UnifiedDownloadState.Success -> {
                                                             downloadStates =
                                                                 downloadStates + (map.id to DownloadProgress(
                                                                     100,
                                                                     context.getString(R.string.search_download_done)
                                                                 ))
-                                                            
-                                                            try {
-                                                                // Register each unique track (one per unique audio file)
-                                                                state.tracks.forEach { track ->
-                                                                    val entity = BeatmapEntity(
-                                                                        beatmapSetId = state.beatmapSetId,
-                                                                        title = track.title,
-                                                                        artist = track.artist,
-                                                                        creator = map.creator,
-                                                                        difficultyName = track.difficultyName,
-                                                                        audioPath = track.audioFile.absolutePath,
-                                                                        coverPath = track.coverFile?.absolutePath ?: "",
-                                                                        genreId = map.genreId
-                                                                    )
-                                                                    TrackService.addTrack(entity, db, context)
-                                                                }
-                                                                TrackService.updateTrackDownloadStatus(state.beatmapSetId, true, db)
-                                                                
-                                                            } catch (e: Exception) {
-                                                                Log.e("SearchScreen", "Failed to register direct download", e)
-                                                            }
-
                                                             kotlinx.coroutines.delay(2000)
                                                             downloadStates = downloadStates - map.id
                                                         }
-
-                                                            is DownloadState.Downloaded -> {
-                                                                downloadStates =
-                                                                    downloadStates + (map.id to DownloadProgress(
-                                                                        100,
-                                                                        context.getString(R.string.search_download_extracting)
-                                                                    ))
-                                                                try {
-                                                                    val extractedTracks =
-                                                                        extractor.extractBeatmap(
-                                                                            state.file,
-                                                                            map.id
-                                                                        )
-                                                                    val fallbackCoverPath =
-                                                                        if (extractedTracks.any { track ->
-                                                                                track.coverFile == null || !track.coverFile.exists()
-                                                                            }
-                                                                        ) {
-                                                                            coverDownloadService.downloadFallbackCoverImage(
-                                                                                map.id,
-                                                                                map.covers.listUrl
-                                                                            )
-                                                                        } else {
-                                                                            null
-                                                                        }
-                                                                    extractedTracks.forEach { track ->
-                                                                        val coverPath = track.coverFile?.takeIf { it.exists() }?.absolutePath
-                                                                            ?: fallbackCoverPath
-                                                                            ?: ""
-                                                                        val entity = BeatmapEntity(
-                                                                            beatmapSetId = map.id,
-                                                                            title = track.title,
-                                                                            artist = track.artist,
-                                                                            creator = map.creator,
-                                                                            difficultyName = track.difficultyName,
-                                                                            audioPath = track.audioFile.absolutePath,
-                                                                            coverPath = coverPath,
-                                                                            genreId = map.genreId
-                                                                        )
-                                                                        TrackService.addTrack(entity, db, context)
-                                                                        // Mark this track as downloaded in any playlists that contain it
-                                                                        TrackService.updateTrackDownloadStatus(entity.beatmapSetId, true, db)
-                                                                    }
-                                                                    downloadStates =
-                                                                        downloadStates + (map.id to DownloadProgress(
-                                                                            100,
-                                                                            context.getString(R.string.search_download_done)
-                                                                        ))
-                                                                    // Remove from download states after 2 seconds
-                                                                    kotlinx.coroutines.delay(2000)
-                                                                    downloadStates =
-                                                                        downloadStates - map.id
-                                                                } catch (e: Exception) {
-                                                                    downloadStates =
-                                                                        downloadStates + (map.id to DownloadProgress(
-                                                                            0,
-                                                                            context.getString(R.string.search_download_error_prefix, e.message)
-                                                                        ))
-                                                                }
-                                                            }
-
-                                                            is DownloadState.Error -> {
-                                                                downloadStates =
-                                                                    downloadStates + (map.id to DownloadProgress(
-                                                                        0,
-                                                                        context.getString(R.string.search_download_failed)
-                                                                    ))
-                                                            }
-
-                                                            else -> {}
+                                                        is com.mosu.app.domain.download.UnifiedDownloadState.Error -> {
+                                                            Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                                                            downloadStates = downloadStates - map.id
                                                         }
                                                     }
+                                                }
                                             }
                                         }
                                     },
@@ -1317,7 +1181,7 @@ fun SearchScreen(
                                             )
                                             if (result.beatmaps.isNotEmpty()) {
                                                 val merged =
-                                                    searchService.mergeByTitle(searchResults, result.beatmaps, downloadedBeatmapSetIds)
+                                                    searchService.mergeByTitle(searchResults, result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                 val mergedIds = merged.map { it.id }.toSet()
                                                 mergeGroups = searchService.unionMergeGroups(
                                                     mergeGroups,
@@ -1359,7 +1223,8 @@ fun SearchScreen(
 
         if (infoDialogVisible && infoTarget != null) {
             val target = infoTarget!!
-            val downloaded = downloadedBeatmapSetIds.contains(target.id)
+            val targetKey = "${target.title.trim().lowercase()}|${target.artist.trim().lowercase()}"
+            val downloaded = downloadedBeatmapSetIds.contains(target.id) || downloadedKeys.contains(targetKey)
             // Info Popup
             InfoPopup(
                 visible = true,
@@ -1374,12 +1239,74 @@ fun SearchScreen(
                     infoCoverEnabled = infoCoverEnabled,
                     onDownloadClick = { beatmapset ->
                         scope.launch {
-                            beatmapDownloader.downloadBeatmap(beatmapset.id)
+                            downloadService.downloadBeatmap(
+                                beatmapSetId = beatmapset.id,
+                                accessToken = accessToken,
+                                title = beatmapset.title,
+                                artist = beatmapset.artist,
+                                creator = beatmapset.creator,
+                                genreId = beatmapset.genreId,
+                                coversListUrl = beatmapset.covers.listUrl
+                            ).collect { state ->
+                                when (state) {
+                                    is UnifiedDownloadState.Progress -> {
+                                        downloadStates =
+                                            downloadStates + (beatmapset.id to DownloadProgress(
+                                                state.progress,
+                                                state.status
+                                            ))
+                                    }
+                                    is UnifiedDownloadState.Success -> {
+                                        downloadStates =
+                                            downloadStates + (beatmapset.id to DownloadProgress(
+                                                100,
+                                                context.getString(R.string.search_download_done)
+                                            ))
+                                        kotlinx.coroutines.delay(2000)
+                                        downloadStates = downloadStates - beatmapset.id
+                                    }
+                                    is UnifiedDownloadState.Error -> {
+                                        Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                                        downloadStates = downloadStates - beatmapset.id
+                                    }
+                                }
+                            }
                         }
                     },
                     onRestoreClick = { beatmapset ->
                         scope.launch {
-                            beatmapDownloader.downloadBeatmap(beatmapset.id)
+                            downloadService.downloadBeatmap(
+                                beatmapSetId = beatmapset.id,
+                                accessToken = accessToken,
+                                title = beatmapset.title,
+                                artist = beatmapset.artist,
+                                creator = beatmapset.creator,
+                                genreId = beatmapset.genreId,
+                                coversListUrl = beatmapset.covers.listUrl
+                            ).collect { state ->
+                                when (state) {
+                                    is UnifiedDownloadState.Progress -> {
+                                        downloadStates =
+                                            downloadStates + (beatmapset.id to DownloadProgress(
+                                                state.progress,
+                                                state.status
+                                            ))
+                                    }
+                                    is UnifiedDownloadState.Success -> {
+                                        downloadStates =
+                                            downloadStates + (beatmapset.id to DownloadProgress(
+                                                100,
+                                                context.getString(R.string.search_download_done)
+                                            ))
+                                        kotlinx.coroutines.delay(2000)
+                                        downloadStates = downloadStates - beatmapset.id
+                                    }
+                                    is UnifiedDownloadState.Error -> {
+                                        Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                                        downloadStates = downloadStates - beatmapset.id
+                                    }
+                                }
+                            }
                         }
                     },
                     onPlayClick = if (downloaded) { beatmapset ->
@@ -1429,7 +1356,7 @@ fun SearchScreen(
                             searchAny = !onlyLeaderboardEnabled
                         )
                         if (cachedResult != null) {
-                            val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds)
+                            val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                             mergeGroups = searchService.buildMergeGroups(cachedResult.beatmaps)
                             searchResults = deduped
                             currentCursor = cachedResult.cursor
@@ -1440,7 +1367,7 @@ fun SearchScreen(
                         scope.launch {
                             try {
                                 val result = repository.getPlayedBeatmaps(accessToken, null, null, null, filterMode, playedFilterMode, uid, isSupporter, !onlyLeaderboardEnabled)
-                                val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds)
+                                val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                 mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                 searchResults = deduped
                                 currentCursor = result.cursor

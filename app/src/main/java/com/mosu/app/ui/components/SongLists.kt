@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
@@ -20,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -31,7 +36,9 @@ sealed class SongListActions {
         val onDelete: (SongItemData) -> Unit,
         val onAddToPlaylist: (SongItemData) -> Unit,
         val onClick: (SongItemData) -> Unit = { },
-        val onLongClick: (SongItemData) -> Unit = { }
+        val onLongClick: (SongItemData) -> Unit = { },
+        val startToEndIcon: ImageVector = Icons.Default.Add,
+        val endToStartIcon: ImageVector = Icons.Default.Delete
     ) : SongListActions()
 
     data class PlaylistActions(
@@ -39,7 +46,9 @@ sealed class SongListActions {
         val onAddToOtherPlaylist: (SongItemData) -> Unit,
         val onClick: (SongItemData) -> Unit = { },
         val onLongClick: (SongItemData) -> Unit = { },
-        val isUndownloaded: (SongItemData) -> Boolean = { false }
+        val isUndownloaded: (SongItemData) -> Boolean = { false },
+        val startToEndIcon: ImageVector = Icons.Default.Add,
+        val endToStartIcon: ImageVector = Icons.Default.Remove
     ) : SongListActions()
 }
 
@@ -102,7 +111,9 @@ fun SwipeableSongList(
                         ),
                         coverStartPadding = config.coverStartPadding,
                         textEndPadding = config.textEndPadding,
-                        modifier = itemModifier
+                        modifier = itemModifier,
+                        startToEndIcon = actions.startToEndIcon,
+                        endToStartIcon = actions.endToStartIcon
                     )
 
                     if (config.showDividers && !isLastItem) {
@@ -126,7 +137,9 @@ fun SwipeableSongList(
                         },
                         coverStartPadding = config.coverStartPadding,
                         textEndPadding = config.textEndPadding,
-                        modifier = itemModifier
+                        modifier = itemModifier,
+                        startToEndIcon = actions.startToEndIcon,
+                        endToStartIcon = actions.endToStartIcon
                     )
 
                     if (config.showDividers && !isLastItem) {

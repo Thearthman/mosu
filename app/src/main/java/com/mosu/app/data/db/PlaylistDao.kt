@@ -29,8 +29,8 @@ interface PlaylistDao {
     @Query("UPDATE playlist_tracks SET isDownloaded = 0 WHERE beatmapSetId IN (SELECT beatmapSetId FROM beatmaps)")
     suspend fun markAllTracksAsUndownloaded()
 
-    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND beatmapSetId = :beatmapSetId")
-    suspend fun removeTrack(playlistId: Long, beatmapSetId: Long)
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND beatmapSetId = :beatmapSetId AND difficultyName = :difficultyName")
+    suspend fun removeTrack(playlistId: Long, beatmapSetId: Long, difficultyName: String)
 
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId")
     suspend fun removeAllTracksFromPlaylist(playlistId: Long)
@@ -38,7 +38,7 @@ interface PlaylistDao {
     @Query(
         """
         SELECT beatmaps.* FROM beatmaps
-        INNER JOIN playlist_tracks ON beatmaps.beatmapSetId = playlist_tracks.beatmapSetId
+        INNER JOIN playlist_tracks ON beatmaps.beatmapSetId = playlist_tracks.beatmapSetId AND beatmaps.difficultyName = playlist_tracks.difficultyName
         WHERE playlist_tracks.playlistId = :playlistId
         ORDER BY playlist_tracks.addedAt ASC
     """
@@ -52,6 +52,7 @@ interface PlaylistDao {
             pt.beatmapSetId,
             pt.title AS storedTitle,
             pt.artist AS storedArtist,
+            pt.difficultyName AS storedDifficultyName,
             pt.addedAt,
             pt.isDownloaded,
             b.uid,
@@ -62,9 +63,10 @@ interface PlaylistDao {
             b.audioPath,
             b.coverPath,
             b.downloadedAt,
-            b.genreId
+            b.genreId,
+            b.isAlbum
         FROM playlist_tracks pt
-        LEFT JOIN beatmaps b ON pt.beatmapSetId = b.beatmapSetId
+        LEFT JOIN beatmaps b ON pt.beatmapSetId = b.beatmapSetId AND pt.difficultyName = b.difficultyName
         WHERE pt.playlistId = :playlistId
         ORDER BY pt.addedAt ASC
     """

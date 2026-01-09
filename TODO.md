@@ -3,13 +3,12 @@
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
-5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. 
+5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
 
 
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-3. SwipeToDismissSongItem should have parameter for left & right swipe icons. For example, in Library left swipe should reveal a delete icon, while in playlist it should be a minus icon. 
 
 
 # Pending Refactors
@@ -44,6 +43,7 @@
 # Implemented Features
 0. Core Feature
     1. Add ability to login two accounts and preserve both login info according to bug fix 3.
+    2. Implemented automatic region check on app launch to switch to Sayobot API for users in Mainland China.
 1. Settings page update
     1. Implement switch in settings that configures whether the played song is filtered by the literal url tag in the search url or the user's most played data. This is because most user without supporter status will not be able to search for their played songs directly through the url. When user don't have supporter, it locks to search by the most played songs directly from user data.
     2. Implement search true all songs(unranked, loved, and so on) with url tag `s=any`
@@ -100,6 +100,9 @@
 19. Implemented long press info popup feature across all song items in Search, Library, and Playlist views with refactored reusable InfoPopup component.
 20. Add global player playcount to info popup in search page and order beatmaps this way in the info pop up. Include ranked status in info popup 
 21. Applied monospace font with tabular (fixed-width) numbers to star rating displays in InfoPopup for consistent alignment and spacing 
+22. Added region and API source indicators to the profile page.
+23. Make the indicator for the Region and API Source Indicator Card in the profile page spinning when the region utils is refreshing.
+24. Implemented parameterizable left & right swipe icons for `SwipeToDismissSongItem`, using a delete icon in Library and a minus icon in Playlist.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -135,7 +138,13 @@
 31. Fixed extremely slow InfoPopup loading by utilizing nested beatmap data in search results instead of making sequential API calls for each beatmapset, reducing load times from ~25s to ~1s.
 32. Optimized supporter status checking to perform only once upon app startup for all logged-in accounts with valid tokens, instead of checking every time search screen loads, significantly improving search screen loading speed.
 33. Fixed unranked maps visibility logic: Renamed "Include unranked maps" toggle to "Only songs with Leaderboard" and aligned API search status with the toggle state (enabled = leaderboard only, disabled = s=any).
-34. Implemented automatic region check on app launch to switch to Sayobot API for users in Mainland China.
+34. Fixed SayobotApi not working for downloading recent plays in recent play filter in search screen. After download, songs don't show as downloaded in search either in library.
+35. Resolved "ID mismatch" bug where downloaded songs wouldn't show as "Downloaded" in certain search filters (Favorite, Recent, etc.) by implementing a unified `BeatmapDownloadService` and Title/Artist metadata matching logic.
+36. Fixed "can't add individual songs in an album to playlist" bug by including difficulty name in playlist track storage.
+37. Refactored Playlist UI to group tracks by set ID, showing them as `AlbumGroup` only if they were identified as an album (multiple audio files) during download.
+38. Added long-press support for album headers to trigger the info popup across Library and Playlist screens.
+39. Implemented Room database migration (v14 to v15) to store `isAlbum` flag in `BeatmapEntity` at download time.
+40. Fixed "whole album showing in playlist" bug by correcting SQL joins to include `difficultyName`, ensuring only added tracks appear in playlist groups.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.HorizontalDivider
@@ -61,7 +62,7 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
-import com.mosu.app.domain.download.BeatmapDownloader
+import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.AlbumGroup
 import com.mosu.app.ui.components.AlbumGroupActions
@@ -84,16 +85,19 @@ fun LibraryScreen(
     db: AppDatabase,
     musicController: MusicController,
     repository: OsuRepository,
-    beatmapDownloader: BeatmapDownloader
+    downloadService: BeatmapDownloadService
 ) {
     val context = LocalContext.current
     val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
     val downloadedBeatmapSetIds = remember(downloadedMaps) { downloadedMaps.map { it.beatmapSetId }.toSet() }
+    val downloadedKeys = remember(downloadedMaps) {
+        downloadedMaps.map { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }.toSet()
+    }
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistTracks by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val playlistMembership = playlistTracks
         .groupBy { it.playlistId }
-        .mapValues { entry -> entry.value.map { it.beatmapSetId }.toSet() }
+        .mapValues { entry -> entry.value.map { "${it.beatmapSetId}|${it.difficultyName}" }.toSet() }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val searchService = remember { BeatmapSearchService(repository, db, context) }
@@ -204,7 +208,7 @@ fun LibraryScreen(
         dialogTrack = track
         dialogSelection = dialogSelectionCache[track.uid]
             ?: playlists
-                .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
+                .filter { playlistMembership[it.id]?.contains("${track.beatmapSetId}|${track.difficultyName}") == true }
                 .map { it.id }
                 .toSet()
         showPlaylistDialog = true
@@ -214,7 +218,7 @@ fun LibraryScreen(
     LaunchedEffect(playlistTracks, dialogTrack, playlists) {
         val track = dialogTrack ?: return@LaunchedEffect
         val latest = playlists
-            .filter { playlistMembership[it.id]?.contains(track.beatmapSetId) == true }
+            .filter { playlistMembership[it.id]?.contains("${track.beatmapSetId}|${track.difficultyName}") == true }
             .map { it.id }
             .toSet()
         dialogSelection = latest
@@ -363,7 +367,9 @@ fun LibraryScreen(
             val tracks = groupedMaps[setId] ?: emptyList()
             if (tracks.isEmpty()) return@items
 
-            if (tracks.size > 1) {
+            val isAlbumSet = tracks.any { it.isAlbum }
+
+            if (isAlbumSet) {
                 // Album Group
                 val albumData = AlbumGroupData(
                     title = tracks[0].title,
@@ -417,6 +423,9 @@ fun LibraryScreen(
                         if (track != null) {
                             openPlaylistDialog(track)
                         }
+                    },
+                    onLongClick = {
+                        onSongLongPress(tracks.first())
                     }
                 )
 
@@ -432,7 +441,8 @@ fun LibraryScreen(
                             expandedBeatmapSets - setId
                         }
                     },
-                    highlightTrackId = highlightTrackId
+                    highlightTrackId = highlightTrackId,
+                    endToStartIcon = Icons.Default.Delete
                 )
             } else {
                 // Single Track
@@ -459,7 +469,8 @@ fun LibraryScreen(
                     onClick = { musicController.playSong(track, filteredMaps) },
                     onLongClick = { onSongLongPress(track) },
                     swipeActions = swipeActions,
-                    highlight = highlightSetId == setId && nowPlaying != null
+                    highlight = highlightSetId == setId && nowPlaying != null,
+                    endToStartIcon = Icons.Default.Delete
                 )
             }
             HorizontalDivider(modifier = Modifier.padding(start = 64.dp)) // Apple style separator
@@ -480,12 +491,12 @@ fun LibraryScreen(
                 },
                 onAddToPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, db)
+                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, track.difficultyName, db)
                     }
                 },
                 onRemoveFromPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, db)
+                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, track.difficultyName, db)
                     }
                 },
                 beatmapSetId = track.beatmapSetId,
@@ -594,20 +605,13 @@ fun LibraryScreen(
             loading = infoLoading,
             error = infoError,
             setCreators = infoSetCreators,
-            downloaded = infoTarget?.let { downloadedBeatmapSetIds.contains(it.id) } ?: false,
+            downloaded = infoTarget?.let { target ->
+                val targetKey = "${target.title.trim().lowercase()}|${target.artist.trim().lowercase()}"
+                downloadedBeatmapSetIds.contains(target.id) || downloadedKeys.contains(targetKey)
+            } ?: false,
             config = InfoPopupConfig(
                 infoCoverEnabled = false, // Disable cover in library popup
                 showConfirmButton = false, // Hide confirm button in library
-                onDownloadClick = { beatmapset ->
-                    scope.launch {
-                        beatmapDownloader.downloadBeatmap(beatmapset.id)
-                    }
-                },
-                onRestoreClick = { beatmapset ->
-                    scope.launch {
-                        beatmapDownloader.downloadBeatmap(beatmapset.id)
-                    }
-                }
             )
         )
     }

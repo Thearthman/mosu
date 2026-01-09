@@ -68,7 +68,9 @@ import com.mosu.app.utils.RegionInfo
 import com.mosu.app.data.api.TokenAuthenticator
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
-import com.mosu.app.domain.download.BeatmapDownloader
+import com.mosu.app.domain.download.CoverDownloadService
+import com.mosu.app.domain.download.ZipExtractor
+import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
@@ -81,6 +83,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
 import com.mosu.app.data.api.RetrofitClient
+import com.mosu.app.domain.download.BeatmapDownloader
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
@@ -118,6 +121,9 @@ class MainActivity : ComponentActivity() {
         val repository = OsuRepository(db.searchCacheDao())
         val settingsManager = SettingsManager(this)
         val beatmapDownloader = BeatmapDownloader(this, settingsManager)
+        val zipExtractor = ZipExtractor(this)
+        val coverDownloadService = CoverDownloadService(this)
+        val downloadService = BeatmapDownloadService(this, beatmapDownloader, zipExtractor, coverDownloadService, db)
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
         val accountManager = AccountManager(this, tokenManager)
@@ -132,7 +138,7 @@ class MainActivity : ComponentActivity() {
                     tokenManager = tokenManager,
                     accountManager = accountManager,
                     settingsManager = settingsManager,
-                    beatmapDownloader = beatmapDownloader,
+                    downloadService = downloadService,
                     redirectUri = redirectUri
                 )
             }
@@ -154,7 +160,7 @@ fun MainScreen(
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
-    beatmapDownloader: BeatmapDownloader,
+    downloadService: BeatmapDownloadService,
     redirectUri: String
 ) {
     val navController = rememberNavController()
@@ -411,10 +417,10 @@ fun MainScreen(
                         .padding(bottom = contentBottomPadding) // Manual padding for MiniPlayer + NavBar
                 ) {
                     composable("library") {
-                        LibraryScreen(db, musicController, repository, beatmapDownloader)
+                        LibraryScreen(db, musicController, repository, downloadService)
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController, repository, beatmapDownloader)
+                        PlaylistScreen(db, musicController, repository, downloadService, accessToken)
                     }
                     composable("search") {
                         SearchScreen(
@@ -424,7 +430,7 @@ fun MainScreen(
                             accountManager = accountManager,
                             settingsManager = settingsManager,
                             musicController = musicController,
-                            beatmapDownloader = beatmapDownloader,
+                            downloadService = downloadService,
                             scrollToTop = scrollSearchToTop,
                             onScrolledToTop = { scrollSearchToTop = false }
                         )
@@ -438,6 +444,7 @@ fun MainScreen(
                             tokenManager = tokenManager,
                             accountManager = accountManager,
                             settingsManager = settingsManager,
+                            downloadService = downloadService,
                             onLoginClick = {
                                 if (clientId.isNotEmpty()) {
                                     val intent = Intent(

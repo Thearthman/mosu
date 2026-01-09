@@ -66,13 +66,13 @@ class BeatmapSearchService(
         }
     }
 
-    fun dedupeByTitle(list: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>): List<BeatmapsetCompact> {
+    fun dedupeByTitle(list: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>, downloadedKeys: Set<String> = emptySet()): List<BeatmapsetCompact> {
         val map = LinkedHashMap<String, BeatmapsetCompact>()
         list.forEach { beatmap ->
             val key = "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
             val existing = map[key]
-            val isDownloaded = beatmap.id in downloadedBeatmapSetIds
-            val existingDownloaded = existing?.id?.let { it in downloadedBeatmapSetIds } ?: false
+            val isDownloaded = beatmap.id in downloadedBeatmapSetIds || key in downloadedKeys
+            val existingDownloaded = existing?.id?.let { it in downloadedBeatmapSetIds } ?: (key in downloadedKeys && existing != null)
             when {
                 existing == null -> map[key] = beatmap
                 !existingDownloaded && isDownloaded -> map[key] = beatmap // prefer downloaded variant
@@ -82,15 +82,15 @@ class BeatmapSearchService(
         return map.values.toList()
     }
 
-    fun mergeByTitle(existing: List<BeatmapsetCompact>, incoming: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>): List<BeatmapsetCompact> {
+    fun mergeByTitle(existing: List<BeatmapsetCompact>, incoming: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>, downloadedKeys: Set<String> = emptySet()): List<BeatmapsetCompact> {
         if (incoming.isEmpty()) return existing
 
         val map = LinkedHashMap<String, BeatmapsetCompact>()
         fun putIfBetter(beatmap: BeatmapsetCompact) {
             val key = "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
             val existingVal = map[key]
-            val isDownloaded = beatmap.id in downloadedBeatmapSetIds
-            val existingDownloaded = existingVal?.id?.let { it in downloadedBeatmapSetIds } ?: false
+            val isDownloaded = beatmap.id in downloadedBeatmapSetIds || key in downloadedKeys
+            val existingDownloaded = existingVal?.id?.let { it in downloadedBeatmapSetIds } ?: (key in downloadedKeys && existingVal != null)
             when {
                 existingVal == null -> map[key] = beatmap
                 !existingDownloaded && isDownloaded -> map[key] = beatmap

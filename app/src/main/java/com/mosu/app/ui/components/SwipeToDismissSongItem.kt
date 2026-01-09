@@ -60,6 +60,8 @@ fun SwipeToDismissWrapper(
     enableDismissFromStartToEnd: Boolean = swipeActions.onAddToPlaylist != null,
     enableDismissFromEndToStart: Boolean = swipeActions.onDelete != null,
     dismissOnDelete: Boolean = false,
+    startToEndIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Add,
+    endToStartIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Remove,
     content: @Composable () -> Unit
 ) {
     // REMOVE: var currentProgress by remember { mutableStateOf(0f) }
@@ -99,8 +101,8 @@ fun SwipeToDismissWrapper(
             }
 
             val icon = when (dismissState.dismissDirection) {
-                SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Add
-                SwipeToDismissBoxValue.EndToStart -> Icons.Default.Remove
+                SwipeToDismissBoxValue.StartToEnd -> startToEndIcon
+                SwipeToDismissBoxValue.EndToStart -> endToStartIcon
                 else -> null // no icon when settled
             }
 
@@ -155,7 +157,9 @@ fun SwipeToDismissSongItem(
     highlight: Boolean = false,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     coverStartPadding: androidx.compose.ui.unit.Dp = 0.dp,
-    textEndPadding: androidx.compose.ui.unit.Dp = 0.dp
+    textEndPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    startToEndIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Add,
+    endToStartIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Remove
 ) {
     SwipeToDismissWrapper(
         swipeActions = GenericSwipeActions(
@@ -167,7 +171,9 @@ fun SwipeToDismissSongItem(
         ),
         highlight = highlight,
         backgroundColor = backgroundColor,
-        modifier = modifier
+        modifier = modifier,
+        startToEndIcon = startToEndIcon,
+        endToStartIcon = endToStartIcon
     ) {
         SongItem(
             song = song,

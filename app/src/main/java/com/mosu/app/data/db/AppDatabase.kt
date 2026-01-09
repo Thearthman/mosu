@@ -19,7 +19,7 @@ import kotlinx.coroutines.withContext
         PlaylistTrackEntity::class,
         PreservedBeatmapSetIdEntity::class
     ],
-    version = 13,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -118,6 +118,83 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 13 to 14: Add difficultyName to playlist_tracks and update primary key
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Create the new table with the new schema (including difficultyName in primary key)
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS playlist_tracks_new (
+                        playlistId INTEGER NOT NULL,
+                        beatmapSetId INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        difficultyName TEXT NOT NULL DEFAULT '',
+                        addedAt INTEGER NOT NULL,
+                        isDownloaded INTEGER,
+                        PRIMARY KEY(playlistId, beatmapSetId, difficultyName)
+                    )
+                """)
+
+                // 2. Copy data from the old table to the new one
+                // Check if difficultyName already exists in old table (it shouldn't, but let's be safe)
+                val cursor = db.query("PRAGMA table_info(playlist_tracks)")
+                var difficultyNameExists = false
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val columnName = it.getString(it.getColumnIndex("name"))
+                        if (columnName == "difficultyName") {
+                            difficultyNameExists = true
+                            break
+                        }
+                    }
+                }
+
+                if (difficultyNameExists) {
+                    db.execSQL("""
+                        INSERT INTO playlist_tracks_new (playlistId, beatmapSetId, title, artist, difficultyName, addedAt, isDownloaded)
+                        SELECT playlistId, beatmapSetId, title, artist, difficultyName, addedAt, isDownloaded FROM playlist_tracks
+                    """)
+                } else {
+                    db.execSQL("""
+                        INSERT INTO playlist_tracks_new (playlistId, beatmapSetId, title, artist, difficultyName, addedAt, isDownloaded)
+                        SELECT playlistId, beatmapSetId, title, artist, '', addedAt, isDownloaded FROM playlist_tracks
+                    """)
+                }
+
+                // 3. Remove the old table
+                db.execSQL("DROP TABLE playlist_tracks")
+
+                // 4. Rename the new table to the original name
+                db.execSQL("ALTER TABLE playlist_tracks_new RENAME TO playlist_tracks")
+                
+                // 5. Recreate indices
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_playlist_tracks_playlistId ON playlist_tracks (playlistId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_playlist_tracks_beatmapSetId ON playlist_tracks (beatmapSetId)")
+            }
+        }
+
+        // Migration from version 14 to 15: Add isAlbum to beatmaps
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Check if isAlbum column exists before adding it
+                val cursor = db.query("PRAGMA table_info(beatmaps)")
+                var isAlbumExists = false
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val columnName = it.getString(it.getColumnIndex("name"))
+                        if (columnName == "isAlbum") {
+                            isAlbumExists = true
+                            break
+                        }
+                    }
+                }
+
+                if (!isAlbumExists) {
+                    db.execSQL("ALTER TABLE beatmaps ADD COLUMN isAlbum INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -125,7 +202,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mosu_database"
                 )
-                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()
                 INSTANCE = instance

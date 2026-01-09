@@ -1,7 +1,9 @@
 package com.mosu.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,8 +15,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,12 +60,14 @@ data class AlbumGroupActions(
     val onDelete: (() -> Unit)? = null,
     val onAddToPlaylist: (() -> Unit)? = null, // Add album to playlist
     val onTrackDelete: ((SongItemData) -> Unit)? = null,
-    val onTrackAddToPlaylist: ((SongItemData) -> Unit)? = null
+    val onTrackAddToPlaylist: ((SongItemData) -> Unit)? = null,
+    val onLongClick: (() -> Unit)? = null
 )
 
 /**
  * An expandable album group component with swipe-to-dismiss functionality
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumGroup(
     album: AlbumGroupData,
@@ -68,7 +76,9 @@ fun AlbumGroup(
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     forceExpanded: Boolean = false,
     onExpansionChanged: ((Boolean) -> Unit)? = null,
-    highlightTrackId: Long? = null
+    highlightTrackId: Long? = null,
+    startToEndIcon: ImageVector = Icons.Default.Add,
+    endToStartIcon: ImageVector = Icons.Default.Remove
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -86,7 +96,9 @@ fun AlbumGroup(
             onAddToPlaylist = actions.onAddToPlaylist
         ),
         highlight = highlight,
-        backgroundColor = backgroundColor
+        backgroundColor = backgroundColor,
+        startToEndIcon = startToEndIcon,
+        endToStartIcon = endToStartIcon
     ) {
         Column(
             modifier = Modifier
@@ -96,11 +108,14 @@ fun AlbumGroup(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        val newExpanded = !expanded
-                        expanded = newExpanded
-                        onExpansionChanged?.invoke(newExpanded)
-                    }
+                    .combinedClickable(
+                        onClick = {
+                            val newExpanded = !expanded
+                            expanded = newExpanded
+                            onExpansionChanged?.invoke(newExpanded)
+                        },
+                        onLongClick = actions.onLongClick
+                    )
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -147,7 +162,9 @@ fun AlbumGroup(
                                     isHighlightedTrack -> MaterialTheme.colorScheme.primaryContainer
                                     index % 2 == 0 -> MaterialTheme.colorScheme.surface
                                     else -> MaterialTheme.colorScheme.surfaceVariant
-                                }
+                                },
+                                startToEndIcon = startToEndIcon,
+                                endToStartIcon = endToStartIcon
                             )
                         }
                     }
@@ -167,7 +184,9 @@ private fun TrackRowWithSwipe(
     onDelete: (() -> Unit)?,
     onAddToPlaylist: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    startToEndIcon: ImageVector = Icons.Default.Add,
+    endToStartIcon: ImageVector = Icons.Default.Remove
 ) {
     SwipeToDismissWrapper(
         swipeActions = GenericSwipeActions(
@@ -176,7 +195,9 @@ private fun TrackRowWithSwipe(
         ),
         backgroundColor = backgroundColor,
         modifier = modifier,
-        dismissOnDelete = true // Allow dismissal on delete for track rows
+        dismissOnDelete = true, // Allow dismissal on delete for track rows
+        startToEndIcon = startToEndIcon,
+        endToStartIcon = endToStartIcon
     ) {
         androidx.compose.foundation.layout.Row(
             modifier = Modifier

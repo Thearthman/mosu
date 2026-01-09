@@ -74,13 +74,15 @@ class TrackService {
             beatmapSetId: Long,
             title: String,
             artist: String,
+            difficultyName: String,
             db: AppDatabase
         ) {
             val playlistTrack = PlaylistTrackEntity(
                 playlistId = playlistId,
                 beatmapSetId = beatmapSetId,
                 title = title,
-                artist = artist
+                artist = artist,
+                difficultyName = difficultyName
             )
             db.playlistDao().addTrack(playlistTrack)
         }
@@ -91,9 +93,10 @@ class TrackService {
         suspend fun removeTrackFromPlaylist(
             playlistId: Long,
             beatmapSetId: Long,
+            difficultyName: String,
             db: AppDatabase
         ) {
-            db.playlistDao().removeTrack(playlistId, beatmapSetId)
+            db.playlistDao().removeTrack(playlistId, beatmapSetId, difficultyName)
         }
 
         /**

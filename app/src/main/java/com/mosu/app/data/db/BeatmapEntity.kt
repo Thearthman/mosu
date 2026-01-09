@@ -19,5 +19,6 @@ data class BeatmapEntity(
     val audioPath: String,
     val coverPath: String,
     val downloadedAt: Long = System.currentTimeMillis(),
-    val genreId: Int? = null // Store genre for filtering in Library
+    val genreId: Int? = null, // Store genre for filtering in Library
+    val isAlbum: Boolean = false // Whether this track belongs to an album (multiple audio files in set)
 )

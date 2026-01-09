@@ -17,7 +17,7 @@ data class PlaylistEntity(
 
 @Entity(
     tableName = "playlist_tracks",
-    primaryKeys = ["playlistId", "beatmapSetId"],
+    primaryKeys = ["playlistId", "beatmapSetId", "difficultyName"],
     indices = [Index(value = ["playlistId"]), Index(value = ["beatmapSetId"])]
 )
 data class PlaylistTrackEntity(
@@ -25,6 +25,7 @@ data class PlaylistTrackEntity(
     val beatmapSetId: Long, // Changed from beatmapUid to beatmapSetId for stability across restores
     val title: String, // Store title for undownloaded tracks
     val artist: String, // Store artist for undownloaded tracks
+    val difficultyName: String, // Store difficulty name to allow multiple tracks from same set
     val addedAt: Long = System.currentTimeMillis(),
     val isDownloaded: Boolean? = true // Track if the beatmap set is currently downloaded (nullable for migration compatibility)
 )
@@ -49,6 +50,7 @@ data class PlaylistTrackWithBeatmap(
     val beatmapSetId: Long, // Changed from beatmapUid
     val storedTitle: String, // From playlist_tracks (always available)
     val storedArtist: String, // From playlist_tracks (always available)
+    val storedDifficultyName: String, // From playlist_tracks (always available)
     val addedAt: Long,
     val isDownloaded: Boolean?,
     val uid: Long?, // From beatmap (null if not downloaded)
@@ -59,7 +61,8 @@ val beatmapTitle: String?, // From beatmap (null if not downloaded)
     val audioPath: String?, // From beatmap
     val coverPath: String?, // From beatmap
     val downloadedAt: Long?, // From beatmap
-    val genreId: Int? // From beatmap
+    val genreId: Int?, // From beatmap
+    val isAlbum: Boolean? // From beatmap
 ) {
     fun toBeatmapEntity(): BeatmapEntity? {
         // Determine if downloaded based on whether beatmap data exists (from LEFT JOIN)
@@ -78,7 +81,8 @@ val beatmapTitle: String?, // From beatmap (null if not downloaded)
                 audioPath = audioPath!!,
                 coverPath = coverPath!!,
                 downloadedAt = downloadedAt ?: System.currentTimeMillis(),
-                genreId = genreId
+                genreId = genreId,
+                isAlbum = isAlbum ?: false
             )
         } else null
     }

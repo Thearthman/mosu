@@ -20,12 +20,14 @@
 0. Core Feature
     1. Implement Equalizer 
     2. Implement Activity Heatmap from recent play data (should have week, month, and year view). 
+    3. Add ability to manually change download source
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
     1. Add HT(Half Time) similar to DT that doesn't change pitch.
     2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion.
     3. Implement sound balancing base on loudness normalization algorithms
+    4. Implement lyrics service with LRCLIB
 3. Playlist page updates
     Nothing as of present
 4. Search page updates

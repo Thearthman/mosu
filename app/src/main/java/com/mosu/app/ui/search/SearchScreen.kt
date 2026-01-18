@@ -62,6 +62,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -210,6 +211,14 @@ fun SearchScreen(
     val context = LocalContext.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
+    val apiSource by settingsManager.apiSource.collectAsState(initial = "osu")
+    val previewManager = remember { SearchPreviewManager(context, musicController) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            previewManager.release()
+        }
+    }
 
     var infoDialogVisible by remember { mutableStateOf(false) }
     var infoLoading by remember { mutableStateOf(false) }
@@ -760,9 +769,19 @@ fun SearchScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .graphicsLayer { alpha = rowAlpha }
+                                .background(
+                                    if (previewManager.previewingId == map.id) {
+                                        Brush.horizontalGradient(
+                                            0.0f to Color.Transparent,
+                                            previewManager.progress to Color.Transparent,
+                                            previewManager.progress to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                            1.0f to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                                        )
+                                    } else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                                )
                                 .combinedClickable(
                                     onClick = {
-                                        // Short press: play if downloaded
+                                        // Short press: play if downloaded, otherwise preview
                                         if (isDownloaded) {
                                             scope.launch {
                                                 // Get the beatmap entities for this set from database
@@ -778,19 +797,11 @@ fun SearchScreen(
                                                     // Play the first track and use the whole list as playlist
                                                     musicController.playSong(beatmaps.first(), beatmaps)
                                                 } else {
-                                                    Toast.makeText(
-                                                        context,
-                                                        context.getString(R.string.search_play_not_downloaded),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
+                                                    previewManager.playPreview(map, apiSource)
                                                 }
                                             }
                                         } else {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.search_play_not_downloaded),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            previewManager.playPreview(map, apiSource)
                                         }
                                     },
                                     onLongClick = {
@@ -969,9 +980,14 @@ fun SearchScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .graphicsLayer { alpha = rowAlpha }
+                                    .background(
+                                        if (previewManager.previewingId == map.id) 
+                                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) 
+                                        else Color.Transparent
+                                    )
                                     .combinedClickable(
                                         onClick = {
-                                            // Short press: play if downloaded
+                                            // Short press: play if downloaded, otherwise preview
                                             if (isDownloaded) {
                                                 scope.launch {
                                                     // Get the beatmap entities for this set from database
@@ -987,19 +1003,11 @@ fun SearchScreen(
                                                         // Play the first track and use the whole list as playlist
                                                         musicController.playSong(beatmaps.first(), beatmaps)
                                                     } else {
-                                                        Toast.makeText(
-                                                            context,
-                                                            context.getString(R.string.search_play_not_downloaded),
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
+                                                        previewManager.playPreview(map, apiSource)
                                                     }
                                                 }
                                             } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.search_play_not_downloaded),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                                previewManager.playPreview(map, apiSource)
                                             }
                                         },
                                         onLongClick = {
@@ -1309,15 +1317,19 @@ fun SearchScreen(
                             }
                         }
                     },
-                    onPlayClick = if (downloaded) { beatmapset ->
-                        scope.launch {
-                            val tracks = db.beatmapDao().getTracksForSet(beatmapset.id)
-                            if (tracks.isNotEmpty()) {
-                                val allDownloaded = db.beatmapDao().getAllBeatmaps().first()
-                                musicController.playSong(tracks[0], allDownloaded)
+                    onPlayClick = { beatmapset ->
+                        if (downloaded) {
+                            scope.launch {
+                                val tracks = db.beatmapDao().getTracksForSet(beatmapset.id)
+                                if (tracks.isNotEmpty()) {
+                                    val allDownloaded = db.beatmapDao().getAllBeatmaps().first()
+                                    musicController.playSong(tracks[0], allDownloaded)
+                                }
                             }
+                        } else {
+                            previewManager.playPreview(beatmapset, apiSource)
                         }
-                    } else null
+                    }
                 )
             )
         }

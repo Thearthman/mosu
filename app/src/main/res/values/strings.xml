@@ -95,6 +95,7 @@
     <string name="search_filter_select">Select</string>
     <string name="search_cd_filter">Filter</string>
     <string name="search_play_not_downloaded">Song not downloaded</string>
+    <string name="search_preview">Preview</string>
     <string name="app_name">Mosu</string>
     <!-- Profile page strings -->
     <string name="profile_title">Profile</string>

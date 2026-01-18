@@ -424,6 +424,16 @@ fun InfoPopup(
                             Text(stringResource(id = R.string.search_play))
                         }
                     }
+                    config.onPlayClick != null && !downloaded -> {
+                        TextButton(
+                            onClick = {
+                                config.onPlayClick.invoke(target)
+                                onDismiss()
+                            }
+                        ) {
+                            Text(stringResource(id = R.string.search_preview))
+                        }
+                    }
                     downloaded -> {
                         TextButton(
                             onClick = {

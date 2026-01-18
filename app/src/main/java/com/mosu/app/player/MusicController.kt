@@ -172,6 +172,10 @@ class MusicController(
         }
     }
     
+    fun pause() {
+        controller?.pause()
+    }
+    
     fun skipToNext() {
         controller?.seekToNext()
     }

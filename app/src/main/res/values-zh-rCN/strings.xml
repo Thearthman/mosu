@@ -92,6 +92,7 @@
     <string name="search_filter_select">选择</string>
     <string name="search_cd_filter">筛选</string>
     <string name="search_play_not_downloaded">歌曲未下载</string>
+    <string name="search_preview">预览</string>
     <!-- Profile page strings -->
     <string name="profile_title">个人</string>
     <string name="profile_oauth_settings_title">osu! OAuth 设置</string>

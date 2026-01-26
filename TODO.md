@@ -4,27 +4,23 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
-6. arguably no need for sayobot api. Because original was fast enough in CN -> fixed by adding manual switch, leaving more room for user.
 
 
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-3. Add ... to songs that cannot fully display their name in search page. Should not clip entire words, only clip characters that extend beyond what could be display. -> should do the refactor that make all songlist reuse the same module, which will achieve same effect with better design. 
-4. Make Manual Api switch more user intuitive.
-5. When everything is set, remove the debug info during downloading in search screen. 
+3. Make Manual Api switch more user intuitive.
+
 
 
 # Pending Refactors(for v1.0)
-1. Refactor all songlists into the same file SongLists.kt
-2. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
+1. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
 
 
 # New Feature
 0. Core Feature
     1. Implement Equalizer 
     2. Implement Activity Heatmap from recent play data (should have week, month, and year view). 
-    3. Add ability to manually change download source
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
@@ -36,7 +32,6 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    2. Add preview to songs in search page. When song aren't downloaded but is clicked, preview is played. preview from osu api should be fine. [important]
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
 6. Playlist page update
@@ -50,6 +45,7 @@
 0. Core Feature
     1. Add ability to login two accounts and preserve both login info according to bug fix 3.
     2. Implemented automatic region check on app launch to switch to Sayobot API for users in Mainland China.
+    3. arguably no need for sayobot api. Because original was fast enough in CN -> fixed by adding manual switch, leaving more room for user.
 1. Settings page update
     1. Implement switch in settings that configures whether the played song is filtered by the literal url tag in the search url or the user's most played data. This is because most user without supporter status will not be able to search for their played songs directly through the url. When user don't have supporter, it locks to search by the most played songs directly from user data.
     2. Implement search true all songs(unranked, loved, and so on) with url tag `s=any`
@@ -75,6 +71,7 @@
     9. Change search page info popup to long press to trigger and reassign short press to play.
     10. Add mode selection for recent play filter
     11. Maybe add timestamp to recent played music
+    12. Integrated song preview functionality in Search: Clicking an undownloaded song plays a preview from the Osu API (supports Sayobot and official sources).
 5. Library update
     1. Implement library filter. Same as the search genre filter.
     2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.
@@ -109,6 +106,10 @@
 22. Added region and API source indicators to the profile page.
 23. Make the indicator for the Region and API Source Indicator Card in the profile page spinning when the region utils is refreshing.
 24. Implemented parameterizable left & right swipe icons for `SwipeToDismissSongItem`, using a delete icon in Library and a minus icon in Playlist.
+26. Added visual progress feedback for song previews using a horizontal gradient background on the active list item.
+27. Implemented preview toggle: clicking a song that is already previewing will now stop the playback.
+28. Improved song titles display in lists: implemented consistent truncation with ellipsis for long titles and artists across all views.
+29. When everything is set, remove the debug info during downloading in search screen. 
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -151,9 +152,16 @@
 38. Added long-press support for album headers to trigger the info popup across Library and Playlist screens.
 39. Implemented Room database migration (v14 to v15) to store `isAlbum` flag in `BeatmapEntity` at download time.
 40. Fixed "whole album showing in playlist" bug by correcting SQL joins to include `difficultyName`, ensuring only added tracks appear in playlist groups.
+41. Resolved `apiSource` inconsistency where UI could show wrong source during initialization due to race conditions.
+42. Fixed SearchScreen manual refresh bug where new results weren't immediately visible without navigating away and back.
+43. Optimized region detection to avoid redundant background checks and potential state flickering.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.
 2. Updated to Material Design 3 and resolved all compilation errors from SwipeToDismissBox migration.
 3. Created generic SwipeToDismissWrapper component for reusable swipe-to-dismiss functionality.
 4. Refactored AlbumGroup.kt to use SwipeToDismissSongItem.kt components, consolidating swipe logic and improving code maintainability.
+5. Unified song list components into a shared "BeatmapSet" architecture with `BeatmapSetList` and `BeatmapSetData`.
+6. Refactored `AlbumGroup` into `BeatmapSetExpandableItem` and `SwipeToDismissWrapper` into `BeatmapSetSwipeItem`.
+7. Consolidated selection dialogs into `SelectableBeatmapList` and `SelectableBeatmapData`.
+8. Updated to Material Design 3 and resolved all compilation errors from SwipeToDismissBox migration.

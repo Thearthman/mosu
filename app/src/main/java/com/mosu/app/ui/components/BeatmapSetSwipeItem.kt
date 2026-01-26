@@ -1,7 +1,6 @@
 package com.mosu.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,53 +8,40 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxDefaults
-import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mosu.app.R
 
 /**
- * Configuration for swipe actions
+ * Swipe configuration for beatmap set items
  */
-data class SwipeActions(
-    val onDelete: (() -> Unit)? = null,
-    val onAddToPlaylist: ((SongItemData) -> Unit)? = null
-)
-
-/**
- * Generic swipe configuration for any content
- */
-data class GenericSwipeActions(
+data class BeatmapSetSwipeActions(
     val onDelete: (() -> Unit)? = null,
     val onAddToPlaylist: (() -> Unit)? = null
 )
 
 /**
- * A generic swipe-to-dismiss wrapper for any content
+ * A swipe-to-dismiss wrapper specifically for beatmap set list items
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SwipeToDismissWrapper(
-    swipeActions: GenericSwipeActions,
+fun BeatmapSetSwipeItem(
+    swipeActions: BeatmapSetSwipeActions,
     highlight: Boolean = false,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    backgroundBrush: Brush? = null,
     modifier: Modifier = Modifier,
     enableDismissFromStartToEnd: Boolean = swipeActions.onAddToPlaylist != null,
     enableDismissFromEndToStart: Boolean = swipeActions.onDelete != null,
@@ -64,19 +50,14 @@ fun SwipeToDismissWrapper(
     endToStartIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Remove,
     content: @Composable () -> Unit
 ) {
-    // REMOVE: var currentProgress by remember { mutableStateOf(0f) }
-    
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when (value) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    // REMOVE: if (currentProgress >= SwipeThresholds.ADD_TO_PLAYLIST)
-                    // ACTION: Just execute. If the user swiped past default threshold, do it.
                     swipeActions.onAddToPlaylist?.invoke()
                     false // Return false to snap back (keep item in list)
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
-                    // REMOVE: if (currentProgress >= SwipeThresholds.DELETE)
                     swipeActions.onDelete?.invoke()
                     dismissOnDelete // Return true to dismiss if configured, else snap back
                 }
@@ -84,8 +65,6 @@ fun SwipeToDismissWrapper(
             }
         }
     )
-
-
 
     SwipeToDismissBox(
         state = dismissState,
@@ -135,56 +114,16 @@ fun SwipeToDismissWrapper(
         },
         content = {
             val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
-            val bg = if (highlight) flickerColor else backgroundColor
+            
+            val finalBackgroundModifier = if (backgroundBrush != null) {
+                Modifier.background(backgroundBrush)
+            } else {
+                Modifier.background(if (highlight) flickerColor else backgroundColor)
+            }
 
-            Box(modifier = modifier.background(bg)) {
+            Box(modifier = modifier.then(finalBackgroundModifier)) {
                 content()
             }
         }
     )
-}
-
-/**
- * A SongItem wrapped with swipe-to-dismiss functionality
- */
-@Composable
-fun SwipeToDismissSongItem(
-    song: SongItemData,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-    swipeActions: SwipeActions,
-    modifier: Modifier = Modifier,
-    highlight: Boolean = false,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface,
-    coverStartPadding: androidx.compose.ui.unit.Dp = 0.dp,
-    textEndPadding: androidx.compose.ui.unit.Dp = 0.dp,
-    startToEndIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Add,
-    endToStartIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Remove
-) {
-    SwipeToDismissWrapper(
-        swipeActions = GenericSwipeActions(
-            onDelete = swipeActions.onDelete,
-            // FIX: Only create the lambda if the action is not null
-            onAddToPlaylist = swipeActions.onAddToPlaylist?.let { action ->
-                { action(song) }
-            }
-        ),
-        highlight = highlight,
-        backgroundColor = backgroundColor,
-        modifier = modifier,
-        startToEndIcon = startToEndIcon,
-        endToStartIcon = endToStartIcon
-    ) {
-        SongItem(
-            song = song,
-            // FIX: Pass the real onClick here directly
-            onClick = onClick,
-            onLongClick = onLongClick,
-            // FIX: Remove Modifier.clickable { onClick() } to avoid conflict
-            modifier = Modifier,
-            backgroundColor = Color.Transparent, // Background handled by wrapper
-            coverStartPadding = coverStartPadding,
-            textEndPadding = textEndPadding
-        )
-    }
 }

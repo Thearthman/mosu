@@ -25,13 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -40,12 +38,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.platform.LocalContext
-import com.mosu.app.domain.search.BeatmapSearchService
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,44 +51,43 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mosu.app.R
 import com.mosu.app.data.api.model.BeatmapDetail
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
+import com.mosu.app.data.db.PlaylistTrackWithBeatmap
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
-import com.mosu.app.data.db.PlaylistTrackWithBeatmap
 import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.domain.download.UnifiedDownloadState
-import com.mosu.app.R
+import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
-import com.mosu.app.ui.components.AlbumGroup
-import com.mosu.app.ui.components.AlbumGroupActions
-import com.mosu.app.ui.components.AlbumGroupData
+import com.mosu.app.ui.components.BeatmapSetActions
+import com.mosu.app.ui.components.BeatmapSetData
+import com.mosu.app.ui.components.BeatmapSetListConfig
+import com.mosu.app.ui.components.BeatmapTrackData
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
-import com.mosu.app.ui.components.SongItemData
-import com.mosu.app.ui.components.SongListActions
-import com.mosu.app.ui.components.SongListConfig
-import com.mosu.app.ui.components.SwipeableSongList
-import com.mosu.app.ui.components.SelectableSongList
-import com.mosu.app.ui.components.SwipeToDismissSongItem
-import com.mosu.app.ui.components.SwipeActions
+import com.mosu.app.ui.components.SelectableBeatmapData
+import com.mosu.app.ui.components.SelectableBeatmapList
+import com.mosu.app.ui.components.beatmapSetList
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -227,6 +221,96 @@ fun PlaylistScreen(
         dialogSelectionCache[track.uid] = latest
     }
 
+    // Transform to BeatmapSetData for the list
+    val groupedTracks = remember(playlistTracksWithStatus) {
+        playlistTracksWithStatus.groupBy { it.beatmapSetId }
+    }
+
+    val beatmapSets = remember(groupedTracks) {
+        groupedTracks.map { (setId, tracks) ->
+            val first = tracks.first()
+            BeatmapSetData(
+                id = setId,
+                title = first.beatmapTitle ?: first.storedTitle,
+                artist = first.beatmapArtist ?: first.storedArtist,
+                creator = first.creator,
+                coverPath = first.coverPath,
+                isExpandable = first.isAlbum == true,
+                tracks = tracks.map { track ->
+                    BeatmapTrackData(
+                        id = track.uid ?: track.beatmapSetId, 
+                        difficultyName = track.difficultyName ?: track.storedDifficultyName,
+                        artist = track.creator ?: track.storedArtist,
+                        isDownloaded = track.isDownloaded == true
+                    )
+                }
+            )
+        }
+    }
+
+    val actions = remember(playlistTracksWithStatus, selectedPlaylistId) {
+        BeatmapSetActions(
+            onClick = { set ->
+                if (!set.isExpandable && set.tracks.isNotEmpty()) {
+                    val track = playlistTracksWithStatus.find { 
+                        it.beatmapSetId == set.id && 
+                        (it.uid == set.tracks.first().id || it.difficultyName == set.tracks.first().difficultyName) 
+                    }
+                    track?.toBeatmapEntity()?.let { 
+                        musicController.playSong(it, playlistTracks) 
+                    }
+                }
+            },
+            onTrackPlay = { trackData ->
+                val track = playlistTracksWithStatus.find { 
+                    it.uid == trackData.id || 
+                    (it.beatmapSetId == (beatmapSets.find { s -> s.tracks.contains(trackData) }?.id ?: 0) && it.difficultyName == trackData.difficultyName)
+                }
+                track?.toBeatmapEntity()?.let {
+                    musicController.playSong(it, playlistTracks)
+                }
+            },
+            onTrackSwipeLeft = { trackData ->
+                // Remove track from playlist
+                if (selectedPlaylistId != null) {
+                    scope.launch {
+                        val track = playlistTracksWithStatus.find { it.uid == trackData.id }
+                        if (track != null) {
+                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
+                        }
+                    }
+                }
+            },
+            onTrackSwipeRight = { trackData ->
+                // Add to other playlist
+                val track = playlistTracksWithStatus.find { it.uid == trackData.id }?.toBeatmapEntity()
+                if (track != null) openPlaylistDialog(track)
+            },
+            onSwipeLeft = { set ->
+                // Delete/Remove from playlist
+                if (selectedPlaylistId != null) {
+                    scope.launch {
+                        val tracksToRemove = playlistTracksWithStatus.filter { it.beatmapSetId == set.id }
+                        tracksToRemove.forEach { track ->
+                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
+                        }
+                    }
+                }
+            },
+            onSwipeRight = { set ->
+                // Add to OTHER playlist
+                val track = playlistTracksWithStatus.find { it.beatmapSetId == set.id }?.toBeatmapEntity()
+                if (track != null) openPlaylistDialog(track)
+            },
+            onLongClick = { set ->
+                val track = playlistTracksWithStatus.find { it.beatmapSetId == set.id }?.toBeatmapEntity()
+                if (track != null) onSongLongPress(track)
+            },
+            swipeLeftIcon = Icons.Default.Remove,
+            swipeRightIcon = Icons.Default.Add
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -350,132 +434,17 @@ fun PlaylistScreen(
                     Text(text = stringResource(id = R.string.playlist_no_songs))
                 }
             } else {
-                val groupedTracks = remember(playlistTracksWithStatus) {
-                    playlistTracksWithStatus.groupBy { it.beatmapSetId }
-                }
-
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 80.dp) // Space for miniplayer
                 ) {
-                    groupedTracks.forEach { (setId, tracksInGroup) ->
-                        val firstTrack = tracksInGroup.first()
-                        val isActuallyAlbum = firstTrack.isAlbum ?: false
-                        
-                        item(key = setId) {
-                            val albumData = AlbumGroupData(
-                                title = firstTrack.beatmapTitle ?: firstTrack.storedTitle,
-                                artist = firstTrack.beatmapArtist ?: firstTrack.storedArtist,
-                                coverPath = firstTrack.coverPath ?: "",
-                                trackCount = tracksInGroup.size,
-                                id = setId,
-                                songs = tracksInGroup.map { track ->
-                                    SongItemData(
-                                        title = track.difficultyName ?: track.storedTitle,
-                                        artist = track.creator ?: track.storedArtist,
-                                        coverPath = track.coverPath ?: "",
-                                        difficultyName = track.difficultyName ?: "",
-                                        id = track.uid ?: track.beatmapSetId // Use UID if downloaded, else Set ID
-                                    )
-                                }
-                            )
-
-                            val albumActions = AlbumGroupActions(
-                                onAlbumPlay = {
-                                    val entities = tracksInGroup.mapNotNull { it.toBeatmapEntity() }
-                                    if (entities.isNotEmpty()) {
-                                        musicController.playSong(entities.first(), entities)
-                                    }
-                                },
-                                onTrackPlay = { songData ->
-                                    val track = tracksInGroup.find { it.uid == songData.id || it.beatmapSetId == songData.id }
-                                    track?.toBeatmapEntity()?.let {
-                                        musicController.playSong(it, playlistTracks)
-                                    }
-                                },
-                                onDelete = {
-                                    scope.launch {
-                                        tracksInGroup.forEach { track ->
-                                            // Removal from playlist
-                                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
-                                        }
-                                    }
-                                },
-                                onAddToPlaylist = {
-                                    tracksInGroup.firstOrNull()?.toBeatmapEntity()?.let {
-                                        openPlaylistDialog(it)
-                                    }
-                                },
-                                onTrackDelete = { songData ->
-                                    scope.launch {
-                                        val track = tracksInGroup.find { it.uid == songData.id || it.beatmapSetId == songData.id }
-                                        track?.let {
-                                            // Removal from playlist
-                                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, it.beatmapSetId, it.storedDifficultyName, db)
-                                        }
-                                    }
-                                },
-                                onTrackAddToPlaylist = { songData ->
-                                    val track = tracksInGroup.find { it.uid == songData.id || it.beatmapSetId == songData.id }
-                                    track?.toBeatmapEntity()?.let {
-                                        openPlaylistDialog(it)
-                                    }
-                                },
-                                onLongClick = {
-                                    tracksInGroup.firstOrNull()?.toBeatmapEntity()?.let {
-                                        onSongLongPress(it)
-                                    }
-                                }
-                            )
-
-                            if (isActuallyAlbum) {
-                                AlbumGroup(
-                                    album = albumData,
-                                    actions = albumActions,
-                                    highlight = false, // Add highlight logic if needed
-                                    endToStartIcon = Icons.Default.Remove
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
-                            } else {
-                                // For non-album tracks in playlist, show each track individually
-                                tracksInGroup.forEach { track ->
-                                    val beatmapEntity = track.toBeatmapEntity()
-                                    val individualSongData = SongItemData(
-                                        title = track.storedTitle,
-                                        artist = track.storedArtist,
-                                        coverPath = track.coverPath ?: "",
-                                        difficultyName = track.difficultyName ?: "",
-                                        id = track.uid ?: track.beatmapSetId
-                                    )
-                                    
-                                    SwipeToDismissSongItem(
-                                        song = individualSongData,
-                                        onClick = { 
-                                            beatmapEntity?.let { 
-                                                musicController.playSong(it, playlistTracks) 
-                                            }
-                                        },
-                                        onLongClick = {
-                                            beatmapEntity?.let { onSongLongPress(it) }
-                                        },
-                                        swipeActions = SwipeActions(
-                                            onDelete = {
-                                                scope.launch {
-                                                    // Removal from playlist
-                                                    TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
-                                                }
-                                            },
-                                            onAddToPlaylist = {
-                                                beatmapEntity?.let { openPlaylistDialog(it) }
-                                            }
-                                        ),
-                                        endToStartIcon = Icons.Default.Remove
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
-                                }
-                            }
-                        }
-                    }
+                    beatmapSetList(
+                        sets = beatmapSets,
+                        actions = actions,
+                        config = BeatmapSetListConfig(
+                            showDividers = true
+                        )
+                    )
                 }
             }
 
@@ -484,8 +453,8 @@ fun PlaylistScreen(
                     onDismissRequest = { showAddDialog = false },
                     title = { Text(stringResource(id = R.string.playlist_add_songs_dialog_title)) },
                     text = {
-                        val selectableSongs = downloadedTracks.map { track ->
-                            SongItemData(
+                        val selectableBeatmaps = downloadedTracks.map { track ->
+                            SelectableBeatmapData(
                                 title = track.title,
                                 artist = track.artist,
                                 coverPath = track.coverPath,
@@ -494,17 +463,17 @@ fun PlaylistScreen(
                             )
                         }
 
-                        SelectableSongList(
-                            songs = selectableSongs,
-                            isSelected = { songData -> addSelection.contains(songData.id) },
-                            onSelectionChanged = { songData, selected ->
+                        SelectableBeatmapList(
+                            beatmaps = selectableBeatmaps,
+                            isSelected = { data -> addSelection.contains(data.id) },
+                            onSelectionChanged = { data, selected ->
                                 addSelection = if (selected) {
-                                    addSelection + songData.id
+                                    addSelection + data.id
                                 } else {
-                                    addSelection - songData.id
+                                    addSelection - data.id
                                 }
                             },
-                            isDisabled = { songData -> existingIds.contains(songData.id) },
+                            isDisabled = { data -> existingIds.contains(data.id) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(320.dp)
@@ -808,4 +777,3 @@ private fun CollageBackground(
         }
     }
 }
-

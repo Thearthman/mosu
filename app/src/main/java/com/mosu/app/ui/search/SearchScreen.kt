@@ -1,66 +1,49 @@
 package com.mosu.app.ui.search
 
-import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -72,53 +55,43 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
-import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
 import com.mosu.app.R
-import androidx.compose.material3.Icon
-import com.mosu.app.data.api.model.Covers
-import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.BeatmapDetail
+import com.mosu.app.data.api.model.BeatmapsetCompact
+import com.mosu.app.data.api.model.Covers
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
-import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.domain.download.UnifiedDownloadState
-import com.mosu.app.domain.download.DownloadState
+import com.mosu.app.domain.model.formatPlayedAtTimestamp
+import com.mosu.app.domain.search.BeatmapSearchService
+import com.mosu.app.domain.search.RecentItem
+import com.mosu.app.player.MusicController
+import com.mosu.app.ui.components.BeatmapSetActions
+import com.mosu.app.ui.components.BeatmapSetData
+import com.mosu.app.ui.components.BeatmapSetItem
+import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
-import com.mosu.app.domain.download.ZipExtractor
-import com.mosu.app.domain.download.CoverDownloadService
-import com.mosu.app.domain.search.BeatmapSearchService
-import com.mosu.app.domain.model.modeLabel
-import com.mosu.app.domain.model.getStarRatingColor
-import com.mosu.app.domain.model.getGradientColorsForRange
-import com.mosu.app.domain.model.createGradientStops
-import com.mosu.app.domain.model.formatPlayedAtTimestamp
-import com.mosu.app.domain.search.RecentItem
+import com.mosu.app.ui.components.beatmapSetList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
-import java.net.URL
 
 data class DownloadProgress(
     val progress: Int, // 0-100
@@ -133,7 +106,7 @@ fun SearchScreen(
     accessToken: String?,
     accountManager: com.mosu.app.data.AccountManager,
     settingsManager: com.mosu.app.data.SettingsManager,
-    musicController: com.mosu.app.player.MusicController,
+    musicController: MusicController,
     downloadService: BeatmapDownloadService,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {}
@@ -251,10 +224,6 @@ fun SearchScreen(
         }
     }
 
-
-
-
-    
     // Scroll state for collapsing header
     val listState = rememberLazyListState()
     
@@ -284,6 +253,110 @@ fun SearchScreen(
         })
     }
 
+    // Define Unified Actions
+    val actions = remember(accessToken, downloadedBeatmapSetIds, downloadedKeys) {
+        BeatmapSetActions(
+            onClick = { set ->
+                if (set.isDownloaded) {
+                    scope.launch {
+                        // Get the beatmap entities for this set from database
+                        val beatmaps = withContext(Dispatchers.IO) {
+                            val tracks = db.beatmapDao().getTracksForSet(set.id)
+                            if (tracks.isEmpty()) {
+                                db.beatmapDao().getTracksByTitleArtist(set.title, set.artist)
+                            } else {
+                                tracks
+                            }
+                        }
+                        if (beatmaps.isNotEmpty()) {
+                            musicController.playSong(beatmaps.first(), beatmaps)
+                        } else {
+                            // Fallback to preview if DB query fails? Or user data inconsistent
+                            // Re-create simple object for preview
+                            val compact = BeatmapsetCompact(set.id, set.title, set.artist, set.creator ?: "", Covers(set.coverUrl ?: "", set.coverUrl ?: ""), status = "unknown")
+                            previewManager.playPreview(compact, apiSource)
+                        }
+                    }
+                } else {
+                    if (previewManager.previewingId == set.id) {
+                        previewManager.stop()
+                    } else {
+                        val compact = BeatmapsetCompact(set.id, set.title, set.artist, set.creator ?: "", Covers(set.coverUrl ?: "", set.coverUrl ?: ""), status = "unknown")
+                        previewManager.playPreview(compact, apiSource)
+                    }
+                }
+            },
+            onLongClick = { set ->
+                val compact = BeatmapsetCompact(set.id, set.title, set.artist, set.creator ?: "", Covers(set.coverUrl ?: "", set.coverUrl ?: ""), status = "unknown")
+                infoTarget = compact
+                infoDialogVisible = true
+            },
+            onSecondaryAction = { set ->
+                if (!set.isDownloaded && set.downloadProgress == null) {
+                    scope.launch {
+                        downloadStates = downloadStates + (set.id to DownloadProgress(0, context.getString(R.string.search_download_starting)))
+                        downloadService.downloadBeatmap(
+                            beatmapSetId = set.id,
+                            accessToken = accessToken,
+                            title = set.title,
+                            artist = set.artist,
+                            creator = set.creator ?: "",
+                            genreId = null, // We might not have genreId in BeatmapSetData for search results easily
+                            coversListUrl = set.coverUrl ?: ""
+                        ).collect { state ->
+                            when (state) {
+                                is UnifiedDownloadState.Progress -> {
+                                    downloadStates = downloadStates + (set.id to DownloadProgress(state.progress, state.status))
+                                }
+                                is UnifiedDownloadState.Success -> {
+                                    downloadStates = downloadStates + (set.id to DownloadProgress(100, context.getString(R.string.search_download_done)))
+                                    delay(2000)
+                                    downloadStates = downloadStates - set.id
+                                }
+                                is UnifiedDownloadState.Error -> {
+                                    Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
+                                    downloadStates = downloadStates - set.id
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    // Transform search results to BeatmapSetData
+    val sortedResults = remember(searchResults, searchResultsMetadata, filterMode) {
+        if (searchResultsMetadata.isNotEmpty()) {
+            searchResults.sortedBy { beatmap ->
+                searchResultsMetadata[beatmap.id]?.first ?: Int.MAX_VALUE
+            }
+        } else {
+            searchResults
+        }
+    }
+
+    val beatmapSets = remember(sortedResults, downloadStates, searchResultsMetadata, downloadedBeatmapSetIds, downloadedKeys, previewManager.previewingId) {
+        sortedResults.map { map ->
+            val metadata = searchResultsMetadata[map.id]
+            val progress = downloadStates[map.id]
+            val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
+            val isDownloaded = downloadedBeatmapSetIds.contains(map.id) || downloadedKeys.contains(mapKey)
+            
+            BeatmapSetData(
+                id = map.id,
+                title = map.title,
+                artist = map.artist,
+                creator = map.creator,
+                coverUrl = map.covers.listUrl,
+                isExpandable = false,
+                isDownloaded = isDownloaded,
+                downloadProgress = progress?.progress,
+                ranking = metadata?.first,
+                playCount = metadata?.second
+            )
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -363,18 +436,6 @@ fun SearchScreen(
                     }
                 }
             )
-
-            // Sort results by rank if using most_played mode
-            // Force sort by rank to fix ordering issues
-            val sortedResults = remember(searchResults, searchResultsMetadata, filterMode) {
-                if (searchResultsMetadata.isNotEmpty()) {
-                    searchResults.sortedBy { beatmap ->
-                        searchResultsMetadata[beatmap.id]?.first ?: Int.MAX_VALUE
-                    }
-                } else {
-                    searchResults
-                }
-            }
             val rowAlpha = if (flicking) 0.75f else 1f
 
             // Collapsible header with search bar and genre filter
@@ -433,10 +494,10 @@ fun SearchScreen(
                                                                     userId,
                                                                     isSupporter
                                                                 )
-                                val deduped =
-                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
-                                mergeGroups = searchService.buildMergeGroups(result.beatmaps)
-                                searchResults = deduped
+                                                            val deduped =
+                                                                searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                                                            mergeGroups = searchService.buildMergeGroups(result.beatmaps)
+                                                            searchResults = deduped
                                                             currentCursor = result.cursor
                                                             searchResultsMetadata =
                                                                 searchService.filterMetadataFor(
@@ -746,7 +807,7 @@ fun SearchScreen(
                                             text = item.timestamp,
                                             style = MaterialTheme.typography.titleSmall,
                                             color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                            fontWeight = FontWeight.Bold
                                         )
                                         HorizontalDivider(
                                             modifier = Modifier.padding(top = 4.dp),
@@ -756,412 +817,59 @@ fun SearchScreen(
                                 }
                                 is RecentItem.Song -> {
                                     val map = item.beatmapset
-                                    val downloadProgress = downloadStates[map.id]
+                                    val progress = downloadStates[map.id]
                                     val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
                                     val isDownloaded = downloadedBeatmapSetIds.contains(map.id) || downloadedKeys.contains(mapKey)
-                                    val metadata = searchResultsMetadata[map.id] // (rank, playcount) or null
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer { alpha = rowAlpha }
-                                .background(
-                                    if (previewManager.previewingId == map.id) {
-                                        Brush.horizontalGradient(
-                                            0.0f to Color.Transparent,
-                                            previewManager.progress to Color.Transparent,
-                                            previewManager.progress to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                                            1.0f to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                                        )
-                                    } else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                                )
-                                .combinedClickable(
-                                    onClick = {
-                                        // Short press: play if downloaded, otherwise preview
-                                        if (isDownloaded) {
-                                            scope.launch {
-                                                // Get the beatmap entities for this set from database
-                                                val beatmaps = withContext(Dispatchers.IO) {
-                                                    val tracks = db.beatmapDao().getTracksForSet(map.id)
-                                                    if (tracks.isEmpty()) {
-                                                        db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
-                                                    } else {
-                                                        tracks
-                                                    }
-                                                }
-                                                if (beatmaps.isNotEmpty()) {
-                                                    // Play the first track and use the whole list as playlist
-                                                    musicController.playSong(beatmaps.first(), beatmaps)
-                                                } else {
-                                                    previewManager.playPreview(map, apiSource)
-                                                }
-                                            }
-                                        } else {
-                                            previewManager.playPreview(map, apiSource)
-                                        }
-                                    },
-                                    onLongClick = {
-                                        // Long press: show info dialog with vibration
-                                        Log.d("SearchScreen", "Long press detected, showing info dialog")
-                                        // Temporarily remove vibration to test if it's the cause of crash
-                                        // vibrate()
-                                        infoTarget = map
-                                        infoDialogVisible = true
-                                    }
-                                )
-                                .padding(vertical = 8.dp)
-                                // Apply horizontal padding: 0 for most_played (full width), 16dp for others
-                                .padding(horizontal = if (metadata != null) 0.dp else 16.dp)
-                                // Add extra right padding for most_played
-                                .padding(end = if (metadata != null) 8.dp else 0.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Ranking number (for most_played mode)
-                            if (metadata != null) {
-                                Text(
-                                    text = "#${metadata.first}",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.width(48.dp),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-
-                            // Cover Image
-                            AsyncImage(
-                                model = map.covers.listUrl,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(50.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            Column(
-                                modifier = Modifier
-                                    .padding(start = 16.dp)
-                                    .weight(1f)
-                            ) {
-                                Text(
-                                    text = map.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = map.artist,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = formatPlayedAtTimestamp(item.playedAt),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
-
-                                // Download Progress Bar
-                                if (downloadProgress != null) {
-                                    Column(modifier = Modifier.padding(top = 4.dp)) {
-                                        if (downloadProgress.status == "Downloading" && downloadProgress.progress < 100) {
-                                            LinearProgressIndicator(
-                                                progress = { downloadProgress.progress / 100f },
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        } else {
-                                            LinearProgressIndicator(
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                        Text(
-                                            text = downloadProgress.status,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Playcount (for most_played mode)
-                            if (metadata != null) {
-                                Column(
-                                    horizontalAlignment = Alignment.End,
-                                    modifier = Modifier.padding(end = 8.dp)
-                                ) {
-                                    Text(
-                                        text = "${metadata.second}",
-                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface
+                                    val highlight = previewManager.previewingId == map.id
+                                    
+                                    val setData = BeatmapSetData(
+                                        id = map.id,
+                                        title = map.title,
+                                        artist = map.artist,
+                                        creator = map.creator,
+                                        coverUrl = map.covers.listUrl,
+                                        isExpandable = false,
+                                        isDownloaded = isDownloaded,
+                                        downloadProgress = progress?.progress,
+                                        lastPlayed = formatPlayedAtTimestamp(item.playedAt)
                                     )
-                                    Text(
-                                        text = stringResource(id = R.string.search_playcount_label),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.secondary
+                                    
+                                    BeatmapSetItem(
+                                        set = setData,
+                                        actions = actions,
+                                        backgroundBrush = if (highlight) {
+                                            Brush.horizontalGradient(
+                                                0.0f to Color.Transparent,
+                                                previewManager.progress to Color.Transparent,
+                                                previewManager.progress to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                                1.0f to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                                            )
+                                        } else null,
+                                        backgroundColor = Color.Transparent
                                     )
-                                }
-                            }
-
-                            // Download Button
-                            IconButton(
-                                onClick = {
-                                    if (!isDownloaded) {
-                                        scope.launch {
-                                            downloadStates =
-                                                downloadStates + (map.id to DownloadProgress(
-                                                    0,
-                                                    context.getString(R.string.search_download_starting)
-                                                ))
-                                            downloadService.downloadBeatmap(
-                                                beatmapSetId = map.id,
-                                                accessToken = accessToken,
-                                                title = map.title,
-                                                artist = map.artist,
-                                                creator = map.creator,
-                                                genreId = map.genreId,
-                                                coversListUrl = map.covers.listUrl
-                                            ).collect { state ->
-                                                when (state) {
-                                                    is UnifiedDownloadState.Progress -> {
-                                                        downloadStates =
-                                                            downloadStates + (map.id to DownloadProgress(
-                                                                state.progress,
-                                                                state.status
-                                                            ))
-                                                    }
-                                                    is UnifiedDownloadState.Success -> {
-                                                        downloadStates =
-                                                            downloadStates + (map.id to DownloadProgress(
-                                                                100,
-                                                                context.getString(R.string.search_download_done)
-                                                            ))
-                                                        kotlinx.coroutines.delay(2000)
-                                                        downloadStates = downloadStates - map.id
-                                                    }
-                                                    is UnifiedDownloadState.Error -> {
-                                                        Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
-                                                        downloadStates = downloadStates - map.id
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                enabled = !isDownloaded && downloadProgress == null // Disable if already downloaded or downloading
-                            ) {
-                                Icon(
-                                    imageVector = if (isDownloaded) Icons.Default.CheckCircle else Icons.Default.Add,
-                                    contentDescription = if (isDownloaded) stringResource(id = R.string.search_cd_downloaded) else stringResource(id = R.string.search_cd_download),
-                                    tint = if (isDownloaded) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else if (downloadProgress != null) {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.primary
-                                    }
-                                )
-                            }
-                        }
                                 }
                             }
                         }
                     } else {
-                        // Non-recent modes (original logic)
-                        items(sortedResults, key = { it.id }) { map ->
-                            val downloadProgress = downloadStates[map.id]
-                            val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
-                            val isDownloaded = downloadedBeatmapSetIds.contains(map.id) || downloadedKeys.contains(mapKey)
-                            val metadata = searchResultsMetadata[map.id] // (rank, playcount) or null
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .graphicsLayer { alpha = rowAlpha }
-                                    .background(
-                                        if (previewManager.previewingId == map.id) 
-                                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) 
-                                        else Color.Transparent
+                        // Non-recent modes
+                        beatmapSetList(
+                            sets = beatmapSets,
+                            actions = actions,
+                            config = BeatmapSetListConfig(
+                                showDividers = false
+                            ),
+                            highlightedSetId = previewManager.previewingId,
+                            backgroundBrush = { set ->
+                                if (previewManager.previewingId == set.id) {
+                                    Brush.horizontalGradient(
+                                        0.0f to Color.Transparent,
+                                        previewManager.progress to Color.Transparent,
+                                        previewManager.progress to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                        1.0f to MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                                     )
-                                    .combinedClickable(
-                                        onClick = {
-                                            // Short press: play if downloaded, otherwise preview
-                                            if (isDownloaded) {
-                                                scope.launch {
-                                                    // Get the beatmap entities for this set from database
-                                                    val beatmaps = withContext(Dispatchers.IO) {
-                                                        val tracks = db.beatmapDao().getTracksForSet(map.id)
-                                                        if (tracks.isEmpty()) {
-                                                            db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
-                                                        } else {
-                                                            tracks
-                                                        }
-                                                    }
-                                                    if (beatmaps.isNotEmpty()) {
-                                                        // Play the first track and use the whole list as playlist
-                                                        musicController.playSong(beatmaps.first(), beatmaps)
-                                                    } else {
-                                                        previewManager.playPreview(map, apiSource)
-                                                    }
-                                                }
-                                            } else {
-                                                previewManager.playPreview(map, apiSource)
-                                            }
-                                        },
-                                        onLongClick = {
-                                            // Long press: show info dialog with vibration
-                                            Log.d("SearchScreen", "Long press detected, showing info dialog")
-                                            // Temporarily remove vibration to test if it's the cause of crash
-                                            // vibrate()
-                                            infoTarget = map
-                                            infoDialogVisible = true
-                                        }
-                                    )
-                                    .padding(vertical = 8.dp)
-                                    // Apply horizontal padding: 0 for most_played (full width), 16dp for others
-                                    .padding(horizontal = if (metadata != null) 0.dp else 16.dp)
-                                    // Add extra right padding for most_played
-                                    .padding(end = if (metadata != null) 8.dp else 0.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Ranking number (for most_played mode)
-                                if (metadata != null) {
-                                    Text(
-                                        text = "#${metadata.first}",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.width(48.dp),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-
-                                // Cover Image
-                                AsyncImage(
-                                    model = map.covers.listUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(50.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-
-                                Column(
-                                    modifier = Modifier
-                                        .padding(start = 16.dp)
-                                        .weight(1f)
-                                ) {
-                                    Text(
-                                        text = map.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = map.artist,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        maxLines = 1
-                                    )
-
-                                    // Download Progress Bar
-                                    if (downloadProgress != null) {
-                                        Column(modifier = Modifier.padding(top = 4.dp)) {
-                                            if (downloadProgress.status == "Downloading" && downloadProgress.progress < 100) {
-                                                LinearProgressIndicator(
-                                                    progress = { downloadProgress.progress / 100f },
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            } else {
-                                                LinearProgressIndicator(
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            }
-                                            Text(
-                                                text = downloadProgress.status,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Playcount (for most_played mode)
-                                if (metadata != null) {
-                                    Column(
-                                        horizontalAlignment = Alignment.End,
-                                        modifier = Modifier.padding(end = 8.dp)
-                                    ) {
-                                        Text(
-                                            text = "${metadata.second}",
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = stringResource(id = R.string.search_playcount_label),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
-                                }
-
-                                // Download Button
-                                IconButton(
-                                    onClick = {
-                                        if (!isDownloaded) {
-                                            scope.launch {
-                                                downloadStates =
-                                                    downloadStates + (map.id to DownloadProgress(
-                                                        0,
-                                                        context.getString(R.string.search_download_starting)
-                                                    ))
-                                                downloadService.downloadBeatmap(
-                                                    beatmapSetId = map.id,
-                                                    accessToken = accessToken,
-                                                    title = map.title,
-                                                    artist = map.artist,
-                                                    creator = map.creator,
-                                                    genreId = map.genreId,
-                                                    coversListUrl = map.covers.listUrl
-                                                ).collect { state ->
-                                                    when (state) {
-                                                        is com.mosu.app.domain.download.UnifiedDownloadState.Progress -> {
-                                                            downloadStates =
-                                                                downloadStates + (map.id to DownloadProgress(
-                                                                    state.progress,
-                                                                    state.status
-                                                                ))
-                                                        }
-                                                        is com.mosu.app.domain.download.UnifiedDownloadState.Success -> {
-                                                            downloadStates =
-                                                                downloadStates + (map.id to DownloadProgress(
-                                                                    100,
-                                                                    context.getString(R.string.search_download_done)
-                                                                ))
-                                                            kotlinx.coroutines.delay(2000)
-                                                            downloadStates = downloadStates - map.id
-                                                        }
-                                                        is com.mosu.app.domain.download.UnifiedDownloadState.Error -> {
-                                                            Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
-                                                            downloadStates = downloadStates - map.id
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    },
-                                    enabled = !isDownloaded && downloadProgress == null // Disable if already downloaded or downloading
-                                ) {
-                                    Icon(
-                                        imageVector = if (isDownloaded) Icons.Default.CheckCircle else Icons.Default.Add,
-                                        contentDescription = if (isDownloaded) stringResource(id = R.string.search_cd_downloaded) else stringResource(id = R.string.search_cd_download),
-                                        tint = if (isDownloaded) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else if (downloadProgress != null) {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        }
-                                    )
-                                }
+                                } else null
                             }
-                        }
+                        )
                     }
 
                     // Pagination / Load More
@@ -1393,4 +1101,3 @@ fun SearchScreen(
         }
     }
 }
-

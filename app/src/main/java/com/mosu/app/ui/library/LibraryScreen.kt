@@ -16,18 +16,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,7 +47,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import com.mosu.app.domain.search.BeatmapSearchService
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -63,21 +61,19 @@ import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.download.BeatmapDownloadService
+import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
-import com.mosu.app.ui.components.AlbumGroup
-import com.mosu.app.ui.components.AlbumGroupActions
-import com.mosu.app.ui.components.AlbumGroupData
+import com.mosu.app.ui.components.BeatmapSetActions
+import com.mosu.app.ui.components.BeatmapSetData
+import com.mosu.app.ui.components.BeatmapTrackData
 import com.mosu.app.ui.components.GenreFilter
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
-import com.mosu.app.ui.components.SongItemData
-import com.mosu.app.ui.components.SwipeActions
-import com.mosu.app.ui.components.SwipeToDismissSongItem
+import com.mosu.app.ui.components.beatmapSetList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -225,258 +221,227 @@ fun LibraryScreen(
         dialogSelectionCache[track.uid] = latest
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        // Animated width for collapsible search bar
-        val searchBarWidth by animateDpAsState(
-            targetValue = if (isSearchExpanded || searchQuery.isNotEmpty()) 200.dp else 50.dp,
-            animationSpec = tween(durationMillis = 300),
-            label = "searchBarWidth"
-        )
+    // Transform to BeatmapSetData for the list
+    val beatmapSets = remember(groupedMaps, expandedBeatmapSets) {
+        groupedMaps.map { (setId, tracks) ->
+            val first = tracks.first()
+            val isAlbumSet = tracks.any { it.isAlbum }
+            
+            BeatmapSetData(
+                id = setId,
+                title = first.title,
+                artist = first.artist,
+                creator = first.creator,
+                coverPath = first.coverPath,
+                isExpandable = isAlbumSet,
+                tracks = tracks.map { track ->
+                    BeatmapTrackData(
+                        id = track.uid,
+                        difficultyName = track.difficultyName,
+                        artist = track.creator,
+                        isDownloaded = true
+                    )
+                }
+            )
+        }
+    }
 
-        // Header with title and search bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Text(
-                text = stringResource(id = R.string.library_title),
-                style = MaterialTheme.typography.displayMedium, // Apple Music style large title
-                modifier = Modifier.weight(1f)
+    // Define Actions
+    val actions = remember(filteredMaps) {
+        BeatmapSetActions(
+            onClick = { set ->
+                // For single tracks (not expandable), play the track
+                if (!set.isExpandable && set.tracks.isNotEmpty()) {
+                    val track = filteredMaps.find { it.uid == set.tracks.first().id }
+                    if (track != null) musicController.playSong(track, filteredMaps)
+                }
+            },
+            onTrackPlay = { trackData ->
+                // Play specific track from album
+                val track = filteredMaps.find { it.uid == trackData.id }
+                if (track != null) musicController.playSong(track, filteredMaps)
+            },
+            onTrackSwipeLeft = { trackData ->
+                // Delete track
+                scope.launch {
+                    val track = filteredMaps.find { it.uid == trackData.id }
+                    if (track != null) {
+                        TrackService.deleteTrack(track, db, context)
+                    }
+                }
+            },
+            onTrackSwipeRight = { trackData ->
+                // Add to playlist
+                val track = filteredMaps.find { it.uid == trackData.id }
+                if (track != null) openPlaylistDialog(track)
+            },
+            onSwipeLeft = { set ->
+                // Delete
+                scope.launch {
+                    val tracksToDelete = filteredMaps.filter { it.beatmapSetId == set.id }
+                    tracksToDelete.forEach { track ->
+                        TrackService.deleteTrack(track, db, context)
+                    }
+                }
+            },
+            onSwipeRight = { set ->
+                // Add to playlist
+                val track = filteredMaps.find { it.beatmapSetId == set.id }
+                if (track != null) openPlaylistDialog(track)
+            },
+            onLongClick = { set ->
+                 val track = filteredMaps.find { it.beatmapSetId == set.id }
+                 if (track != null) onSongLongPress(track)
+            },
+            swipeLeftIcon = Icons.Default.Delete,
+            swipeRightIcon = Icons.Default.Add
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Animated width for collapsible search bar
+            val searchBarWidth by animateDpAsState(
+                targetValue = if (isSearchExpanded || searchQuery.isNotEmpty()) 200.dp else 50.dp,
+                animationSpec = tween(durationMillis = 300),
+                label = "searchBarWidth"
             )
 
-            // Custom search field with dynamic text positioning
-            Box(
+            // Header with title and search bar
+            Row(
                 modifier = Modifier
-                    .width(searchBarWidth)
-                    .height(50.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .focusRequester(searchFocusRequester)
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            isSearchExpanded = true
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp, horizontal = 16.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(
+                    text = stringResource(id = R.string.library_title),
+                    style = MaterialTheme.typography.displayMedium, // Apple Music style large title
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Custom search field with dynamic text positioning
+                Box(
+                    modifier = Modifier
+                        .width(searchBarWidth)
+                        .height(50.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .focusRequester(searchFocusRequester)
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                isSearchExpanded = true
+                            }
+                        }
+                ) {
+                    // Search icon (fades/disappears based on width)
+                    if (searchBarWidth < 120.dp) {
+                        val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
+
+                        IconButton(
+                            onClick = {
+                                if (!isSearchExpanded) {
+                                    isSearchExpanded = true
+                                    searchFocusRequester.requestFocus()
+                                }
+                            },
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Open search",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = iconAlpha)
+                            )
                         }
                     }
-            ) {
-                // Search icon (fades/disappears based on width)
-                if (searchBarWidth < 120.dp) {
-                    val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
 
-                    IconButton(
-                        onClick = {
-                            if (!isSearchExpanded) {
+                    // Text field content with dynamic positioning
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = {
+                            searchQuery = it
+                            // Keep expanded when there's text
+                            if (it.isNotEmpty()) {
                                 isSearchExpanded = true
-                                searchFocusRequester.requestFocus()
                             }
                         },
                         modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(24.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "Open search",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = iconAlpha)
-                        )
-                    }
-                }
-
-                // Text field content with dynamic positioning
-                BasicTextField(
-                    value = searchQuery,
-                    onValueChange = {
-                        searchQuery = it
-                        // Keep expanded when there's text
-                        if (it.isNotEmpty()) {
-                            isSearchExpanded = true
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            start = if (searchBarWidth >= 120.dp) 18.dp else 10.dp, // More space when icon hidden
-                            end = 30.dp,  // Space for clear button
-                            bottom = 1.dp
+                            .fillMaxSize()
+                            .padding(
+                                start = if (searchBarWidth >= 120.dp) 18.dp else 10.dp, // More space when icon hidden
+                                end = 30.dp,  // Space for clear button
+                                bottom = 1.dp
+                            ),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                // Search is already triggered by the filtering logic
+                            }
                         ),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = {
-                            // Search is already triggered by the filtering logic
-                        }
-                    ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    decorationBox = { innerTextField ->
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            if (searchQuery.isEmpty() && searchBarWidth >= 125.dp) {
-                                Text(
-                                    text = stringResource(id = R.string.library_search_placeholder),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (searchQuery.isEmpty() && searchBarWidth >= 125.dp) {
+                                    Text(
+                                        text = stringResource(id = R.string.library_search_placeholder),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
                         }
-                    }
-                )
+                    )
 
-                // Clear button
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = { searchQuery = "" },
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 10.dp)
-                            .size(24.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Clear,
-                            contentDescription = stringResource(id = R.string.search_cd_clear),
-                            modifier = Modifier.size(16.dp)
-                        )
+                    // Clear button
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 10.dp)
+                                .size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = stringResource(id = R.string.search_cd_clear),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
+
             }
 
-        }
+            // Genre Filter
+            Text(text = stringResource(id = R.string.library_filter_genre), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp))
+            GenreFilter(
+                selectedGenreId = selectedGenreId,
+                onGenreSelected = { selectedGenreId = it },
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp, start = 16.dp, end = 16.dp)
+            )
 
-        // Genre Filter
-        Text(text = stringResource(id = R.string.library_filter_genre), style = MaterialTheme.typography.labelMedium)
-        GenreFilter(
-            selectedGenreId = selectedGenreId,
-            onGenreSelected = { selectedGenreId = it },
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-        )
-
-        LazyColumn(state = listState) {
-        items(
-            items = groupedMaps.keys.toList(),
-            key = { setId -> setId } // Add unique key for proper state management
-        ) { setId ->
-            val tracks = groupedMaps[setId] ?: emptyList()
-            if (tracks.isEmpty()) return@items
-
-            val isAlbumSet = tracks.any { it.isAlbum }
-
-            if (isAlbumSet) {
-                // Album Group
-                val albumData = AlbumGroupData(
-                    title = tracks[0].title,
-                    artist = tracks[0].artist,
-                    coverPath = tracks[0].coverPath,
-                    trackCount = tracks.size,
-                    songs = tracks.map { track ->
-                        SongItemData(
-                            title = track.difficultyName,
-                            artist = track.creator,
-                            coverPath = track.coverPath,
-                            difficultyName = track.difficultyName,
-                            id = track.uid
-                        )
-                    },
-                    id = setId
-                )
-
-                val albumActions = AlbumGroupActions(
-                    onAlbumPlay = {
-                        // Play the first track of the album
-                        musicController.playSong(tracks.first(), filteredMaps)
-                    },
-                    onTrackPlay = { songData ->
-                        // Find the actual BeatmapEntity and play it
-                        val track = tracks.find { it.uid == songData.id }
-                        if (track != null) {
-                            musicController.playSong(track, filteredMaps)
-                        }
-                    },
-                    onDelete = {
-                        scope.launch {
-                            tracks.forEach { track ->
-                                TrackService.deleteTrack(track, db, context)
-                            }
-                        }
-                    },
-                    onAddToPlaylist = {
-                        openPlaylistDialog(tracks.first())
-                    },
-                    onTrackDelete = { songData ->
-                        scope.launch {
-                            val track = tracks.find { it.uid == songData.id }
-                            if (track != null) {
-                                TrackService.deleteTrack(track, db, context)
-                            }
-                        }
-                    },
-                    onTrackAddToPlaylist = { songData ->
-                        val track = tracks.find { it.uid == songData.id }
-                        if (track != null) {
-                            openPlaylistDialog(track)
-                        }
-                    },
-                    onLongClick = {
-                        onSongLongPress(tracks.first())
-                    }
-                )
-
-                AlbumGroup(
-                    album = albumData,
-                    actions = albumActions,
-                    highlight = highlightSetId == setId && nowPlaying != null,
-                    forceExpanded = expandedBeatmapSets.contains(setId),
-                    onExpansionChanged = { expanded ->
-                        expandedBeatmapSets = if (expanded) {
-                            expandedBeatmapSets + setId
-                        } else {
-                            expandedBeatmapSets - setId
-                        }
-                    },
-                    highlightTrackId = highlightTrackId,
-                    endToStartIcon = Icons.Default.Delete
-                )
-            } else {
-                // Single Track
-                val track = tracks[0]
-                val songData = SongItemData(
-                    title = track.title,
-                    artist = track.artist,
-                    coverPath = track.coverPath,
-                    difficultyName = track.difficultyName,
-                    id = track.uid
-                )
-
-                val swipeActions = SwipeActions(
-                    onDelete = {
-                        scope.launch {
-                            TrackService.deleteTrack(track, db, context)
-                        }
-                    },
-                    onAddToPlaylist = { openPlaylistDialog(track) }
-                )
-
-                SwipeToDismissSongItem(
-                    song = songData,
-                    onClick = { musicController.playSong(track, filteredMaps) },
-                    onLongClick = { onSongLongPress(track) },
-                    swipeActions = swipeActions,
-                    highlight = highlightSetId == setId && nowPlaying != null,
-                    endToStartIcon = Icons.Default.Delete
+            // BeatmapSet List
+            LazyColumn(state = listState) {
+                beatmapSetList(
+                    sets = beatmapSets,
+                    actions = actions,
+                    highlightedSetId = highlightSetId,
+                    highlightedTrackId = highlightTrackId
                 )
             }
-            HorizontalDivider(modifier = Modifier.padding(start = 64.dp)) // Apple style separator
         }
-        }
-        }   
 
         if (showPlaylistDialog && dialogTrack != null) {
             val track = dialogTrack!!
@@ -532,7 +497,7 @@ fun LibraryScreen(
 
                                     // Calculate song position within the beatmapset for scroll offset
                                     val beatmapset = groupedMaps[match.beatmapSetId] ?: emptyList()
-                                    val sortedSongs = beatmapset.sortedBy { it.difficultyName } // Sort by difficulty name like AlbumGroup
+                                    val sortedSongs = beatmapset.sortedBy { it.difficultyName } // Sort by difficulty name like BeatmapSetExpandableItem
                                     val songIndex = sortedSongs.indexOfFirst { it.uid == match.uid }
 
                                     // Estimate scroll offset: header height + (song index * estimated item height)
@@ -616,5 +581,3 @@ fun LibraryScreen(
         )
     }
 }
-
-

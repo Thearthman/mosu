@@ -4,14 +4,18 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
+6. arguably no need for sayobot api. Because original was fast enough in CN -> fixed by adding manual switch, leaving more room for user.
 
 
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
+3. Add ... to songs that cannot fully display their name in search page. Should not clip entire words, only clip characters that extend beyond what could be display. -> should do the refactor that make all songlist reuse the same module, which will achieve same effect with better design. 
+4. Make Manual Api switch more user intuitive.
+5. When everything is set, remove the debug info during downloading in search screen. 
 
 
-# Pending Refactors
+# Pending Refactors(for v1.0)
 1. Refactor all songlists into the same file SongLists.kt
 2. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
 

@@ -114,6 +114,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -211,7 +212,8 @@ fun SearchScreen(
     val context = LocalContext.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
-    val apiSource by settingsManager.apiSource.collectAsState(initial = "osu")
+    val initialApiSource: String = remember { runBlocking { settingsManager.apiSource.first() } }
+    val apiSource: String by settingsManager.apiSource.collectAsState(initial = initialApiSource)
     val previewManager = remember { SearchPreviewManager(context, musicController) }
 
     DisposableEffect(Unit) {
@@ -348,18 +350,10 @@ fun SearchScreen(
                                     forceRefresh = true
                                 )
                                 val incoming = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
-                                if (filterMode == "favorite") {
-                                    searchResults = incoming
-                                    currentCursor = result.cursor
-                                    searchResultsMetadata = searchService.filterMetadataFor(incoming, result.metadata)
-                                } else {
-                                    val merged = searchService.mergeByTitle(searchResults, incoming, downloadedBeatmapSetIds, downloadedKeys)
-                                    val mergedIds = merged.map { it.id }.toSet()
-                                    searchResults = merged
-                                    currentCursor = result.cursor
-                                    searchResultsMetadata =
-                                        (searchResultsMetadata + result.metadata).filterKeys { it in mergedIds }
-                                }
+                                mergeGroups = searchService.buildMergeGroups(result.beatmaps)
+                                searchResults = incoming
+                                currentCursor = result.cursor
+                                searchResultsMetadata = searchService.filterMetadataFor(incoming, result.metadata)
                             }
                         } catch (e: Exception) {
                             Log.e("SearchScreen", "Refresh failed", e)
@@ -589,6 +583,7 @@ fun SearchScreen(
                                                                 )
                                                                 val deduped =
                                                                     searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                                                                mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                                 searchResults = deduped
                                                                 currentCursor = result.cursor
                                                                 searchResultsMetadata =
@@ -696,6 +691,7 @@ fun SearchScreen(
                                                                 )
                                                             val deduped =
                                                                 searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                                                            mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                             searchResults = deduped
                                                             currentCursor = result.cursor
                                                             searchResultsMetadata =

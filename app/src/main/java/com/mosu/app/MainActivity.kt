@@ -228,8 +228,8 @@ fun MainScreen(
             val isChecked = settingsManager.regionChecked.first()
             val storedRegion = settingsManager.detectedRegion.first()
             
-            // Re-check if never checked OR if previous check failed (unknown)
-            if (!isChecked || storedRegion == null) {
+            // Re-check only if never checked
+            if (!isChecked) {
                 val region = RegionUtils.getDeviceRegion()
                 if (region != null) {
                     settingsManager.setDetectedRegion(region.countryCode)
@@ -284,7 +284,8 @@ fun MainScreen(
         }
     }
     val language by settingsManager.language.collectAsState(initial = "en")
-    val apiSource by settingsManager.apiSource.collectAsState(initial = "osu")
+    val initialApiSource: String = remember { runBlocking { settingsManager.apiSource.first() } }
+    val apiSource: String by settingsManager.apiSource.collectAsState(initial = initialApiSource)
 
     // Update RetrofitClient when apiSource changes
     LaunchedEffect(apiSource) {

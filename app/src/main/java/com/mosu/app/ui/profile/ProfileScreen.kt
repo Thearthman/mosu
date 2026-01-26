@@ -54,8 +54,10 @@ import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.domain.download.ZipExtractor
 import com.mosu.app.utils.RegionUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -178,7 +180,8 @@ fun ProfileScreen(
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     val language by settingsManager.language.collectAsState(initial = "en")
     val detectedRegion by settingsManager.detectedRegion.collectAsState(initial = null)
-    val apiSource by settingsManager.apiSource.collectAsState(initial = "osu")
+    val initialApiSource: String = remember { runBlocking { settingsManager.apiSource.first() } }
+    val apiSource: String by settingsManager.apiSource.collectAsState(initial = initialApiSource)
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val languageOptions = listOf(
@@ -465,7 +468,15 @@ fun ProfileScreen(
                         }
                     }
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.clickable {
+                        scope.launch {
+                            val nextSource = if (apiSource == "osu") "sayobot" else "osu"
+                            settingsManager.setApiSource(nextSource)
+                        }
+                    }
+                ) {
                     Text(
                         stringResource(R.string.profile_api_source_title),
                         style = MaterialTheme.typography.labelMedium,

@@ -61,4 +61,5 @@ google-services.json
 
 # User-specific configurations
 .vscode/
-
+.cursor/
+workspace/

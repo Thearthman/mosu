@@ -1,16 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="info_cover_title">Show cover in info popup</string>
-    <string name="info_cover_desc">Toggle beatmap cover visibility in Search info dialog.</string>
-    <string name="info_no_details">No difficulty details available.</string>
-    <string name="info_star_range">Star range: %1$.1f - %2$.1f</string>
-    <string name="info_star_single">Star diff: %1$.1f</string>
-    <string name="info_diff_count">%1$d difficulties</string>
-    <string name="info_modes">Modes: %1$s</string>
+    <!-- General -->
+    <string name="app_name">Mosu</string>
+
+    <!-- Search Screen -->
+    <string name="search_title">Search</string>
+    <string name="search_placeholder">Search by title or artist…</string>
+    <string name="search_not_logged">Not Logged In</string>
+    <string name="search_not_logged_button">Login</string>
+    <string name="search_config_prompt">Please go to the Profile tab to configure credentials and login.</string>
+    <string name="search_playcount_label">plays</string>
+    <string name="search_load_more">Load More</string>
+    <string name="search_loading">Loading…</string>
+    <string name="search_play">Play</string>
+    <string name="search_preview">Preview</string>
+    <string name="search_play_not_downloaded">Song not downloaded</string>
+    <string name="search_author_prefix">by %1$s</string>
+
+    <!-- Search Filters -->
+    <string name="search_filter_genre">Filter by Genre</string>
+    <string name="search_genre_not_available">Genre filter not available in Most Played view</string>
+    <string name="search_filter_played">Played</string>
+    <string name="search_filter_recent">Recent</string>
+    <string name="search_filter_favorite">Favorite</string>
+    <string name="search_filter_most_played">Most Played</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_select">Select</string>
+
+    <!-- Library Screen -->
     <string name="library_title">Library</string>
+    <string name="library_search_placeholder">Search…</string>
     <string name="library_filter_genre">Filter by Genre</string>
     <string name="library_no_playlists">No playlists yet. Create one in Playlists tab.</string>
     <string name="library_track_count">%1$d tracks</string>
+
+    <!-- Playlist Screen -->
+    <string name="playlist_title">Playlists</string>
+    <string name="playlist_empty_state">No playlists yet. Tap + to create one.</string>
+    <string name="playlist_default_name">Playlist</string>
+    <string name="playlist_song_count_suffix">songs</string>
+    <string name="playlist_no_songs">No songs yet. Tap + to add.</string>
+    <string name="playlist_dialog_title">Add to playlist</string>
+    <string name="playlist_add_songs_dialog_title">Add songs</string>
+    <string name="playlist_add_button">Add</string>
+    <string name="playlist_cancel_button">Cancel</string>
+    <string name="playlist_create_dialog_title">Create playlist</string>
+    <string name="playlist_name_label">Name</string>
+    <string name="playlist_create_button">Create</string>
+
+    <!-- Profile Screen -->
+    <string name="profile_title">Profile</string>
+    <string name="profile_id_prefix">ID: %1$s</string>
+    <string name="profile_statistics_title">Statistics</string>
+    <string name="profile_downloaded_songs_label">Downloaded Songs: %1$d</string>
+
+    <!-- Account Management -->
+    <string name="profile_account_switch_title">Switch Account</string>
+    <string name="profile_account_no_accounts">No accounts configured</string>
+    <string name="profile_account_select_account">Select an account to continue</string>
+    <string name="profile_account_access_description">Add an account to access osu! features</string>
+    <string name="profile_account_manage_credentials_title">Manage Account Credentials</string>
+    <string name="profile_account_update_credentials">Update Credentials</string>
+    <string name="profile_account_add_new_title">Add New Account</string>
+    <string name="profile_account_add_new_description">Set up additional osu! account</string>
+    <string name="profile_account_add_button">Add Account</string>
+    <string name="profile_account_logged_in">Logged in</string>
+    <string name="profile_account_not_logged_in">Not logged in</string>
+    <string name="profile_account_needs_login">Needs login - tap to login</string>
+    <string name="profile_account_expired_login">Expired - click to login</string>
+
+    <!-- OAuth Credentials -->
+    <string name="profile_oauth_dialog_title">OAuth Credentials</string>
+    <string name="profile_oauth_dialog_message">Enter your osu! OAuth Application credentials:</string>
+    <string name="profile_oauth_dialog_client_id_hint">Client ID</string>
+    <string name="profile_oauth_dialog_client_secret_hint">Client Secret</string>
+    <string name="profile_oauth_dialog_help">Get these from: osu.ppy.sh/home/account/edit</string>
+    <string name="profile_oauth_dialog_save">Save</string>
+    <string name="profile_oauth_dialog_cancel">Cancel</string>
+
+    <!-- Settings & Configuration -->
+    <string name="profile_api_source_title">Preferred Mirror</string>
+    <string name="profile_default_search_view_title">Default Search View</string>
+    <string name="profile_default_search_view_desc">This controls which view Search opens with.</string>
+    <string name="profile_include_unranked_title">Only songs with Leaderboard</string>
+    <string name="profile_include_unranked_desc">Only search for ranked, loved and approved beatmaps.</string>
+    <string name="profile_equalizer_title">Equalizer</string>
+    <string name="profile_recent_activity_heatmap_title">Recent Activity Heatmap</string>
+    <string name="profile_coming_soon">Coming Soon</string>
+    <string name="profile_region_title">Region</string>
+    <string name="profile_region_unknown">Unknown</string>
+
+    <!-- Downloads & Restore -->
+    <string name="search_download_starting">Starting...</string>
+    <string name="search_download_downloading">Downloading</string>
+    <string name="search_download_extracting">Extracting…</string>
+    <string name="search_download_done">Done ✓</string>
+    <string name="search_download_failed">Failed</string>
+    <string name="profile_restore_downloads_title">Restore Downloads</string>
+    <string name="profile_restore_button">Restore</string>
+    <string name="profile_restore_description">previously downloaded beatmaps after database reset</string>
+    <string name="profile_restore_starting">Starting restore...</string>
+    <string name="profile_restore_no_beatmaps">No beatmaps to restore</string>
+    <string name="profile_restore_skipped">Skipped already downloaded beatmap %1$d</string>
+    <string name="profile_restore_downloading">Downloading beatmap %1$d...</string>
+    <string name="profile_restore_extracting">Extracting beatmap %1$d...</string>
+    <string name="profile_restore_completed_toast">Restore completed! Restored %1$d beatmaps</string>
+    <string name="profile_restore_completed_progress">Restore completed! Restored %1$d/%2$d beatmaps</string>
+    <string name="profile_restore_failed_progress">Restore failed: %1$s</string>
+    <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
+
+    <!-- Info Popup -->
+    <string name="info_cover_title">Show cover in info popup</string>
+    <string name="info_cover_desc">Toggle beatmap cover visibility in Search info dialog.</string>
+    <string name="info_no_details">No difficulty details available.</string>
+    <string name="info_diff_count">%1$d difficulties</string>
+    <string name="search_info_load_error">Failed to load details</string>
+
+    <!-- Debug & Technical -->
+    <string name="profile_token_dialog_title">Bearer Token (Debug)</string>
+    <string name="profile_token_dialog_description">Your current bearer token for API testing:</string>
+    <string name="profile_token_dialog_no_token">No token available</string>
+    <string name="profile_token_dialog_copy">Copy</string>
+    <string name="profile_token_dialog_copied">Token copied to clipboard</string>
+    <string name="profile_token_dialog_close">Close</string>
+
+    <!-- Genres -->
     <string name="genre_electronic">Electronic</string>
     <string name="genre_anime">Anime</string>
     <string name="genre_rock">Rock</string>
@@ -23,20 +137,13 @@
     <string name="genre_jazz">Jazz</string>
     <string name="genre_novelty">Novelty</string>
     <string name="genre_other">Other</string>
-    <string name="playlist_dialog_title">Add to playlist</string>
-    <!-- Playlist Screen Strings -->
-    <string name="playlist_title">Playlists</string>
-    <string name="playlist_empty_state">No playlists yet. Tap + to create one.</string>
-    <string name="playlist_default_name">Playlist</string>
-    <string name="playlist_song_count_suffix">songs</string>
-    <string name="playlist_no_songs">No songs yet. Tap + to add.</string>
-    <string name="playlist_add_songs_dialog_title">Add songs</string>
-    <string name="playlist_add_button">Add</string>
-    <string name="playlist_cancel_button">Cancel</string>
-    <string name="playlist_create_dialog_title">Create playlist</string>
-    <string name="playlist_name_label">Name</string>
-    <string name="playlist_create_button">Create</string>
+
     <!-- Content Descriptions -->
+    <string name="search_cd_search">Search</string>
+    <string name="search_cd_clear">Clear</string>
+    <string name="search_cd_filter">Filter</string>
+    <string name="search_cd_download">Download</string>
+    <string name="search_cd_downloaded">Downloaded</string>
     <string name="playlist_cd_create_playlist">Create playlist</string>
     <string name="playlist_cd_back">Back</string>
     <string name="playlist_cd_add_songs">Add songs</string>
@@ -46,129 +153,8 @@
     <string name="library_cd_add_playlist">Add to playlist</string>
     <string name="library_cd_delete">Delete</string>
     <string name="library_cd_expand">Expand</string>
-    <string name="search_title">Search</string>
-    <string name="search_not_logged">Not Logged In</string>
-    <string name="search_config_prompt">Please go to the Profile tab to configure credentials and login.</string>
-    <string name="search_placeholder">Search by title or artist...</string>
-    <string name="library_search_placeholder">Search...</string>
-    <string name="search_cd_search">Search</string>
-    <string name="search_cd_clear">Clear</string>
-    <string name="search_filter_genre">Filter by Genre</string>
-    <string name="search_genre_not_available">Genre filter not available in Most Played view</string>
-    <string name="search_playcount_label">plays</string>
-    <string name="search_status_refreshed">Refreshed</string>
-    <string name="search_status_refresh_error">Refresh Error: %1$s</string>
-    <string name="search_error_prefix">Error: %1$s</string>
-    <string name="search_status_loading_more">Loading more...</string>
-    <string name="search_status_loaded_more">Loaded %1$d more results</string>
-    <string name="search_status_no_more">No more results available</string>
-    <string name="search_status_load_more_error">Load More Error: %1$s</string>
-    <string name="search_load_more">Load More</string>
-    <string name="search_loading">Loading...</string>
-    <string name="search_download_starting">Starting...</string>
-    <string name="search_download_downloading">Downloading</string>
-    
-    <!-- Token Debug Dialog Strings -->
-    <string name="profile_token_dialog_title">Bearer Token (Debug)</string>
-    <string name="profile_token_dialog_description">Your current bearer token for API testing:</string>
-    <string name="profile_token_dialog_no_token">No token available</string>
-    <string name="profile_token_dialog_copy">Copy</string>
-    <string name="profile_token_dialog_copied">Token copied to clipboard</string>
-    <string name="profile_token_dialog_close">Close</string>
-    <string name="search_download_extracting">Extracting...</string>
-    <string name="search_download_done">Done ✓</string>
-    <string name="search_download_failed">Failed</string>
-    <string name="search_download_error_prefix">Error: %1$s</string>
-    <string name="search_cd_downloaded">Downloaded</string>
-    <string name="search_cd_download">Download</string>
-    <string name="search_info_login_required">Login required to fetch details</string>
-    <string name="search_info_load_partial_error">Failed to load some details</string>
-    <string name="search_info_load_error">Failed to load details</string>
-    <string name="search_author_prefix">by %1$s</string>
-    <string name="search_not_logged_button">Login</string>
-    <string name="search_play">Play</string>
-    <string name="search_filter_played">Played</string>
-    <string name="search_filter_recent">Recent</string>
-    <string name="search_filter_favorite">Favorite</string>
-    <string name="search_filter_most_played">Most Played</string>
-    <string name="search_filter_all">All</string>
-    <string name="search_filter_select">Select</string>
-    <string name="search_cd_filter">Filter</string>
-    <string name="search_play_not_downloaded">Song not downloaded</string>
-    <string name="search_preview">Preview</string>
-    <string name="app_name">Mosu</string>
-    <!-- Profile page strings -->
-    <string name="profile_title">Profile</string>
-    <string name="profile_oauth_settings_title">osu! OAuth Settings</string>
-    <string name="profile_client_id_label">Client ID: %1$s</string>
-    <string name="profile_client_id_configured">Configured ✓</string>
-    <string name="profile_client_id_not_set">Not Set</string>
-    <string name="profile_client_secret_label">Client Secret: %1$s</string>
-    <string name="profile_client_secret_configured">Configured ✓</string>
-    <string name="profile_client_secret_not_set">Not Set</string>
-    <string name="profile_configure_credentials">Configure Credentials</string>
-    <string name="profile_update_credentials">Update Credentials</string>
-    <string name="profile_login_button">Login with osu!</string>
-    <string name="profile_login_prompt">Please configure your OAuth credentials above to login</string>
-    <string name="profile_statistics_title">Statistics</string>
-    <string name="profile_downloaded_songs_label">Downloaded Songs: %1$d</string>
-    <string name="profile_id_prefix">ID: %1$s</string>
-    <string name="profile_default_search_view_title">Default Search View</string>
-    <string name="profile_default_search_view_desc">This controls which view Search opens with.</string>
-    <string name="profile_include_unranked_title">Only songs with Leaderboard</string>
-    <string name="profile_include_unranked_desc">Only search for ranked, loved and approved beatmaps.</string>
-    <string name="profile_language_title">Language</string>
-    <string name="profile_equalizer_title">Equalizer</string>
-    <string name="profile_coming_soon">Coming Soon</string>
-    <string name="profile_recent_activity_heatmap_title">Recent Activity Heatmap</string>
-    <string name="profile_logout_button">Logout</string>
-    <!-- OAuth Dialog strings -->
-    <string name="profile_oauth_dialog_title">OAuth Credentials</string>
-    <string name="profile_oauth_dialog_message">Enter your osu! OAuth Application credentials:</string>
-    <string name="profile_oauth_dialog_client_id_hint">Client ID</string>
-    <string name="profile_oauth_dialog_client_secret_hint">Client Secret</string>
-    <string name="profile_oauth_dialog_help">Get these from: osu.ppy.sh/home/account/edit</string>
-    <string name="profile_oauth_dialog_save">Save</string>
-    <string name="profile_oauth_dialog_cancel">Cancel</string>
-    <!-- Language names -->
-    <string name="language_english">English</string>
-    <string name="language_simplified_chinese">简体中文</string>
-    <string name="language_traditional_chinese">繁体中文</string>
-    <string name="profile_language_desc">Choose application display language</string>
 
-    <!-- Restore Downloads -->
-    <string name="profile_restore_downloads_title">Restore Downloads</string>
-    <string name="profile_restore_downloads_description">%1$d previously downloaded beatmaps after database reset</string>
-    <string name="profile_restore_button">Restore</string>
-
-    <!-- Account Manager -->
-    <string name="profile_account_no_accounts">No accounts configured</string>
-    <string name="profile_account_select_account">Select an account to continue</string>
-    <string name="profile_account_access_description">Add an account to access osu! features</string>
-    <string name="profile_account_switch_title">Switch Account</string>
-    <string name="profile_account_manage_credentials_title">Manage Account Credentials</string>
-    <string name="profile_account_update_credentials">Update Credentials</string>
-    <string name="profile_account_add_new_title">Add New Account</string>
-    <string name="profile_account_add_new_description">Set up additional osu! account</string>
-    <string name="profile_account_logged_in">Logged in</string>
-    <string name="profile_account_not_logged_in">Not logged in</string>
-    <string name="profile_account_needs_login">Needs login - tap to login</string>
-    <string name="profile_account_expired_login">Expired - click to login</string>
-    <string name="profile_account_add_button">Add Account</string>
-
-    <!-- Restore Downloads -->
-    <string name="profile_restore_description">previously downloaded beatmaps after database reset</string>
-    <string name="profile_restore_starting">Starting restore...</string>
-    <string name="profile_restore_no_beatmaps">No beatmaps to restore</string>
-    <string name="profile_restore_skipped">Skipped already downloaded beatmap %1$d</string>
-    <string name="profile_restore_downloading">Downloading beatmap %1$d...</string>
-    <string name="profile_restore_extracting">Extracting beatmap %1$d...</string>
-    <string name="profile_restore_completed_toast">Restore completed! Restored %1$d beatmaps</string>
-    <string name="profile_restore_completed_progress">Restore completed! Restored %1$d/%2$d beatmaps</string>
-    <string name="profile_restore_failed_progress">Restore failed: %1$s</string>
-    <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
-
-    <!-- Timestamp formatting -->
+    <!-- Timestamps -->
     <string name="timestamp_today">Today</string>
     <string name="timestamp_yesterday">Yesterday</string>
     <string name="timestamp_three_days_ago">Three days ago</string>
@@ -178,8 +164,9 @@
     <string name="timestamp_three_months_ago">3 months ago</string>
     <string name="timestamp_six_months_ago">6 months ago</string>
     <string name="timestamp_one_year_ago">1 year ago</string>
-    <string name="profile_region_title">Detected Region</string>
-    <string name="profile_region_unknown">Unknown</string>
-    <string name="profile_api_source_title">API Source</string>
-</resources>
 
+    <!-- Languages -->
+    <string name="language_english">English</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_traditional_chinese">繁体中文</string>
+</resources>

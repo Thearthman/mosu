@@ -26,7 +26,8 @@ class SettingsManager(private val context: Context) {
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
-        private val API_SOURCE_KEY = stringPreferencesKey("api_source") // "osu" or "sayobot"
+        private val PREFERRED_MIRROR_KEY = stringPreferencesKey("preferred_mirror") // "nerinyan" or "sayobot"
+        private val API_SOURCE_KEY_OLD = stringPreferencesKey("api_source") // Deprecated
         private val REGION_CHECKED_KEY = booleanPreferencesKey("region_checked")
         private val DETECTED_REGION_KEY = stringPreferencesKey("detected_region")
     }
@@ -42,14 +43,24 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    val apiSource: Flow<String> = context.settingsDataStore.data
+    val preferredMirror: Flow<String> = context.settingsDataStore.data
         .map { preferences ->
-            preferences[API_SOURCE_KEY] ?: "osu"
+            // Migration: if old API_SOURCE_KEY exists and is "osu", map to "nerinyan"
+            // If new PREFERRED_MIRROR_KEY exists, use it. Otherwise default to "nerinyan"
+            val oldVal = preferences[API_SOURCE_KEY_OLD]
+            val newVal = preferences[PREFERRED_MIRROR_KEY]
+            
+            when {
+                newVal != null -> newVal
+                oldVal == "osu" -> "nerinyan"
+                oldVal == "sayobot" -> "sayobot"
+                else -> "nerinyan"
+            }
         }
 
-    suspend fun setApiSource(source: String) {
+    suspend fun setPreferredMirror(mirror: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[API_SOURCE_KEY] = source
+            preferences[PREFERRED_MIRROR_KEY] = mirror
         }
     }
 

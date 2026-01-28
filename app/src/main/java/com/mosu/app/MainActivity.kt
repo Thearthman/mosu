@@ -178,39 +178,31 @@ fun MainScreen(
     val musicController = remember { MusicController(context, settingsManager) }
     
     // Access Token State (loaded from TokenManager or from OAuth)
-    // Initialize synchronously to prevent race condition with API calls
-    var accessToken by remember {
-        mutableStateOf(runBlocking {
-            val token = tokenManager.getCurrentAccessToken()
-
-            // If token exists, check if it's expired and try to refresh
-            if (token != null) {
-                val isExpired = tokenManager.isTokenExpired().first()
-
-                if (isExpired) {
-                        val clientId = settingsManager.clientId.first()
-                        val clientSecret = settingsManager.clientSecret.first()
-
-                        if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
-                            val refreshSuccess = tokenManager.refreshTokenIfNeeded(clientId, clientSecret)
-
-                        if (refreshSuccess) {
-                            // Get the refreshed token
-                            tokenManager.getCurrentAccessToken()
-                            } else {
-                                tokenManager.clearCurrentAccountToken()
-                                null
-                            }
-                        } else {
-                            token
-                        }
+    var accessToken by remember { mutableStateOf<String?>(null) }
+    
+    // Initialize accessToken asynchronously
+    LaunchedEffect(Unit) {
+        val token = tokenManager.getCurrentAccessToken()
+        if (token != null) {
+            val isExpired = tokenManager.isTokenExpired().first()
+            if (isExpired) {
+                val clientId = settingsManager.clientId.first()
+                val clientSecret = settingsManager.clientSecret.first()
+                if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
+                    val refreshSuccess = tokenManager.refreshTokenIfNeeded(clientId, clientSecret)
+                    accessToken = if (refreshSuccess) {
+                        tokenManager.getCurrentAccessToken()
                     } else {
-                        token
+                        tokenManager.clearCurrentAccountToken()
+                        null
                     }
                 } else {
-                    null
+                    accessToken = token
                 }
-        })
+            } else {
+                accessToken = token
+            }
+        }
     }
     
     // Scroll to top trigger for Search screen
@@ -223,6 +215,10 @@ fun MainScreen(
 
     // Initialize accounts and migrate settings on first launch
     LaunchedEffect(Unit) {
+        // Fetch preferred mirror asynchronously
+        val mirror = settingsManager.preferredMirror.first()
+        // preferredMirror state will be updated by the collectAsState below
+        
         // Region check for automatic API switching
         launch {
             val isChecked = settingsManager.regionChecked.first()
@@ -234,10 +230,10 @@ fun MainScreen(
                 if (region != null) {
                     settingsManager.setDetectedRegion(region.countryCode)
                     if (region.countryCode == "CN") {
-                        settingsManager.setApiSource("sayobot")
+                        settingsManager.setPreferredMirror("sayobot")
                         android.util.Log.d("MainActivity", "Region detected as CN, switched to Sayobot API")
                     } else {
-                        settingsManager.setApiSource("osu")
+                        settingsManager.setPreferredMirror("nerinyan")
                         android.util.Log.d("MainActivity", "Region detected as ${region.countryCode}, using official API")
                     }
                 }
@@ -284,15 +280,8 @@ fun MainScreen(
         }
     }
     val language by settingsManager.language.collectAsState(initial = "en")
-    val initialApiSource: String = remember { runBlocking { settingsManager.apiSource.first() } }
-    val apiSource: String by settingsManager.apiSource.collectAsState(initial = initialApiSource)
+    val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
 
-    // Update RetrofitClient when apiSource changes
-    LaunchedEffect(apiSource) {
-        RetrofitClient.setApiSource(apiSource)
-    }
-    
-    
     // Listen for token changes (e.g., after OAuth login or account switch)
     val storedToken by tokenManager.accessToken.collectAsState(initial = accessToken)
     val currentAccountId by tokenManager.currentAccountId.collectAsState(initial = null)
@@ -321,8 +310,8 @@ fun MainScreen(
             val accountId = nullableAccountId // Smart cast to non-null
             val (currentClientId, currentClientSecret) = tokenManager.getAccountCredentials(accountId)
 
-            val effectiveClientId = if (currentClientId.isNullOrEmpty()) runBlocking { settingsManager.clientId.first() } else currentClientId
-            val effectiveClientSecret = if (currentClientSecret.isNullOrEmpty()) runBlocking { settingsManager.clientSecret.first() } else currentClientSecret
+            val effectiveClientId = if (currentClientId.isNullOrEmpty()) settingsManager.clientId.first() else currentClientId
+            val effectiveClientSecret = if (currentClientSecret.isNullOrEmpty()) settingsManager.clientSecret.first() else currentClientSecret
 
             if (effectiveClientId.isNullOrEmpty() || effectiveClientSecret.isNullOrEmpty()) {
                 android.util.Log.w("MainActivity", "OAuth callback received but no credentials configured for account: $currentAccountId")
@@ -468,24 +457,26 @@ fun MainScreen(
             }
 
             // 2. Full Player Sheet (Middle Layer)
-            Box(
-                modifier = Modifier
-                    .zIndex(1f)
-                    .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
-                    .fillMaxSize()
-                    .statusBarsPadding() // Always add status bar padding to prevent drawing under notification bar
-                    .draggable(
-                        state = draggableState,
-                        orientation = Orientation.Vertical,
-                        onDragStopped = { velocity -> snapToTarget(velocity) }
+            if (progress > 0f) {
+                Box(
+                    modifier = Modifier
+                        .zIndex(1f)
+                        .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
+                        .fillMaxSize()
+                        .statusBarsPadding() // Always add status bar padding to prevent drawing under notification bar
+                        .draggable(
+                            state = draggableState,
+                            orientation = Orientation.Vertical,
+                            onDragStopped = { velocity -> snapToTarget(velocity) }
+                        )
+                ) {
+                    FullPlayer(
+                        musicController = musicController,
+                        onCollapse = {
+                            scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
+                        }
                     )
-            ) {
-                FullPlayer(
-                    musicController = musicController,
-                onCollapse = {
-                    scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
                 }
-                )
             }
 
             // 3. MiniPlayer (Top Layer) - Moves UP with Sheet

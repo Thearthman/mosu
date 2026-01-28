@@ -66,8 +66,8 @@ class BeatmapDownloader(
     )
 
     private suspend fun getOrderedMirrors(): List<String> {
-        val apiSource = settingsManager.apiSource.first()
-        return if (apiSource == "sayobot") {
+        val preferredMirror = settingsManager.preferredMirror.first()
+        return if (preferredMirror == "sayobot") {
             listOf(sayobotMirror) + defaultMirrors.filter { it != sayobotMirror }
         } else {
             defaultMirrors
@@ -150,10 +150,10 @@ class BeatmapDownloader(
     }
 
     fun downloadBeatmap(beatmapSetId: Long, accessToken: String? = null): Flow<DownloadState> = flow {
-        val apiSource = settingsManager.apiSource.first()
+        val preferredMirror = settingsManager.preferredMirror.first()
         
         // Use direct file download for Sayobot
-        if (apiSource == "sayobot") {
+        if (preferredMirror == "sayobot") {
              emitAll(downloadDirectlyFromSayobot(beatmapSetId))
              return@flow
         }

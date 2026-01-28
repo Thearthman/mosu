@@ -1,16 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="info_cover_title">資訊彈窗顯示封面</string>
-    <string name="info_cover_desc">控制搜尋資訊彈窗是否顯示譜面封面。</string>
-    <string name="info_no_details">暫無難度詳細資訊。</string>
-    <string name="info_star_range">星數範圍: %1$.1f - %2$.1f</string>
-    <string name="info_star_single">星數: %1$.1f</string>
-    <string name="info_diff_count">%1$d 個難度</string>
-    <string name="info_modes">模式: %1$s</string>
+    <!-- 常規 -->
+    <string name="app_name">Mosu</string>
+
+    <!-- 搜尋介面 -->
+    <string name="search_title">搜尋</string>
+    <string name="search_placeholder">以標題或歌手搜尋…</string>
+    <string name="search_not_logged">未登入</string>
+    <string name="search_not_logged_button">登入</string>
+    <string name="search_config_prompt">請前往「個人」頁設定憑證並登入。</string>
+    <string name="search_playcount_label">次播放</string>
+    <string name="search_load_more">載入更多</string>
+    <string name="search_loading">載入中…</string>
+    <string name="search_play">播放</string>
+    <string name="search_preview">預覽</string>
+    <string name="search_play_not_downloaded">歌曲未下載</string>
+    <string name="search_author_prefix">作者: %1$s</string>
+
+    <!-- 搜尋篩選 -->
+    <string name="search_filter_genre">依曲風篩選</string>
+    <string name="search_genre_not_available">「最多遊玩」檢視不提供曲風篩選</string>
+    <string name="search_filter_played">已玩</string>
+    <string name="search_filter_recent">最近</string>
+    <string name="search_filter_favorite">收藏</string>
+    <string name="search_filter_most_played">最多遊玩</string>
+    <string name="search_filter_all">全部</string>
+    <string name="search_filter_select">選擇</string>
+
+    <!-- 曲庫介面 -->
     <string name="library_title">曲庫</string>
+    <string name="library_search_placeholder">搜尋…</string>
     <string name="library_filter_genre">依曲風篩選</string>
     <string name="library_no_playlists">尚無播放清單。請在「播放清單」分頁建立。</string>
     <string name="library_track_count">%1$d 首曲目</string>
+
+    <!-- 播放清單介面 -->
+    <string name="playlist_title">播放清單</string>
+    <string name="playlist_empty_state">尚無播放清單。點擊 + 建立一個。</string>
+    <string name="playlist_default_name">播放清單</string>
+    <string name="playlist_song_count_suffix">首歌曲</string>
+    <string name="playlist_no_songs">尚無歌曲。點擊 + 新增。</string>
+    <string name="playlist_dialog_title">加入播放清單</string>
+    <string name="playlist_add_songs_dialog_title">新增歌曲</string>
+    <string name="playlist_add_button">新增</string>
+    <string name="playlist_cancel_button">取消</string>
+    <string name="playlist_create_dialog_title">建立播放清單</string>
+    <string name="playlist_name_label">名稱</string>
+    <string name="playlist_create_button">建立</string>
+
+    <!-- 個人介面 -->
+    <string name="profile_title">個人</string>
+    <string name="profile_id_prefix">ID: %1$s</string>
+    <string name="profile_statistics_title">統計資料</string>
+    <string name="profile_downloaded_songs_label">已下載歌曲: %1$d</string>
+
+    <!-- 帳戶管理 -->
+    <string name="profile_account_switch_title">切換帳戶</string>
+    <string name="profile_account_no_accounts">未配置帳戶</string>
+    <string name="profile_account_select_account">選擇一個帳戶繼續</string>
+    <string name="profile_account_access_description">添加帳戶以訪問 osu! 功能</string>
+    <string name="profile_account_manage_credentials_title">管理帳戶憑證</string>
+    <string name="profile_account_update_credentials">更新憑證</string>
+    <string name="profile_account_add_new_title">添加新帳戶</string>
+    <string name="profile_account_add_new_description">設置額外的 osu! 帳戶</string>
+    <string name="profile_account_add_button">添加帳戶</string>
+    <string name="profile_account_logged_in">已登錄</string>
+    <string name="profile_account_not_logged_in">未登錄</string>
+    <string name="profile_account_needs_login">需要登錄 - 點擊登錄</string>
+    <string name="profile_account_expired_login">已過期 - 點擊登錄</string>
+
+    <!-- OAuth 憑證 -->
+    <string name="profile_oauth_dialog_title">OAuth 憑證</string>
+    <string name="profile_oauth_dialog_message">請輸入您的 osu! OAuth 應用程式憑證: </string>
+    <string name="profile_oauth_dialog_client_id_hint">用戶端 ID</string>
+    <string name="profile_oauth_dialog_client_secret_hint">用戶端密鑰</string>
+    <string name="profile_oauth_dialog_help">取得地址: osu.ppy.sh/home/account/edit</string>
+    <string name="profile_oauth_dialog_save">儲存</string>
+    <string name="profile_oauth_dialog_cancel">取消</string>
+
+    <!-- 設置與配置 -->
+    <string name="profile_api_source_title">下載來源</string>
+    <string name="profile_default_search_view_title">預設搜尋檢視</string>
+    <string name="profile_default_search_view_desc">控制搜尋頁面開啟時的預設檢視。</string>
+    <string name="profile_include_unranked_title">僅限有排行榜的譜面</string>
+    <string name="profile_include_unranked_desc">僅搜尋已上榜（Ranked, Loved, Approved）的譜面。</string>
+    <string name="profile_equalizer_title">均衡器</string>
+    <string name="profile_recent_activity_heatmap_title">近期活動熱力圖</string>
+    <string name="profile_coming_soon">即將推出</string>
+    <string name="profile_region_title">檢測到</string>
+    <string name="profile_region_unknown">未知</string>
+
+    <!-- 下載與恢復 -->
+    <string name="search_download_starting">開始…</string>
+    <string name="search_download_downloading">下載中</string>
+    <string name="search_download_extracting">解壓縮…</string>
+    <string name="search_download_done">完成 ✓</string>
+    <string name="search_download_failed">失敗</string>
+    <string name="profile_restore_downloads_title">恢復下載</string>
+    <string name="profile_restore_button">恢復</string>
+    <string name="profile_restore_description">首數據庫重置後之前下載的譜面</string>
+    <string name="profile_restore_starting">開始恢復...</string>
+    <string name="profile_restore_no_beatmaps">沒有譜面可恢復</string>
+    <string name="profile_restore_skipped">跳過已下載的譜面 %1$d</string>
+    <string name="profile_restore_downloading">正在下載譜面 %1$d...</string>
+    <string name="profile_restore_extracting">正在解壓譜面 %1$d...</string>
+    <string name="profile_restore_completed_toast">恢復完成！已恢復 %1$d 首譜面</string>
+    <string name="profile_restore_completed_progress">恢復完成！已恢復 %1$d/%2$d 首譜面</string>
+    <string name="profile_restore_failed_progress">恢復失敗: %1$s</string>
+    <string name="profile_restore_failed_toast">恢復失敗: %1$s</string>
+
+    <!-- 資訊彈窗 -->
+    <string name="info_cover_title">資訊彈窗顯示封面</string>
+    <string name="info_cover_desc">控制搜尋資訊彈窗是否顯示譜面封面。</string>
+    <string name="info_no_details">暫無難度詳細資訊。</string>
+    <string name="info_diff_count">%1$d 個難度</string>
+    <string name="search_info_load_error">詳細資訊載入失敗</string>
+
+    <!-- 除錯與技術 -->
+    <string name="profile_token_dialog_title">Bearer Token (除錯)</string>
+    <string name="profile_token_dialog_description">您目前的 API 測試用 bearer token: </string>
+    <string name="profile_token_dialog_no_token">無可用 token</string>
+    <string name="profile_token_dialog_copy">複製</string>
+    <string name="profile_token_dialog_copied">Token 已複製到剪貼簿</string>
+    <string name="profile_token_dialog_close">關閉</string>
+
+    <!-- 曲風 -->
     <string name="genre_electronic">電子</string>
     <string name="genre_anime">動漫</string>
     <string name="genre_rock">搖滾</string>
@@ -23,20 +137,13 @@
     <string name="genre_jazz">爵士</string>
     <string name="genre_novelty">另類</string>
     <string name="genre_other">其他</string>
-    <string name="playlist_dialog_title">加入播放清單</string>
-    <!-- Playlist Screen Strings -->
-    <string name="playlist_title">播放清單</string>
-    <string name="playlist_empty_state">尚無播放清單。點擊 + 建立一個。</string>
-    <string name="playlist_default_name">播放清單</string>
-    <string name="playlist_song_count_suffix">首歌曲</string>
-    <string name="playlist_no_songs">尚無歌曲。點擊 + 新增。</string>
-    <string name="playlist_add_songs_dialog_title">新增歌曲</string>
-    <string name="playlist_add_button">新增</string>
-    <string name="playlist_cancel_button">取消</string>
-    <string name="playlist_create_dialog_title">建立播放清單</string>
-    <string name="playlist_name_label">名稱</string>
-    <string name="playlist_create_button">建立</string>
-    <!-- Content Descriptions -->
+
+    <!-- 內容描述 -->
+    <string name="search_cd_search">搜尋</string>
+    <string name="search_cd_clear">清除</string>
+    <string name="search_cd_filter">篩選</string>
+    <string name="search_cd_download">下載</string>
+    <string name="search_cd_downloaded">已下載</string>
     <string name="playlist_cd_create_playlist">建立播放清單</string>
     <string name="playlist_cd_back">返回</string>
     <string name="playlist_cd_add_songs">新增歌曲</string>
@@ -46,128 +153,8 @@
     <string name="library_cd_add_playlist">加入播放清單</string>
     <string name="library_cd_delete">刪除</string>
     <string name="library_cd_expand">展開</string>
-    <string name="search_title">搜尋</string>
-    <string name="search_not_logged">未登入</string>
-    <string name="search_config_prompt">請前往「個人」頁設定憑證並登入。</string>
-    <string name="search_placeholder">以標題或歌手搜尋…</string>
-    <string name="library_search_placeholder">搜尋…</string>
-    <string name="search_cd_search">搜尋</string>
-    <string name="search_cd_clear">清除</string>
-    <string name="search_filter_genre">依曲風篩選</string>
-    <string name="search_genre_not_available">「最多遊玩」檢視不提供曲風篩選</string>
-    <string name="search_playcount_label">次播放</string>
-    <string name="search_status_refreshed">已更新</string>
-    <string name="search_status_refresh_error">重新整理錯誤: %1$s</string>
-    <string name="search_error_prefix">錯誤: %1$s</string>
-    <string name="search_status_loading_more">正在載入更多…</string>
-    <string name="search_status_loaded_more">已載入 %1$d 筆結果</string>
-    <string name="search_status_no_more">沒有更多結果</string>
-    <string name="search_status_load_more_error">載入更多時出錯: %1$s</string>
-    <string name="search_load_more">載入更多</string>
-    <string name="search_loading">載入中…</string>
-    <string name="search_download_starting">開始…</string>
-    <string name="search_download_downloading">下載中</string>
-    
-    <!-- Token Debug Dialog Strings -->
-    <string name="profile_token_dialog_title">Bearer Token (除錯)</string>
-    <string name="profile_token_dialog_description">您目前的 API 測試用 bearer token: </string>
-    <string name="profile_token_dialog_no_token">無可用 token</string>
-    <string name="profile_token_dialog_copy">複製</string>
-    <string name="profile_token_dialog_copied">Token 已複製到剪貼簿</string>
-    <string name="profile_token_dialog_close">關閉</string>
-    <string name="search_download_extracting">解壓縮…</string>
-    <string name="search_download_done">完成 ✓</string>
-    <string name="search_download_failed">失敗</string>
-    <string name="search_download_error_prefix">錯誤: %1$s</string>
-    <string name="search_cd_downloaded">已下載</string>
-    <string name="search_cd_download">下載</string>
-    <string name="search_info_login_required">需要登入以取得詳細資訊</string>
-    <string name="search_info_load_partial_error">部分詳細資訊載入失敗</string>
-    <string name="search_info_load_error">詳細資訊載入失敗</string>
-    <string name="search_author_prefix">作者: %1$s</string>
-    <string name="search_not_logged_button">登入</string>
-    <string name="search_play">播放</string>
-    <string name="search_filter_played">已玩</string>
-    <string name="search_filter_recent">最近</string>
-    <string name="search_filter_favorite">收藏</string>
-    <string name="search_filter_most_played">最多遊玩</string>
-    <string name="search_filter_all">全部</string>
-    <string name="search_filter_select">選擇</string>
-    <string name="search_cd_filter">篩選</string>
-    <string name="search_play_not_downloaded">歌曲未下載</string>
-    <string name="search_preview">預覽</string>
-    <!-- Profile page strings -->
-    <string name="profile_title">個人</string>
-    <string name="profile_oauth_settings_title">osu! OAuth 設定</string>
-    <string name="profile_client_id_label">用戶端 ID: %1$s</string>
-    <string name="profile_client_id_configured">已設定 ✓</string>
-    <string name="profile_client_id_not_set">未設定</string>
-    <string name="profile_client_secret_label">用戶端密鑰: %1$s</string>
-    <string name="profile_client_secret_configured">已設定 ✓</string>
-    <string name="profile_client_secret_not_set">未設定</string>
-    <string name="profile_configure_credentials">設定憑證</string>
-    <string name="profile_update_credentials">更新憑證</string>
-    <string name="profile_login_button">使用 osu! 登入</string>
-    <string name="profile_login_prompt">請在上方設定您的 OAuth 憑證以登入</string>
-    <string name="profile_statistics_title">統計資料</string>
-    <string name="profile_downloaded_songs_label">已下載歌曲: %1$d</string>
-    <string name="profile_id_prefix">ID: %1$s</string>
-    <string name="profile_default_search_view_title">預設搜尋檢視</string>
-    <string name="profile_default_search_view_desc">控制搜尋頁面開啟時的預設檢視。</string>
-    <string name="profile_include_unranked_title">僅限有排行榜的譜面</string>
-    <string name="profile_include_unranked_desc">僅搜尋已上榜（Ranked, Loved, Approved）的譜面。</string>
-    <string name="profile_language_title">語言</string>
-    <string name="profile_equalizer_title">均衡器</string>
-    <string name="profile_coming_soon">即將推出</string>
-    <string name="profile_recent_activity_heatmap_title">近期活動熱力圖</string>
-    <string name="profile_logout_button">登出</string>
-    <!-- OAuth Dialog strings -->
-    <string name="profile_oauth_dialog_title">OAuth 憑證</string>
-    <string name="profile_oauth_dialog_message">請輸入您的 osu! OAuth 應用程式憑證: </string>
-    <string name="profile_oauth_dialog_client_id_hint">用戶端 ID</string>
-    <string name="profile_oauth_dialog_client_secret_hint">用戶端密鑰</string>
-    <string name="profile_oauth_dialog_help">取得地址: osu.ppy.sh/home/account/edit</string>
-    <string name="profile_oauth_dialog_save">儲存</string>
-    <string name="profile_oauth_dialog_cancel">取消</string>
-    <!-- Language names -->
-    <string name="language_english">English</string>
-    <string name="language_simplified_chinese">简体中文</string>
-    <string name="language_traditional_chinese">繁体中文</string>
-    <string name="profile_language_desc">選擇應用顯示語言</string>
 
-    <!-- Restore Downloads -->
-    <string name="profile_restore_downloads_title">恢復下載</string>
-    <string name="profile_restore_downloads_description">%1$d 首資料庫重置後之前下載的譜面</string>
-    <string name="profile_restore_button">恢復</string>
-
-    <!-- Account Manager -->
-    <string name="profile_account_no_accounts">未配置帳戶</string>
-    <string name="profile_account_select_account">選擇一個帳戶繼續</string>
-    <string name="profile_account_access_description">添加帳戶以訪問 osu! 功能</string>
-    <string name="profile_account_switch_title">切換帳戶</string>
-    <string name="profile_account_manage_credentials_title">管理帳戶憑證</string>
-    <string name="profile_account_update_credentials">更新憑證</string>
-    <string name="profile_account_add_new_title">添加新帳戶</string>
-    <string name="profile_account_add_new_description">設置額外的 osu! 帳戶</string>
-    <string name="profile_account_logged_in">已登錄</string>
-    <string name="profile_account_not_logged_in">未登錄</string>
-    <string name="profile_account_needs_login">需要登錄 - 點擊登錄</string>
-    <string name="profile_account_expired_login">已過期 - 點擊登錄</string>
-    <string name="profile_account_add_button">添加帳戶</string>
-
-    <!-- Restore Downloads -->
-    <string name="profile_restore_description">首數據庫重置後之前下載的譜面</string>
-    <string name="profile_restore_starting">開始恢復...</string>
-    <string name="profile_restore_no_beatmaps">沒有譜面可恢復</string>
-    <string name="profile_restore_skipped">跳過已下載的譜面 %1$d</string>
-    <string name="profile_restore_downloading">正在下載譜面 %1$d...</string>
-    <string name="profile_restore_extracting">正在解壓譜面 %1$d...</string>
-    <string name="profile_restore_completed_toast">恢復完成！已恢復 %1$d 首譜面</string>
-    <string name="profile_restore_completed_progress">恢復完成！已恢復 %1$d/%2$d 首譜面</string>
-    <string name="profile_restore_failed_progress">恢復失敗: %1$s</string>
-    <string name="profile_restore_failed_toast">恢復失敗: %1$s</string>
-
-    <!-- Timestamp formatting -->
+    <!-- 時間標記 -->
     <string name="timestamp_today">今天</string>
     <string name="timestamp_yesterday">昨天</string>
     <string name="timestamp_three_days_ago">三天前</string>
@@ -177,8 +164,9 @@
     <string name="timestamp_three_months_ago">3個月前</string>
     <string name="timestamp_six_months_ago">6個月前</string>
     <string name="timestamp_one_year_ago">1年前</string>
-    <string name="profile_region_title">檢測到的地區</string>
-    <string name="profile_region_unknown">未知</string>
-    <string name="profile_api_source_title">API 來源</string>
-</resources>
 
+    <!-- 語言 -->
+    <string name="language_english">English</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_traditional_chinese">繁体中文</string>
+</resources>

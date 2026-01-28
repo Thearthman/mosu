@@ -40,7 +40,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.AccountManager
@@ -180,8 +183,7 @@ fun ProfileScreen(
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     val language by settingsManager.language.collectAsState(initial = "en")
     val detectedRegion by settingsManager.detectedRegion.collectAsState(initial = null)
-    val initialApiSource: String = remember { runBlocking { settingsManager.apiSource.first() } }
-    val apiSource: String by settingsManager.apiSource.collectAsState(initial = initialApiSource)
+    val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val languageOptions = listOf(
@@ -408,7 +410,7 @@ fun ProfileScreen(
             }
         }
 
-        // Region and API Source Indicator
+        // API Source and Region Indicator
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -420,15 +422,19 @@ fun ProfileScreen(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(0.7f)
+                ) {
                     Text(
-                        stringResource(R.string.profile_region_title),
+                        stringResource(R.string.profile_api_source_title),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = detectedRegion ?: stringResource(R.string.profile_region_unknown),
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "${stringResource(R.string.profile_region_title)}: ${detectedRegion ?: stringResource(R.string.profile_region_unknown)}",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.secondary
                         )
                         IconButton(
@@ -441,9 +447,9 @@ fun ProfileScreen(
                                             if (region != null) {
                                                 settingsManager.setDetectedRegion(region.countryCode)
                                                 if (region.countryCode == "CN") {
-                                                    settingsManager.setApiSource("sayobot")
+                                                    settingsManager.setPreferredMirror("sayobot")
                                                 } else {
-                                                    settingsManager.setApiSource("osu")
+                                                    settingsManager.setPreferredMirror("nerinyan")
                                                 }
                                             }
                                         } finally {
@@ -468,31 +474,18 @@ fun ProfileScreen(
                         }
                     }
                 }
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            val nextSource = if (apiSource == "osu") "sayobot" else "osu"
-                            settingsManager.setApiSource(nextSource)
-                        }
+                Spacer(modifier = Modifier.width(16.dp))
+                MirrorSourceToggle(
+                    currentSource = preferredMirror,
+                    onSourceSelected = { nextSource ->
+                        scope.launch { settingsManager.setPreferredMirror(nextSource) }
                     }
-                ) {
-                    Text(
-                        stringResource(R.string.profile_api_source_title),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = apiSource.uppercase(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                )
             }
         }
 
 
-            // Info Cover Toggle Card (已符合设计，使用InfoCoverToggleCard)
+            // Info Cover Toggle Card
             InfoCoverToggleCard(infoCoverEnabled = infoCoverEnabled) { checked ->
                 scope.launch { settingsManager.saveInfoCoverEnabled(checked) }
             }
@@ -703,6 +696,10 @@ fun ProfileScreen(
                                 }
                             },
                             enabled = !isRestoring,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
@@ -1232,6 +1229,56 @@ private fun InfoCoverToggleCard(
         }
     }
 }
+@Composable
+private fun MirrorSourceToggle(
+    currentSource: String,
+    onSourceSelected: (String) -> Unit
+) {
+    val options = listOf("nerinyan", "sayobot")
+    
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        modifier = Modifier.height(36.dp).wrapContentWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxHeight(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            options.forEach { option ->
+                val isSelected = currentSource == option
+                val backgroundColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    label = "bgColor"
+                )
+                val contentColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    label = "contentColor"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(backgroundColor)
+                        .clickable { onSourceSelected(option) }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = option.uppercase(),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = contentColor,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun languageLabel(code: String): String = when (code) {
     "zh-CN" -> stringResource(R.string.language_simplified_chinese)

@@ -176,8 +176,16 @@ fun SearchScreen(
     // Load downloaded beatmap IDs from database
     LaunchedEffect(Unit) {
         db.beatmapDao().getAllBeatmaps().collect { beatmaps ->
-            downloadedBeatmapSetIds = beatmaps.map { it.beatmapSetId }.toSet()
-            downloadedKeys = beatmaps.map { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }.toSet()
+            // Move processing to Default dispatcher to avoid blocking UI thread
+            withContext(Dispatchers.Default) {
+                val setIds = beatmaps.map { it.beatmapSetId }.toSet()
+                val keys = beatmaps.map { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }.toSet()
+                
+                withContext(Dispatchers.Main) {
+                    downloadedBeatmapSetIds = setIds
+                    downloadedKeys = keys
+                }
+            }
         }
     }
 
@@ -185,8 +193,7 @@ fun SearchScreen(
     val context = LocalContext.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
-    val initialApiSource: String = remember { runBlocking { settingsManager.apiSource.first() } }
-    val apiSource: String by settingsManager.apiSource.collectAsState(initial = initialApiSource)
+    val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
     val previewManager = remember { SearchPreviewManager(context, musicController) }
 
     DisposableEffect(Unit) {
@@ -274,7 +281,7 @@ fun SearchScreen(
                             // Fallback to preview if DB query fails? Or user data inconsistent
                             // Re-create simple object for preview
                             val compact = BeatmapsetCompact(set.id, set.title, set.artist, set.creator ?: "", Covers(set.coverUrl ?: "", set.coverUrl ?: ""), status = "unknown")
-                            previewManager.playPreview(compact, apiSource)
+                            previewManager.playPreview(compact, preferredMirror)
                         }
                     }
                 } else {
@@ -282,7 +289,7 @@ fun SearchScreen(
                         previewManager.stop()
                     } else {
                         val compact = BeatmapsetCompact(set.id, set.title, set.artist, set.creator ?: "", Covers(set.coverUrl ?: "", set.coverUrl ?: ""), status = "unknown")
-                        previewManager.playPreview(compact, apiSource)
+                        previewManager.playPreview(compact, preferredMirror)
                     }
                 }
             },
@@ -1031,7 +1038,7 @@ fun SearchScreen(
                                 }
                             }
                         } else {
-                            previewManager.playPreview(beatmapset, apiSource)
+                            previewManager.playPreview(beatmapset, preferredMirror)
                         }
                     }
                 )

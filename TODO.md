@@ -4,13 +4,13 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
+6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. 
 
 
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-3. Make Manual Api switch more user intuitive.
-
+3. add a little progress bar inthe botton of the miniplayer similar to the style of the download progress bar but without the dot on the end 
 
 
 # Pending Refactors(for v1.0)
@@ -32,6 +32,7 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
+    2. In infopopup, add ability to download a specific beatmapset. In short, add download button to the right of card of each beatmapset. WWhen the download button is clicked. exit info popup and download this specific beatmapsetId thats been clicked. everything following this point, in term of UI, should be same as before, i.e., there's the progress bar etc. 
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
 6. Playlist page update
@@ -110,6 +111,7 @@
 27. Implemented preview toggle: clicking a song that is already previewing will now stop the playback.
 28. Improved song titles display in lists: implemented consistent truncation with ellipsis for long titles and artists across all views.
 29. When everything is set, remove the debug info during downloading in search screen. 
+30. Make Manual Api switch more user intuitive.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

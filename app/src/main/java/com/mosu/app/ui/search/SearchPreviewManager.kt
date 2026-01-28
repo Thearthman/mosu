@@ -50,14 +50,14 @@ class SearchPreviewManager(
         return exoPlayer!!
     }
 
-    fun playPreview(beatmapset: BeatmapsetCompact, apiSource: String) {
+    fun playPreview(beatmapset: BeatmapsetCompact, preferredMirror: String) {
         // Stop current preview if any
         stop()
         
         // Pause global music
         musicController.pause()
         
-        val url = if (apiSource.lowercase() == "sayobot") {
+        val url = if (preferredMirror.lowercase() == "sayobot") {
             "https://a.sayobot.cn/preview/${beatmapset.id}.mp3"
         } else {
             "https://b.ppy.sh/preview/${beatmapset.id}.mp3"

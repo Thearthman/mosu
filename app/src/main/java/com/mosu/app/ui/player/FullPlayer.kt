@@ -75,6 +75,7 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.mosu.app.player.MusicController
 import com.mosu.app.player.PlaybackMod
+import com.mosu.app.ui.components.Track
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -451,75 +452,4 @@ private fun modMenuLabel(mod: PlaybackMod): String = when (mod) {
     PlaybackMod.NONE -> "NO MOD"
     PlaybackMod.DOUBLE_TIME -> "DOUBLE TIME"
     PlaybackMod.NIGHT_CORE -> "NIGHT CORE"
-}
-
-@Composable
-fun Track(
-    activeRange: ClosedFloatingPointRange<Float>,
-    modifier: Modifier = Modifier,
-    activeTrackColor: Color,
-    inactiveTrackColor: Color,
-    activeTickColor: Color = activeTrackColor,
-    inactiveTickColor: Color = inactiveTrackColor,
-    tickFractions: List<Float> = emptyList(),
-    trackHeight: Dp = 15.dp,
-    horizontalExpansion: Float = 0f
-) {
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(trackHeight)
-    ) {
-        // Cache expensive calculations within Canvas context
-        val tickSizePx = trackHeight.toPx() * 0.133f // Cache tick size relative to track height
-        val isRtl = layoutDirection == LayoutDirection.Rtl
-        val sliderLeft = Offset(0f - horizontalExpansion, center.y)
-        val sliderRight = Offset(size.width + horizontalExpansion, center.y)
-        val sliderStart = if (isRtl) sliderRight else sliderLeft
-        val sliderEnd = if (isRtl) sliderLeft else sliderRight
-        val trackStrokeWidth = size.height // Use canvas height directly
-
-        // Draw inactive track
-        drawLine(
-            color = inactiveTrackColor,
-            start = sliderStart,
-            end = sliderEnd,
-            strokeWidth = trackStrokeWidth,
-            cap = StrokeCap.Round
-        )
-
-        // Draw active track
-        val sliderValueEnd = Offset(
-            sliderStart.x + (sliderEnd.x - sliderStart.x) * activeRange.endInclusive,
-            center.y
-        )
-        val sliderValueStart = Offset(
-            sliderStart.x + (sliderEnd.x - sliderStart.x) * activeRange.start,
-            center.y
-        )
-
-        drawLine(
-            color = activeTrackColor,
-            start = sliderValueStart,
-            end = sliderValueEnd,
-            strokeWidth = trackStrokeWidth,
-            cap = StrokeCap.Round
-        )
-
-        // Optimize tick rendering - only render if there are ticks
-        if (tickFractions.isNotEmpty()) {
-            tickFractions.groupBy { fraction ->
-                fraction > activeRange.endInclusive ||
-                        fraction < activeRange.start
-            }.forEach { (outsideFraction, list) ->
-                drawPoints(
-                    points = list.map { Offset(lerp(sliderStart, sliderEnd, it).x, center.y) },
-                    pointMode = PointMode.Points,
-                    color = if (outsideFraction) inactiveTickColor else activeTickColor,
-                    strokeWidth = tickSizePx,
-                    cap = StrokeCap.Round
-                )
-            }
-        }
-    }
 }

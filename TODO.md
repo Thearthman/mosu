@@ -10,8 +10,7 @@
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-3. add a little progress bar inthe botton of the miniplayer similar to the style of the download progress bar but without the dot on the end 
-
+3. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
 
 # Pending Refactors(for v1.0)
 1. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
@@ -112,6 +111,8 @@
 28. Improved song titles display in lists: implemented consistent truncation with ellipsis for long titles and artists across all views.
 29. When everything is set, remove the debug info during downloading in search screen. 
 30. Make Manual Api switch more user intuitive.
+31. bottom button in the infopopup should not take up that much space @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:88-433 replace it with normal dialog to remove the huge buttom padding introduced by alertdialog
+32. add a little progress bar in the botton of the miniplayer similar to the style of the full player progress bar but much thinner(similar to download progress bar thickness). It should have similar functionality to the full player progress bar. Also, it should take much all horizontal space.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

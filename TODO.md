@@ -1,16 +1,17 @@
 # Bugs
 1. Album photo not the same as it is shown on search page. Fix: Use offical osu api to get the high-res version of the coverphoto for each beatmap.
 2. Quick swipe would still delete a song even when the swipe is very small. We should measure the absolute distance instead of the speed
-3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much). [important]
+3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much).
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
-6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. 
+6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup.
 
 
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
 2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
 3. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
+
 
 # Pending Refactors(for v1.0)
 1. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
@@ -19,22 +20,22 @@
 # New Feature
 0. Core Feature
     1. Implement Equalizer 
-    2. Implement Activity Heatmap from recent play data (should have week, month, and year view). 
+    2. Implement Activity Heatmap from recent play data (should have week, month, and year view). [nextMajorUpdate]
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
     1. Add HT(Half Time) similar to DT that doesn't change pitch.
-    2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion.
-    3. Implement sound balancing base on loudness normalization algorithms
-    4. Implement lyrics service with LRCLIB
+    2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion. [MajorUpdate]
+    3. Implement sound balancing base on loudness normalization algorithms [nextMajorUpdate]
+    4. Implement lyrics service with LRCLIB [nextMajorUpdate]
 3. Playlist page updates
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
 5. Library page update
-    1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
+    1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [nextMajorUpdate]
 6. Playlist page update
-    1. Implement Playlist management system allowing for rearrangement(placement) of playlists.
+    1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [nextMajorUpdate]
 
 
 ---

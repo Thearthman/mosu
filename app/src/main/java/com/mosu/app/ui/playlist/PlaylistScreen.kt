@@ -140,8 +140,7 @@ fun PlaylistScreen(
     var infoLoading by remember { mutableStateOf(false) }
     var infoError by remember { mutableStateOf<String?>(null) }
     var infoTarget by remember { mutableStateOf<BeatmapsetCompact?>(null) }
-    var infoBeatmaps by remember { mutableStateOf<List<BeatmapDetail>>(emptyList()) }
-    var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var infoSets by remember { mutableStateOf<List<BeatmapsetCompact>>(emptyList()) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -174,14 +173,12 @@ fun PlaylistScreen(
             val target = infoTarget!!
             infoLoading = true
             infoError = null
-            infoBeatmaps = emptyList()
-            infoSetCreators = emptyMap()
+            infoSets = emptyList()
 
             val result = searchService.loadInfoPopup(target.title, target.artist)
             
-            result.onSuccess { (beatmaps, creators) ->
-                infoBeatmaps = beatmaps
-                infoSetCreators = creators
+            result.onSuccess { sets ->
+                infoSets = sets
             }.onFailure { e ->
                 infoError = e.message ?: context.getString(R.string.search_info_load_error)
             }
@@ -236,6 +233,7 @@ fun PlaylistScreen(
                 creator = first.creator,
                 coverPath = first.coverPath,
                 isExpandable = first.isAlbum == true,
+                genreId = first.genreId,
                 tracks = tracks.map { track ->
                     BeatmapTrackData(
                         id = track.uid ?: track.beatmapSetId, 
@@ -573,14 +571,11 @@ fun PlaylistScreen(
         visible = infoDialogVisible,
         onDismiss = { infoDialogVisible = false },
         target = infoTarget,
-        beatmaps = infoBeatmaps,
+        sets = infoSets,
         loading = infoLoading,
         error = infoError,
-        setCreators = infoSetCreators,
-        downloaded = infoTarget?.let { target ->
-            val targetKey = "${target.title.trim().lowercase()}|${target.artist.trim().lowercase()}"
-            downloadedBeatmapSetIds.contains(target.id) || downloadedKeys.contains(targetKey)
-        } ?: false,
+        downloadedIds = downloadedBeatmapSetIds,
+        downloadedKeys = downloadedKeys,
         config = InfoPopupConfig(
             infoCoverEnabled = false, // Disable cover in playlist popup
             showConfirmButton = false, // Hide confirm button in playlist

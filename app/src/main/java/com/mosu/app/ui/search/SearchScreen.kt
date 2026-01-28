@@ -206,8 +206,7 @@ fun SearchScreen(
     var infoLoading by remember { mutableStateOf(false) }
     var infoError by remember { mutableStateOf<String?>(null) }
     var infoTarget by remember { mutableStateOf<BeatmapsetCompact?>(null) }
-    var infoBeatmaps by remember { mutableStateOf<List<BeatmapDetail>>(emptyList()) }
-    var infoSetCreators by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var infoSets by remember { mutableStateOf<List<BeatmapsetCompact>>(emptyList()) }
 
     // Effect to fetch info details when target changes and dialog is visible
     LaunchedEffect(infoTarget, infoDialogVisible) {
@@ -215,14 +214,12 @@ fun SearchScreen(
             val target = infoTarget!!
             infoLoading = true
             infoError = null
-            infoBeatmaps = emptyList()
-            infoSetCreators = emptyMap()
+            infoSets = emptyList()
 
             val result = searchService.loadInfoPopup(target.title, target.artist)
             
-            result.onSuccess { (beatmaps, creators) ->
-                infoBeatmaps = beatmaps
-                infoSetCreators = creators
+            result.onSuccess { sets ->
+                infoSets = sets
             }.onFailure { e ->
                 infoError = e.message ?: context.getString(R.string.search_info_load_error)
             }
@@ -301,28 +298,33 @@ fun SearchScreen(
             onSecondaryAction = { set ->
                 if (!set.isDownloaded && set.downloadProgress == null) {
                     scope.launch {
-                        downloadStates = downloadStates + (set.id to DownloadProgress(0, context.getString(R.string.search_download_starting)))
+                        val downloadId = set.id
+                        val mergeGroupIds = mergeGroups[searchService.mergeKey(set.toCompact())] ?: setOf(downloadId)
+                        
+                        downloadStates = downloadStates + mergeGroupIds.associateWith { DownloadProgress(0, context.getString(R.string.search_download_starting)) }
                         downloadService.downloadBeatmap(
-                            beatmapSetId = set.id,
+                            beatmapSetId = downloadId,
                             accessToken = accessToken,
                             title = set.title,
                             artist = set.artist,
                             creator = set.creator ?: "",
-                            genreId = null, // We might not have genreId in BeatmapSetData for search results easily
+                            genreId = null,
                             coversListUrl = set.coverUrl ?: ""
                         ).collect { state ->
                             when (state) {
                                 is UnifiedDownloadState.Progress -> {
-                                    downloadStates = downloadStates + (set.id to DownloadProgress(state.progress, state.status))
+                                    val progress = DownloadProgress(state.progress, state.status)
+                                    downloadStates = downloadStates + mergeGroupIds.associateWith { progress }
                                 }
                                 is UnifiedDownloadState.Success -> {
-                                    downloadStates = downloadStates + (set.id to DownloadProgress(100, context.getString(R.string.search_download_done)))
+                                    val doneProgress = DownloadProgress(100, context.getString(R.string.search_download_done))
+                                    downloadStates = downloadStates + mergeGroupIds.associateWith { doneProgress }
                                     delay(2000)
-                                    downloadStates = downloadStates - set.id
+                                    downloadStates = downloadStates - mergeGroupIds
                                 }
                                 is UnifiedDownloadState.Error -> {
                                     Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
-                                    downloadStates = downloadStates - set.id
+                                    downloadStates = downloadStates - mergeGroupIds
                                 }
                             }
                         }
@@ -360,7 +362,8 @@ fun SearchScreen(
                 isDownloaded = isDownloaded,
                 downloadProgress = progress?.progress,
                 ranking = metadata?.first,
-                playCount = metadata?.second
+                playCount = metadata?.second,
+                genreId = map.genreId
             )
         }
     }
@@ -838,7 +841,8 @@ fun SearchScreen(
                                         isExpandable = false,
                                         isDownloaded = isDownloaded,
                                         downloadProgress = progress?.progress,
-                                        lastPlayed = formatPlayedAtTimestamp(item.playedAt)
+                                        lastPlayed = formatPlayedAtTimestamp(item.playedAt),
+                                        genreId = map.genreId
                                     )
                                     
                                     BeatmapSetItem(
@@ -949,17 +953,22 @@ fun SearchScreen(
                 visible = true,
                 onDismiss = { infoDialogVisible = false },
                 target = target,
-                beatmaps = infoBeatmaps,
+                sets = infoSets,
                 loading = infoLoading,
                 error = infoError,
-                setCreators = infoSetCreators,
-                downloaded = downloaded,
+                downloadedIds = downloadedBeatmapSetIds,
+                downloadedKeys = downloadedKeys,
                 config = InfoPopupConfig(
                     infoCoverEnabled = infoCoverEnabled,
                     onDownloadClick = { beatmapset ->
                         scope.launch {
+                            val downloadId = beatmapset.id
+                            val mergeGroupIds = mergeGroups[searchService.mergeKey(beatmapset)] ?: setOf(downloadId)
+                            
+                            downloadStates = downloadStates + mergeGroupIds.associateWith { DownloadProgress(0, context.getString(R.string.search_download_starting)) }
+                            
                             downloadService.downloadBeatmap(
-                                beatmapSetId = beatmapset.id,
+                                beatmapSetId = downloadId,
                                 accessToken = accessToken,
                                 title = beatmapset.title,
                                 artist = beatmapset.artist,
@@ -969,24 +978,18 @@ fun SearchScreen(
                             ).collect { state ->
                                 when (state) {
                                     is UnifiedDownloadState.Progress -> {
-                                        downloadStates =
-                                            downloadStates + (beatmapset.id to DownloadProgress(
-                                                state.progress,
-                                                state.status
-                                            ))
+                                        val progress = DownloadProgress(state.progress, state.status)
+                                        downloadStates = downloadStates + mergeGroupIds.associateWith { progress }
                                     }
                                     is UnifiedDownloadState.Success -> {
-                                        downloadStates =
-                                            downloadStates + (beatmapset.id to DownloadProgress(
-                                                100,
-                                                context.getString(R.string.search_download_done)
-                                            ))
+                                        val doneProgress = DownloadProgress(100, context.getString(R.string.search_download_done))
+                                        downloadStates = downloadStates + mergeGroupIds.associateWith { doneProgress }
                                         kotlinx.coroutines.delay(2000)
-                                        downloadStates = downloadStates - beatmapset.id
+                                        downloadStates = downloadStates - mergeGroupIds
                                     }
                                     is UnifiedDownloadState.Error -> {
                                         Toast.makeText(context, state.message, Toast.LENGTH_SHORT).show()
-                                        downloadStates = downloadStates - beatmapset.id
+                                        downloadStates = downloadStates - mergeGroupIds
                                     }
                                 }
                             }

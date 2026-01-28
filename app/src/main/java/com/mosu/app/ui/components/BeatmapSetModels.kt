@@ -2,6 +2,8 @@ package com.mosu.app.ui.components
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.mosu.app.data.api.model.BeatmapsetCompact
+import com.mosu.app.data.api.model.Covers
 
 /**
  * Unified data model representing a BeatmapSet (Album/Set)
@@ -21,10 +23,22 @@ data class BeatmapSetData(
     // Metadata slots
     val ranking: Int? = null,      // e.g. #1
     val playCount: Int? = null,    // e.g. 123
-    val lastPlayed: String? = null // e.g. "2h ago"
+    val lastPlayed: String? = null, // e.g. "2h ago"
+    val genreId: Int? = null
 ) {
     val trackCount: Int
         get() = tracks.size
+
+    fun toCompact(): BeatmapsetCompact = BeatmapsetCompact(
+        id = id,
+        title = title,
+        artist = artist,
+        creator = creator ?: "",
+        covers = Covers(coverUrl ?: "", coverUrl ?: ""),
+        genreId = genreId,
+        status = "unknown",
+        beatmaps = emptyList()
+    )
 }
 
 /**

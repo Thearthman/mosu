@@ -32,7 +32,6 @@
     Nothing as of present
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    2. In infopopup, add ability to download a specific beatmapset. In short, add download button to the right of card of each beatmapset. WWhen the download button is clicked. exit info popup and download this specific beatmapsetId thats been clicked. everything following this point, in term of UI, should be same as before, i.e., there's the progress bar etc. 
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist.
 6. Playlist page update
@@ -73,6 +72,7 @@
     10. Add mode selection for recent play filter
     11. Maybe add timestamp to recent played music
     12. Integrated song preview functionality in Search: Clicking an undownloaded song plays a preview from the Osu API (supports Sayobot and official sources).
+    13. In infopopup, add ability to download a specific beatmapset. In short, add download button to the right of card of each beatmapset. WWhen the download button is clicked. exit info popup and download this specific beatmapsetId thats been clicked. everything following this point, in term of UI, should be same as before, i.e., there's the progress bar etc. 
 5. Library update
     1. Implement library filter. Same as the search genre filter.
     2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.

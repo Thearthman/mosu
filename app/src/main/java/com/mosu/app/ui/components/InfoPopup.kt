@@ -277,7 +277,7 @@ fun InfoPopup(
                                                             Icon(
                                                                 painter = painterResource(id = it),
                                                                 contentDescription = modeLabel(mode),
-                                                                modifier = Modifier.size(20.dp),
+                                                                modifier = Modifier.size(20.dp).padding(top = 2.dp),
                                                                 tint = MaterialTheme.colorScheme.onSurface
                                                             )
                                                             Spacer(modifier = Modifier.width(4.dp))

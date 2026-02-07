@@ -4,13 +4,12 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much).
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
-6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup.
-7. Fix screen frame buffer out of order issue.
+6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup. [V1.0]
+7. Fix screen frame buffer out of order issue. [V1.0]
+8. Recent filter mode does not load itself automatically when app first started, leaving the page blank. [V1.0]
 
 
 # UIUX improvement
-1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
-2. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
 
 
 # Pending Refactors(for v1.0)
@@ -28,12 +27,14 @@
     2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion. [MajorUpdate]
     3. Implement sound balancing base on loudness normalization algorithms [nextMajorUpdate]
     4. Implement lyrics service with LRCLIB [nextMajorUpdate]
-    5. Implement a playcart display
+    5. Implement a current playing playlist, such that it keeps track of the list of music to be played. Also the list of music played. And, in random/shuffle mode, it should not be generating each number on the go but generate a list of random indexes that serves as the playlist. This means when you hit last song you can still find the song just been played, not another randomly found song.  
+    6. Implement a current playing playlist display
 3. Playlist page updates
     1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [nextMajorUpdate]
+    2. Long pressing a playlist in playlist page should be able to rename the playlist. [V1.0]
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song. 
+    2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song.  [nextMajorUpdate] 
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [nextMajorUpdate]
 
@@ -73,6 +74,7 @@
     11. Maybe add timestamp to recent played music
     12. Integrated song preview functionality in Search: Clicking an undownloaded song plays a preview from the Osu API (supports Sayobot and official sources).
     13. In infopopup, add ability to download a specific beatmapset. In short, add download button to the right of card of each beatmapset. WWhen the download button is clicked. exit info popup and download this specific beatmapsetId thats been clicked. everything following this point, in term of UI, should be same as before, i.e., there's the progress bar etc. 
+    3. Recent play should support for all modes. 
 5. Library update
     1. Implement library filter. Same as the search genre filter.
     2. waiting for loop implementation to make the library genre filter applies to `loop`/`random` playlist.
@@ -118,6 +120,7 @@
 34. Save and restore search page view when navigating away and back (query, results, filters, scroll) via SearchViewModel.
 35. Swipe actions for downloaded songs in search: left swipe delete, right swipe add to playlist (same as library). Playlist selector dialog in search.
 36. Stop search preview when starting playback (from search click, info popup play, or MiniPlayer controls).
+37. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

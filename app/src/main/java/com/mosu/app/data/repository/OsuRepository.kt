@@ -62,33 +62,18 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         return RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId)
     }
 
-    suspend fun getRecentPlayedBeatmaps(
-        accessToken: String,
-        userId: String,
-        limit: Int = 100
-    ): List<BeatmapsetCompact> {
-        val recentScores = RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit)
-        // Keep order as returned (newest first), de-dup by beatmapset id, filter last 7 days
-        val seen = mutableSetOf<Long>()
-        val ordered = mutableListOf<BeatmapsetCompact>()
-        for (score in recentScores) {
-            val beatmapset = score.beatmapset ?: continue
-            if (seen.add(beatmapset.id)) {
-                ordered.add(beatmapset)
-            }
-        }
-        return ordered
-    }
+    private val recentPlayModes = listOf("osu", "taiko", "fruits", "mania")
 
     suspend fun fetchRecentPlays(
         accessToken: String,
         userId: String,
         limit: Int = 100
     ): List<RecentPlayEntity> {
-        val recentScores = RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1)
+        val allRecentScores = mutableListOf<com.mosu.app.data.api.model.RecentScore>()
+        for (mode in recentPlayModes) { allRecentScores.addAll(RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1, mode)) }
         val seen = mutableSetOf<Long>()
         val entities = mutableListOf<RecentPlayEntity>()
-        for (score in recentScores) {
+        for (score in allRecentScores) {
             val playedAt = score.createdAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() } ?: continue
             val beatmapset = score.beatmapset ?: continue
             if (!seen.add(beatmapset.id)) continue

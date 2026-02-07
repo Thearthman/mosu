@@ -5,6 +5,7 @@
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
 6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup.
+7. Fix screen frame buffer out of order issue.
 
 
 # UIUX improvement
@@ -32,6 +33,7 @@
     1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [nextMajorUpdate]
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
+    2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song. 
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [nextMajorUpdate]
 

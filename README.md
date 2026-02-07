@@ -27,7 +27,8 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - OAuth login with automatic token refresh and credential management.
 - Search views (selectable and persisted): Played, Recent (with timestamps), Favorite, Most Played, All; global "include unranked (s=any)" toggle in Profile.
 - Advanced search: merge duplicate songs by title/author, enhanced info popups showing all matching beatmapsets from osu API (difficulties, star ratings, game modes), color-coded difficulty gradients, manual cache refresh (pull-to-refresh).
-- Per-item download progress; downloaded items tap-to-play from Search/Library.
+- Per-item download progress; downloaded items tap-to-play from Search/Library. Undownloaded items: tap to play preview; preview stops when starting full playback (from search, info popup, or MiniPlayer).
+- Downloaded songs in Search: swipe left to delete, swipe right to add to playlist (playlist selector dialog), same as Library.
 - Library with genre filter, search bar, and "Find current song" locator that scrolls/highlights the playing track; swipe-to-delete or add to playlists.
 - Playlists: create custom playlists, add/remove songs, long-press to rename/delete playlists, playlist-specific playback modes.
 - Player: background playback (Media3), collapsible MiniPlayer with controls, expandable full player view; mod selector (NM/DT/NC) with persistence, deterministic shuffle cycling, playback mode persistence (single/loop/random).
@@ -42,7 +43,7 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 
 > **IMPORTANT**: How to get your OAuth keys:
 > 1. Go to https://osu.ppy.sh/home/account/edit
-> 2. Scroll down to find the "OAuth" (开放授权) section
+> 2. Scroll down to find the "OAuth" section
 > 3. Click "New OAuth Application"
 > 4. Set **Application Callback URL** to exactly: `mosu://callback` (no trailing slash!)
 > 5. Give your app a name (e.g., "Mosu")
@@ -60,7 +61,3 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - Playlists: create custom playlists; long-press playlist to rename/delete; within playlists, swipe right to remove from playlist, left to delete from library.
 - Player: tap MiniPlayer to expand; drag progress bar; cycle through playback modes (single/loop/random); Mod selector for DT/NC effects; mods persist across tracks.
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.
-
-### 4. Notes
-- Download source uses mirrors; audio/cover extracted from `.osz` and stored under app files. 
-- Room DB version 5 with destructive migrations during development.

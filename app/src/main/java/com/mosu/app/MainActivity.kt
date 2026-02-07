@@ -78,6 +78,9 @@ import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.playlist.PlaylistScreen
 import com.mosu.app.ui.profile.ProfileScreen
 import com.mosu.app.ui.search.SearchScreen
+import com.mosu.app.ui.search.SearchViewModel
+import com.mosu.app.ui.search.SearchViewModelFactory
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -176,6 +179,11 @@ fun MainScreen(
 
     // Music Controller stays alive at MainScreen level
     val musicController = remember { MusicController(context, settingsManager) }
+
+    // SearchViewModel stays alive at MainScreen level to survive navigation
+    val searchViewModel: SearchViewModel = viewModel(
+        factory = SearchViewModelFactory(repository, db, context.applicationContext)
+    )
     
     // Access Token State (loaded from TokenManager or from OAuth)
     var accessToken by remember { mutableStateOf<String?>(null) }
@@ -423,8 +431,7 @@ fun MainScreen(
                     }
                     composable("search") {
                         SearchScreen(
-                            repository = repository,
-                            db = db,
+                            viewModel = searchViewModel,
                             accessToken = accessToken,
                             accountManager = accountManager,
                             settingsManager = settingsManager,

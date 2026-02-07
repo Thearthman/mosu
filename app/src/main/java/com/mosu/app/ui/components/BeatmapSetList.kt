@@ -31,7 +31,8 @@ fun LazyListScope.beatmapSetList(
     config: BeatmapSetListConfig = BeatmapSetListConfig(),
     highlightedSetId: Long? = null,
     highlightedTrackId: Long? = null,
-    backgroundBrush: @Composable (BeatmapSetData) -> Brush? = { null }
+    backgroundBrush: @Composable (BeatmapSetData) -> Brush? = { null },
+    swipeEnabled: (BeatmapSetData) -> Boolean = { true }
 ) {
     sets.forEach { set ->
         val isHighlighted = set.id == highlightedSetId
@@ -94,7 +95,7 @@ fun LazyListScope.beatmapSetList(
             item(key = "set_${set.id}") {
                 val brush = backgroundBrush(set)
                 Column {
-                    if (actions.onSwipeLeft != null || actions.onSwipeRight != null) {
+                    if ((actions.onSwipeLeft != null || actions.onSwipeRight != null) && swipeEnabled(set)) {
                         BeatmapSetSwipeItem(
                             swipeActions = BeatmapSetSwipeActions(
                                 onDelete = { actions.onSwipeLeft?.invoke(set) },
@@ -109,8 +110,7 @@ fun LazyListScope.beatmapSetList(
                         ) {
                             BeatmapSetItem(
                                 set = set,
-                                actions = actions,
-                                highlight = isHighlighted
+                                actions = actions
                             )
                         }
                     } else {
@@ -122,7 +122,7 @@ fun LazyListScope.beatmapSetList(
                         )
                     }
                     if (config.showDividers) {
-                        HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
+                        HorizontalDivider(modifier = Modifier.padding(start = 64.dp, end = 16.dp))
                     }
                 }
             }
@@ -142,7 +142,8 @@ fun BeatmapSetList(
     highlightedSetId: Long? = null,
     highlightedTrackId: Long? = null,
     listState: LazyListState = rememberLazyListState(),
-    backgroundBrush: @Composable (BeatmapSetData) -> Brush? = { null }
+    backgroundBrush: @Composable (BeatmapSetData) -> Brush? = { null },
+    swipeEnabled: (BeatmapSetData) -> Boolean = { true }
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         LazyColumn(
@@ -156,7 +157,8 @@ fun BeatmapSetList(
                 config = config,
                 highlightedSetId = highlightedSetId,
                 highlightedTrackId = highlightedTrackId,
-                backgroundBrush = backgroundBrush
+                backgroundBrush = backgroundBrush,
+                swipeEnabled = swipeEnabled
             )
         }
 

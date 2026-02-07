@@ -9,8 +9,7 @@
 
 # UIUX improvement
 1. Rethink on the UI design of profile page, think of sections holding boxes of similar functionality, highlight non-reversible actions.
-2. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view. [important]
-3. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
+2. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
 
 
 # Pending Refactors(for v1.0)
@@ -114,6 +113,9 @@
 31. bottom button in the infopopup should not take up that much space @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:88-433 replace it with normal dialog to remove the huge buttom padding introduced by alertdialog
 32. add a little progress bar in the botton of the miniplayer similar to the style of the full player progress bar but much thinner(similar to download progress bar thickness). It should have similar functionality to the full player progress bar. Also, it should take much all horizontal space.
 33. Add side scroll bar to songlist as an optional parameter, remember that the songlist size is variable because you can load more results in search screen.
+34. Save and restore search page view when navigating away and back (query, results, filters, scroll) via SearchViewModel.
+35. Swipe actions for downloaded songs in search: left swipe delete, right swipe add to playlist (same as library). Playlist selector dialog in search.
+36. Stop search preview when starting playback (from search click, info popup play, or MiniPlayer controls).
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -160,6 +162,7 @@
 42. Fixed SearchScreen manual refresh bug where new results weren't immediately visible without navigating away and back.
 43. Optimized region detection to avoid redundant background checks and potential state flickering.
 44. Bring back highlight indication for finding currently playing song. Songs inside expanded album has highlight indication but doesn't self-expand when it's collapsed and what's being find is its song.
+45. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

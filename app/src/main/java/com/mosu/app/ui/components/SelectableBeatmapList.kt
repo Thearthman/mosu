@@ -48,6 +48,7 @@ data class SelectableBeatmapData(
  */
 data class SelectableBeatmapConfig(
     val coverSize: Dp = 40.dp,
+    val itemHeight: Dp = 50.dp,
     val verticalPadding: Dp = 0.dp,
     val checkboxMarginEnd: Dp = 14.dp,
     val backgroundColor: Color? = null,
@@ -72,14 +73,15 @@ private fun SimpleBeatmapItem(
     showDifficulty: Boolean = false,
     coverStartPadding: Dp = 0.dp,
     textEndPadding: Dp = 0.dp,
-    coverSize: Dp = 50.dp,
+    coverSize: Dp = 40.dp,
+    itemHeight: Dp = 50.dp,
     titleTextStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.titleMedium,
     subtitleTextStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(66.dp)
+            .height(itemHeight)
             .background(backgroundColor)
             .combinedClickable(
                 onClick = { onClick() },
@@ -157,6 +159,7 @@ fun SelectableBeatmapItem(
             coverStartPadding = config.coverStartPadding,
             textEndPadding = config.textEndPadding,
             coverSize = config.coverSize,
+            itemHeight = config.itemHeight,
             titleTextStyle = config.textStyle ?: MaterialTheme.typography.bodyMedium,
             subtitleTextStyle = config.secondaryTextStyle ?: MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f)
@@ -174,6 +177,7 @@ fun SelectableBeatmapList(
     onSelectionChanged: (SelectableBeatmapData, Boolean) -> Unit,
     isDisabled: (SelectableBeatmapData) -> Boolean = { false },
     config: SelectableBeatmapConfig = SelectableBeatmapConfig(),
+    itemHeight: Dp = config.itemHeight,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -187,7 +191,7 @@ fun SelectableBeatmapList(
                 isSelected = isSelected(beatmap),
                 isDisabled = isDisabled(beatmap),
                 onSelectionChanged = { selected -> onSelectionChanged(beatmap, selected) },
-                config = config
+                config = config.copy(itemHeight = itemHeight)
             )
         }
     }

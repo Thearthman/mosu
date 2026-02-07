@@ -65,6 +65,8 @@ import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.BeatmapSetActions
 import com.mosu.app.ui.components.BeatmapSetData
+import com.mosu.app.ui.components.BeatmapSetList
+import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.BeatmapTrackData
 import com.mosu.app.ui.components.GenreFilter
 import com.mosu.app.ui.components.InfoPopup
@@ -81,7 +83,9 @@ fun LibraryScreen(
     db: AppDatabase,
     musicController: MusicController,
     repository: OsuRepository,
-    downloadService: BeatmapDownloadService
+    downloadService: BeatmapDownloadService,
+    scrollToTop: Boolean = false,
+    onScrolledToTop: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
@@ -97,6 +101,14 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val searchService = remember { BeatmapSearchService(repository, db, context) }
+
+    // Scroll to top when requested
+    LaunchedEffect(scrollToTop) {
+        if (scrollToTop) {
+            listState.animateScrollToItem(0)
+            onScrolledToTop()
+        }
+    }
     var highlightSetId by remember { mutableStateOf<Long?>(null) }
     var buttonBlink by remember { mutableStateOf(false) }
     var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -431,14 +443,25 @@ fun LibraryScreen(
             )
 
             // BeatmapSet List
-            LazyColumn(state = listState) {
-                beatmapSetList(
-                    sets = beatmapSets,
-                    actions = actions,
-                    highlightedSetId = highlightSetId,
-                    highlightedTrackId = highlightTrackId
+            BeatmapSetList(
+                sets = beatmapSets,
+                actions = actions,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                listState = listState,
+                highlightedSetId = highlightSetId,
+                highlightedTrackId = highlightTrackId,
+                config = BeatmapSetListConfig(
+                    showScrollbar = true,
+                    expandedIds = expandedBeatmapSets,
+                    onExpansionChanged = { id, isExpanded ->
+                        expandedBeatmapSets = if (isExpanded) {
+                            expandedBeatmapSets + id
+                        } else {
+                            expandedBeatmapSets - id
+                        }
+                    }
                 )
-            }
+            )
         }
 
         if (showPlaylistDialog && dialogTrack != null) {
@@ -481,57 +504,57 @@ fun LibraryScreen(
                         it.difficultyName.trim().lowercase() == playingTitle
                     }
                     if (match != null) {
-                        val targetIndex = keyList.indexOf(match.beatmapSetId)
-                        if (targetIndex >= 0) {
-                            scope.launch {
-                                // Check if it's a song in a beatmapset pack
-                                val isSongInPack = groupedMaps[match.beatmapSetId]?.size ?: 0 > 1 &&
-                                                  match.difficultyName.trim().lowercase() == playingTitle
+                        scope.launch {
+                            // 1. If it's a track in an album, ensure album is expanded first
+                            val isAlbumTrack = groupedMaps[match.beatmapSetId]?.any { it.isAlbum } == true
+                            if (isAlbumTrack) {
+                                expandedBeatmapSets = expandedBeatmapSets + match.beatmapSetId
+                                highlightTrackId = match.uid
+                            } else {
+                                highlightSetId = match.beatmapSetId
+                            }
 
-                                if (isSongInPack) {
-                                    // For songs in beatmapset packs: expand the pack and highlight only the specific track
-                                    expandedBeatmapSets = expandedBeatmapSets + match.beatmapSetId
-                                    highlightTrackId = match.uid
+                            // 2. Wait for recomposition to ensure LazyColumn knows about new items
+                            delay(50)
 
-                                    // Calculate song position within the beatmapset for scroll offset
-                                    val beatmapset = groupedMaps[match.beatmapSetId] ?: emptyList()
-                                    val sortedSongs = beatmapset.sortedBy { it.difficultyName } // Sort by difficulty name like BeatmapSetExpandableItem
-                                    val songIndex = sortedSongs.indexOfFirst { it.uid == match.uid }
-
-                                    // Estimate scroll offset: header height + (song index * estimated item height)
-                                    // Header is ~80dp, each song item is ~60dp
-                                    val estimatedOffsetDp = 80 + songIndex * 65
-                                    val estimatedOffsetPx = estimatedOffsetDp * 3 // Rough density multiplier
-
-                                    // Scroll to the beatmapset with offset to bring target song into view
-                                    if (songIndex > 2) { // Only use offset if song is not in the first few positions
-                                        // Positive offset to position beatmapset lower, revealing content above
-                                        listState.animateScrollToItem(targetIndex, estimatedOffsetPx.toInt())
-                                    } else {
-                                        listState.animateScrollToItem(targetIndex)
+                            // 3. Calculate actual flattened index
+                            var flattenedIndex = 0
+                            for (set in beatmapSets) {
+                                if (set.id == match.beatmapSetId) {
+                                    if (isAlbumTrack) {
+                                        val sortedSongs = set.tracks.sortedBy { it.difficultyName }
+                                        val trackIndex = sortedSongs.indexOfFirst { it.id == match.uid }
+                                        if (trackIndex != -1) {
+                                            flattenedIndex += 1 + trackIndex // +1 for header
+                                        }
                                     }
-
-                                    // Normal highlight sequence for the specific track (same as standalone songs)
-                                    repeat(3) {
-                                        highlightTrackId = match.uid  // Set highlight
-                                        delay(150)
-                                        highlightTrackId = null       // Clear highlight
-                                        delay(150)
-                                    }
-
-                                    // Final clear (already cleared in loop, but for safety)
-                                    highlightTrackId = null
-                                } else {
-                                    // For standalone songs, just highlight the item
-                                    listState.animateScrollToItem(targetIndex)
-                                    repeat(3) {
-                                        highlightSetId = match.beatmapSetId
-                                        delay(150)
-                                        highlightSetId = null
-                                        delay(150)
-                                    }
+                                    break
+                                }
+                                flattenedIndex += 1 // Header
+                                if (expandedBeatmapSets.contains(set.id)) {
+                                    flattenedIndex += set.tracks.size
                                 }
                             }
+
+                            // 4. Scroll to item with offset to center it (roughly)
+                            if (flattenedIndex >= 0) {
+                                // Since all items are 60dp, we can use a precise offset if needed
+                                // but animateScrollToItem(flattenedIndex) is usually enough to bring it to top.
+                                // To center it: viewportHeight / 2 - 30dp
+                                listState.animateScrollToItem(flattenedIndex)
+                            }
+
+                            // 5. Highlight sequence
+                            repeat(3) {
+                                delay(150)
+                                highlightTrackId = null
+                                highlightSetId = null
+                                delay(150)
+                                if (isAlbumTrack) highlightTrackId = match.uid else highlightSetId = match.beatmapSetId
+                            }
+                            // Final clear
+                            highlightTrackId = null
+                            highlightSetId = null
                         }
                     } else {
                         scope.launch {

@@ -79,6 +79,7 @@ import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.BeatmapSetActions
 import com.mosu.app.ui.components.BeatmapSetData
+import com.mosu.app.ui.components.BeatmapSetList
 import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.BeatmapTrackData
 import com.mosu.app.ui.components.InfoPopup
@@ -145,6 +146,7 @@ fun PlaylistScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
+    var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
     // Long press handler for song items
     val onSongLongPress: (BeatmapEntity) -> Unit = { track ->
@@ -432,18 +434,23 @@ fun PlaylistScreen(
                     Text(text = stringResource(id = R.string.playlist_no_songs))
                 }
             } else {
-                LazyColumn(
+                BeatmapSetList(
+                    sets = beatmapSets,
+                    actions = actions,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 80.dp) // Space for miniplayer
-                ) {
-                    beatmapSetList(
-                        sets = beatmapSets,
-                        actions = actions,
-                        config = BeatmapSetListConfig(
-                            showDividers = true
-                        )
+                    config = BeatmapSetListConfig(
+                        showDividers = true,
+                        showScrollbar = true,
+                        expandedIds = expandedBeatmapSets,
+                        onExpansionChanged = { id, isExpanded ->
+                            expandedBeatmapSets = if (isExpanded) {
+                                expandedBeatmapSets + id
+                            } else {
+                                expandedBeatmapSets - id
+                            }
+                        }
                     )
-                }
+                )
             }
 
             if (showAddDialog) {

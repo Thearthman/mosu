@@ -78,5 +78,8 @@ data class BeatmapSetActions(
  */
 data class BeatmapSetListConfig(
     val showDividers: Boolean = true,
+    val showScrollbar: Boolean = false,
+    val expandedIds: Set<Long> = emptySet(),
+    val onExpansionChanged: (Long, Boolean) -> Unit = { _, _ -> },
     val contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp)
 )

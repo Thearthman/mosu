@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,32 +40,21 @@ import com.mosu.app.R
 import java.io.File
 
 /**
- * An expandable beatmap set item with swipe actions for the set and individual tracks
+ * An expandable beatmap set item header with swipe actions.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BeatmapSetExpandableItem(
+fun BeatmapSetHeaderItem(
     album: BeatmapSetData,
     actions: BeatmapSetActions,
+    expanded: Boolean,
+    onExpandClick: () -> Unit,
     highlight: Boolean = false,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     backgroundBrush: Brush? = null,
-    forceExpanded: Boolean = false,
-    onExpansionChanged: ((Boolean) -> Unit)? = null,
-    highlightTrackId: Long? = null,
     startToEndIcon: ImageVector = actions.swipeRightIcon ?: Icons.Default.Add,
     endToStartIcon: ImageVector = actions.swipeLeftIcon ?: Icons.Default.Remove
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
-    // Handle forced expansion
-    LaunchedEffect(forceExpanded) {
-        if (forceExpanded && !expanded) {
-            expanded = true
-            onExpansionChanged?.invoke(true)
-        }
-    }
-
     BeatmapSetSwipeItem(
         swipeActions = BeatmapSetSwipeActions(
             onDelete = { actions.onSwipeLeft?.invoke(album) },
@@ -78,76 +68,38 @@ fun BeatmapSetExpandableItem(
         enableDismissFromStartToEnd = actions.onSwipeRight != null,
         enableDismissFromEndToStart = actions.onSwipeLeft != null
     ) {
-        Column(
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp) // Unified height
+            .combinedClickable(
+                onClick = onExpandClick,
+                onLongClick = { actions.onLongClick(album) }
+            )
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Cover Art
+        AsyncImage(
+            model = if (album.coverPath != null) File(album.coverPath) else album.coverUrl,
+            contentDescription = null,
             modifier = Modifier
-                .fillMaxWidth().padding(horizontal = 16.dp)
-        ) {
-            // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = {
-                            val newExpanded = !expanded
-                            expanded = newExpanded
-                            onExpansionChanged?.invoke(newExpanded)
-                        },
-                        onLongClick = { actions.onLongClick(album) }
-                    )
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Cover Art
-                AsyncImage(
-                    model = if (album.coverPath != null) File(album.coverPath) else album.coverUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                .size(44.dp) // Adjusted for 60dp
+                .clip(RoundedCornerShape(4.dp)),
+            contentScale = ContentScale.Crop
+        )
 
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp).weight(1f)) {
-                    Text(text = album.title, style = MaterialTheme.typography.titleMedium)
-                    Text(text = album.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                    Text(text = stringResource(id = R.string.library_track_count, album.trackCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                }
-
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = stringResource(id = R.string.library_cd_expand)
-                )
-            }
-
-            // Expanded Tracks
-            if (expanded) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                ) {
-                    val sortedSongs = album.tracks.sortedBy { it.difficultyName }
-                    sortedSongs.forEachIndexed { index, song ->
-                        androidx.compose.runtime.key(song.id) {
-                            val isHighlightedTrack = highlightTrackId == song.id
-                            BeatmapSetTrackItem(
-                                track = song,
-                                onPlay = { actions.onTrackPlay?.invoke(song) },
-                                onDelete = actions.onTrackSwipeLeft?.let { action -> { action(song) } },
-                                onAddToPlaylist = actions.onTrackSwipeRight?.let { action -> { action(song) } },
-                                modifier = Modifier,
-                                backgroundColor = when {
-                                    isHighlightedTrack -> MaterialTheme.colorScheme.primaryContainer
-                                    index % 2 == 0 -> MaterialTheme.colorScheme.surface
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                startToEndIcon = startToEndIcon,
-                                endToStartIcon = endToStartIcon
-                            )
-                        }
-                    }
-                }
-            }
+        Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp).weight(1f)) {
+            Text(text = album.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = album.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+
+        Icon(
+            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            contentDescription = stringResource(id = R.string.library_cd_expand),
+            modifier = Modifier.size(24.dp)
+        )
+    }
     }
 }
 
@@ -155,7 +107,7 @@ fun BeatmapSetExpandableItem(
  * A track row within an expandable beatmap set item
  */
 @Composable
-private fun BeatmapSetTrackItem(
+fun BeatmapSetTrackItem(
     track: BeatmapTrackData,
     onPlay: () -> Unit,
     onDelete: (() -> Unit)?,
@@ -181,9 +133,9 @@ private fun BeatmapSetTrackItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(60.dp) // Unified height
                 .clickable { onPlay() }
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 16.dp), // Match header padding
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -195,7 +147,7 @@ private fun BeatmapSetTrackItem(
                 )
                 Text(
                     text = track.artist ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

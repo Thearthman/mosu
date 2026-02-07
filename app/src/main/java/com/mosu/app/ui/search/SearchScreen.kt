@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -83,6 +84,7 @@ import com.mosu.app.ui.components.BeatmapSetActions
 import com.mosu.app.ui.components.BeatmapSetData
 import com.mosu.app.ui.components.BeatmapSetItem
 import com.mosu.app.ui.components.BeatmapSetListConfig
+import com.mosu.app.ui.components.DraggableScrollbar
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.beatmapSetList
@@ -162,6 +164,7 @@ fun SearchScreen(
     var currentCursor by remember { mutableStateOf<String?>(null) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var refreshTick by remember { mutableStateOf(0) }
     var flicking by remember { mutableStateOf(false) }
     
@@ -446,7 +449,6 @@ fun SearchScreen(
                     }
                 }
             )
-            val rowAlpha = if (flicking) 0.75f else 1f
 
             // Collapsible header with search bar and genre filter
             Box(
@@ -458,16 +460,19 @@ fun SearchScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Header: Search bar and Genre filter
+                    // Item 1: Search Bar (1 unit tall)
                     item {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            // Search Bar
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             TextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 8.dp),
+                                modifier = Modifier.fillMaxSize(),
                                 placeholder = {
                                     Text(
                                         stringResource(id = R.string.search_placeholder),
@@ -488,32 +493,18 @@ fun SearchScreen(
                                         if (searchQuery.isNotEmpty()) {
                                             IconButton(onClick = {
                                                 searchQuery = ""
-                                                // Refresh results without search query
                                                 scope.launch {
                                                     try {
-                                                        if (filterMode == "recent") {
-                                                        } else {
-                                                            val result =
-                                                                repository.getPlayedBeatmaps(
-                                                                    accessToken,
-                                                                    selectedGenreId,
-                                                                    null,
-                                                                    null,
-                                                                    filterMode,
-                                                                    playedFilterMode,
-                                                                    userId,
-                                                                    isSupporter
-                                                                )
-                                                            val deduped =
-                                                                searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                                                        if (filterMode != "recent") {
+                                                            val result = repository.getPlayedBeatmaps(
+                                                                accessToken, selectedGenreId, null, null,
+                                                                filterMode, playedFilterMode, userId, isSupporter
+                                                            )
+                                                            val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                             mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                             searchResults = deduped
                                                             currentCursor = result.cursor
-                                                            searchResultsMetadata =
-                                                                searchService.filterMetadataFor(
-                                                                    deduped,
-                                                                    result.metadata
-                                                                )
+                                                            searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
                                                         }
                                                     } catch (e: Exception) {
                                                         Log.e("SearchScreen", "Clear search failed", e)
@@ -522,22 +513,15 @@ fun SearchScreen(
                                             }) {
                                                 Icon(
                                                     Icons.Default.Clear,
-                                                contentDescription = stringResource(id = R.string.search_cd_clear)
+                                                    contentDescription = stringResource(id = R.string.search_cd_clear)
                                                 )
                                             }
                                         }
 
-                                        // Filter Mode Dropdown
                                         var filterMenuExpanded by remember { mutableStateOf(false) }
                                         val isSupporterAllowed = isSupporter
                                         val options = if (isSupporterAllowed) {
-                                            listOf(
-                                                "played",
-                                                "recent",
-                                                "favorite",
-                                                "most_played",
-                                                "all"
-                                            )
+                                            listOf("played", "recent", "favorite", "most_played", "all")
                                         } else {
                                             listOf("recent", "favorite", "most_played", "all")
                                         }
@@ -550,70 +534,37 @@ fun SearchScreen(
                                         )
                                         val optionColors = mapOf(
                                             "played" to MaterialTheme.colorScheme.primary,
-                                            "recent" to androidx.compose.ui.graphics.Color(
-                                                0xFF7E57C2
-                                            ),
-                                            "favorite" to androidx.compose.ui.graphics.Color(
-                                                0xFFFFD059
-                                            ),
-                                            "most_played" to androidx.compose.ui.graphics.Color(
-                                                0xFF483AC2
-                                            ),
+                                            "recent" to androidx.compose.ui.graphics.Color(0xFF7E57C2),
+                                            "favorite" to androidx.compose.ui.graphics.Color(0xFFFFD059),
+                                            "most_played" to androidx.compose.ui.graphics.Color(0xFF483AC2),
                                             "all" to androidx.compose.ui.graphics.Color(0xFFF748AE)
                                         )
-
                                         val contentColors = mapOf(
                                             "played" to MaterialTheme.colorScheme.onPrimary,
-                                            "recent" to androidx.compose.ui.graphics.Color(
-                                                0xFFFFFFFF
-                                            ),
-                                            "favorite" to androidx.compose.ui.graphics.Color(
-                                                0xFF000000
-                                            ),
-                                            "most_played" to androidx.compose.ui.graphics.Color(
-                                                0xFFFFFFFF
-                                            ),
-                                            "all" to androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+                                            "recent" to Color.White,
+                                            "favorite" to Color.Black,
+                                            "most_played" to Color.White,
+                                            "all" to Color.White
                                         )
-                                        val currentColor = optionColors[filterMode]
-                                            ?: MaterialTheme.colorScheme.primary
-                                        val currentContentColor = contentColors[filterMode]
-                                            ?: MaterialTheme.colorScheme.primary
+                                        val currentColor = optionColors[filterMode] ?: MaterialTheme.colorScheme.primary
+                                        val currentContentColor = contentColors[filterMode] ?: MaterialTheme.colorScheme.primary
 
                                         OutlinedButton(
                                             onClick = { filterMenuExpanded = true },
-                                            modifier = Modifier
-                                                .width(98.dp)
-                                                .height(40.dp),
+                                            modifier = Modifier.width(98.dp).height(36.dp),
                                             shape = RoundedCornerShape(8.dp),
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = currentColor,
                                                 contentColor = currentContentColor
                                             ),
-                                            contentPadding = PaddingValues(
-                                                horizontal = 8.dp,
-                                                vertical = 8.dp
-                                            )
+                                            contentPadding = PaddingValues(horizontal = 4.dp)
                                         ) {
-                                            Spacer(modifier = Modifier.width(10.dp))
                                             Text(
-                                                text = optionLabels[filterMode] ?: stringResource(id = R.string.search_filter_select),
-                                                style = if (filterMode == "most_played") {
-                                                    MaterialTheme.typography.labelSmall.copy(
-                                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f
-                                                    )
-                                                } else {
-                                                    MaterialTheme.typography.labelSmall.copy(
-                                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                                    )
-                                                },
+                                                text = optionLabels[filterMode] ?: "",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                 maxLines = 1
                                             )
-                                            Icon(
-                                                Icons.Default.ArrowDropDown,
-                                                contentDescription = stringResource(id = R.string.search_cd_filter)
-                                            )
+                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
                                         }
                                         DropdownMenu(
                                             expanded = filterMenuExpanded,
@@ -626,42 +577,26 @@ fun SearchScreen(
                                                         filterMenuExpanded = false
                                                         filterMode = mode
                                                         scope.launch {
-                                                            settingsManager.saveDefaultSearchView(
-                                                                mode
-                                                            )
+                                                            settingsManager.saveDefaultSearchView(mode)
                                                             currentCursor = null
                                                             if (mode == "recent") {
                                                                 val (groupedItems, mergeGroupsResult, timestamps) = searchService.loadRecentFiltered(accessToken, userId, searchQuery, selectedGenreId)
                                                                 mergeGroups = mergeGroupsResult
                                                                 recentGroupedResults = groupedItems
                                                                 searchResults = emptyList()
-                                                                currentCursor = null
                                                                 searchResultsMetadata = emptyMap()
                                                                 recentTimestamps = timestamps
                                                             } else {
-                                                                val result =
-                                                                repository.getPlayedBeatmaps(
-                                                                    accessToken,
-                                                                    selectedGenreId,
-                                                                    null,
-                                                                    searchQuery.trim()
-                                                                        .ifEmpty { null },
-                                                                    mode,
-                                                                    playedFilterMode,
-                                                                    userId,
-                                                                    isSupporter,
-                                                                    !onlyLeaderboardEnabled
+                                                                val result = repository.getPlayedBeatmaps(
+                                                                    accessToken, selectedGenreId, null, 
+                                                                    searchQuery.trim().ifEmpty { null },
+                                                                    mode, playedFilterMode, userId, isSupporter, !onlyLeaderboardEnabled
                                                                 )
-                                                                val deduped =
-                                                                    searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                                                                val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                                 mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                                 searchResults = deduped
                                                                 currentCursor = result.cursor
-                                                                searchResultsMetadata =
-                                                                    searchService.filterMetadataFor(
-                                                                        deduped,
-                                                                        result.metadata
-                                                                    )
+                                                                searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
                                                             }
                                                         }
                                                     }
@@ -682,27 +617,18 @@ fun SearchScreen(
                                                     mergeGroups = mergeGroupsResult
                                                     recentGroupedResults = groupedItems
                                                     searchResults = emptyList()
-                                                    currentCursor = null
                                                     searchResultsMetadata = emptyMap()
                                                     recentTimestamps = timestamps
                                                 } else {
                                                     val result = repository.getPlayedBeatmaps(
-                                                        accessToken,
-                                                        selectedGenreId,
-                                                        null,
-                                                        searchQuery.trim(),
-                                                        filterMode,
-                                                        playedFilterMode,
-                                                        userId,
-                                                        isSupporter,
-                                                        !onlyLeaderboardEnabled
+                                                        accessToken, selectedGenreId, null, searchQuery.trim(),
+                                                        filterMode, playedFilterMode, userId, isSupporter, !onlyLeaderboardEnabled
                                                     )
                                                     val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                     mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                     searchResults = deduped
                                                     currentCursor = result.cursor
-                                                    searchResultsMetadata =
-                                                        searchService.filterMetadataFor(deduped, result.metadata)
+                                                    searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
                                                 }
                                             } catch (e: Exception) {
                                                 Log.e("SearchScreen", "Search failed", e)
@@ -713,29 +639,31 @@ fun SearchScreen(
                                 colors = TextFieldDefaults.colors(
                                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
+                        }
+                    }
 
-                            // Genre Filter (hide when using most_played mode)
-                            val usingMostPlayed = searchResultsMetadata.isNotEmpty()
+                    // Item 2: Genre bar (1 unit tall)
+                    item {
+                        val usingMostPlayed = searchResultsMetadata.isNotEmpty()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             if (!usingMostPlayed) {
-                                Text(
-                                    text = stringResource(id = R.string.search_filter_genre),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                                LazyRow(modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
+                                LazyRow(modifier = Modifier.fillMaxWidth()) {
                                     items(genres) { (id, name) ->
                                         Button(
                                             onClick = {
-                                                selectedGenreId =
-                                                    if (selectedGenreId == id) null else id
-                                                currentCursor =
-                                                    null // Reset cursor when changing genre
+                                                selectedGenreId = if (selectedGenreId == id) null else id
+                                                currentCursor = null
                                                 scope.launch {
                                                     try {
                                                         if (filterMode == "recent") {
@@ -743,60 +671,41 @@ fun SearchScreen(
                                                             mergeGroups = mergeGroupsResult
                                                             recentGroupedResults = groupedItems
                                                             searchResults = emptyList()
-                                                            currentCursor = null
                                                             searchResultsMetadata = emptyMap()
                                                             recentTimestamps = timestamps
                                                         } else {
-                                                            val result =
-                                                                repository.getPlayedBeatmaps(
-                                                                    accessToken,
-                                                                    selectedGenreId,
-                                                                    null,
-                                                                    searchQuery.trim()
-                                                                        .ifEmpty { null },
-                                                                    filterMode,
-                                                                    playedFilterMode,
-                                                                    userId,
-                                                                    isSupporter,
-                                                                    !onlyLeaderboardEnabled
-                                                                )
-                                                            val deduped =
-                                                                searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                                                            val result = repository.getPlayedBeatmaps(
+                                                                accessToken, selectedGenreId, null, 
+                                                                searchQuery.trim().ifEmpty { null },
+                                                                filterMode, playedFilterMode, userId, isSupporter, !onlyLeaderboardEnabled
+                                                            )
+                                                            val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                                                             mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                                                             searchResults = deduped
                                                             currentCursor = result.cursor
-                                                            searchResultsMetadata =
-                                                                searchService.filterMetadataFor(
-                                                                    deduped,
-                                                                    result.metadata
-                                                                )
+                                                            searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
                                                         }
                                                     } catch (e: Exception) {
                                                         Log.e("SearchScreen", "Genre filter failed", e)
                                                     }
                                                 }
                                             },
-                                            modifier = Modifier.padding(end = 8.dp),
-                                            contentPadding = PaddingValues(
-                                                horizontal = 12.dp,
-                                                vertical = 8.dp
-                                            ),
+                                            modifier = Modifier.padding(end = 8.dp).height(40.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp),
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = if (selectedGenreId == id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
                                                 contentColor = if (selectedGenreId == id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
                                             )
                                         ) {
-                                            Text(name, style = MaterialTheme.typography.labelMedium)
+                                            Text(name, style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }
                             } else {
-                                // Show info text when genre filter is hidden for most_played
                                 Text(
                                     text = stringResource(id = R.string.search_genre_not_available),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                                    color = MaterialTheme.colorScheme.secondary
                                 )
                             }
                         }
@@ -811,7 +720,8 @@ fun SearchScreen(
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 8.dp, horizontal = 16.dp)
+                                            .height(60.dp) // Exact match for unified height
+                                            .padding(vertical = 12.dp, horizontal = 16.dp)
                                     ) {
                                         Text(
                                             text = item.timestamp,
@@ -867,7 +777,15 @@ fun SearchScreen(
                             sets = beatmapSets,
                             actions = actions,
                             config = BeatmapSetListConfig(
-                                showDividers = false
+                                showDividers = false,
+                                expandedIds = expandedBeatmapSets,
+                                onExpansionChanged = { id, isExpanded ->
+                                    expandedBeatmapSets = if (isExpanded) {
+                                        expandedBeatmapSets + id
+                                    } else {
+                                        expandedBeatmapSets - id
+                                    }
+                                }
                             ),
                             highlightedSetId = previewManager.previewingId,
                             backgroundBrush = { set ->
@@ -924,7 +842,10 @@ fun SearchScreen(
                                         }
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(60.dp) // Exact match for unified height
+                                    .padding(8.dp),
                                 enabled = !isLoadingMore
                             ) {
                                 Text(if (isLoadingMore) stringResource(id = R.string.search_loading) else stringResource(id = R.string.search_load_more))
@@ -940,6 +861,11 @@ fun SearchScreen(
                         .align(Alignment.TopCenter)
                         .padding(top = indicatorOffset),
                     contentColor = MaterialTheme.colorScheme.primary
+                )
+
+                DraggableScrollbar(
+                    state = listState,
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
         }

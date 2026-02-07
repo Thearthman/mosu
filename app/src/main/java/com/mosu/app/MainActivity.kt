@@ -205,9 +205,11 @@ fun MainScreen(
         }
     }
     
-    // Scroll to top trigger for Search screen
+    // Scroll to top trigger for screens
     var scrollSearchToTop by remember { mutableStateOf(false) }
     var lastSearchTapTime by remember { mutableStateOf(0L) }
+    var scrollLibraryToTop by remember { mutableStateOf(false) }
+    var lastLibraryTapTime by remember { mutableStateOf(0L) }
     
     // OAuth Credentials from current account
     var clientId by remember { mutableStateOf("") }
@@ -407,7 +409,14 @@ fun MainScreen(
                         .padding(bottom = contentBottomPadding) // Manual padding for MiniPlayer + NavBar
                 ) {
                     composable("library") {
-                        LibraryScreen(db, musicController, repository, downloadService)
+                        LibraryScreen(
+                            db = db,
+                            musicController = musicController,
+                            repository = repository,
+                            downloadService = downloadService,
+                            scrollToTop = scrollLibraryToTop,
+                            onScrolledToTop = { scrollLibraryToTop = false }
+                        )
                     }
                     composable("playlists") {
                         PlaylistScreen(db, musicController, repository, downloadService, accessToken)
@@ -524,13 +533,19 @@ fun MainScreen(
                     label = { Text("Library") },
                     selected = currentDestination == "library",
                     onClick = {
-                        navController.navigate("library") {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                        val currentTime = System.currentTimeMillis()
+                        if (currentDestination == "library" && (currentTime - lastLibraryTapTime) < 500) {
+                            scrollLibraryToTop = true
+                        } else {
+                            navController.navigate("library") {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
                         }
+                        lastLibraryTapTime = currentTime
                     }
                 )
                 NavigationBarItem(

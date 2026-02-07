@@ -28,14 +28,13 @@
     2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion. [MajorUpdate]
     3. Implement sound balancing base on loudness normalization algorithms [nextMajorUpdate]
     4. Implement lyrics service with LRCLIB [nextMajorUpdate]
+    5. Implement a playcart display
 3. Playlist page updates
-    Nothing as of present
+    1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [nextMajorUpdate]
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [nextMajorUpdate]
-6. Playlist page update
-    1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [nextMajorUpdate]
 
 
 ---
@@ -114,6 +113,7 @@
 30. Make Manual Api switch more user intuitive.
 31. bottom button in the infopopup should not take up that much space @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:88-433 replace it with normal dialog to remove the huge buttom padding introduced by alertdialog
 32. add a little progress bar in the botton of the miniplayer similar to the style of the full player progress bar but much thinner(similar to download progress bar thickness). It should have similar functionality to the full player progress bar. Also, it should take much all horizontal space.
+33. Add side scroll bar to songlist as an optional parameter, remember that the songlist size is variable because you can load more results in search screen.
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -159,6 +159,7 @@
 41. Resolved `apiSource` inconsistency where UI could show wrong source during initialization due to race conditions.
 42. Fixed SearchScreen manual refresh bug where new results weren't immediately visible without navigating away and back.
 43. Optimized region detection to avoid redundant background checks and potential state flickering.
+44. Bring back highlight indication for finding currently playing song. Songs inside expanded album has highlight indication but doesn't self-expand when it's collapsed and what's being find is its song.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

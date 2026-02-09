@@ -1063,56 +1063,16 @@ fun SearchScreen(
         }
 
         // Initial Load - Show cached data immediately, then refresh
-        LaunchedEffect(accessToken, vm.filterMode, vm.userId, onlyLeaderboardEnabled) {
-            val loadKey = "$accessToken|${vm.filterMode}|${vm.userId}|$onlyLeaderboardEnabled"
-            if (accessToken != null && vm.userId != null && vm.lastInitialLoadKey != loadKey) {
-                vm.lastInitialLoadKey = loadKey
-                val uid = vm.userId ?: return@LaunchedEffect
-                try {
-                    if (vm.filterMode == "recent") {
-                        val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId, forceRefresh = true)
-                        vm.mergeGroups = mergeGroupsResult
-                        vm.recentGroupedResults = groupedItems
-                        vm.searchResults = emptyList()
-                        vm.currentCursor = null
-                        vm.searchResultsMetadata = emptyMap()
-                        vm.recentTimestamps = timestamps
-                    } else {
-                        // First, try to load cached data immediately for all filter modes
-                        val cachedResult = vm.repository.getCachedPlayedBeatmaps(
-                            genreId = null,
-                            searchQuery = null,
-                            filterMode = vm.filterMode,
-                            playedFilterMode = playedFilterMode,
-                            userId = uid,
-                            searchAny = !onlyLeaderboardEnabled
-                        )
-                        if (cachedResult != null) {
-                            val deduped = vm.searchService.dedupeByTitle(cachedResult.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
-                            vm.mergeGroups = vm.searchService.buildMergeGroups(cachedResult.beatmaps)
-                            vm.searchResults = deduped
-                            vm.currentCursor = cachedResult.cursor
-                            vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, cachedResult.metadata)
-                        }
-
-                        // Then refresh with fresh data in background for all filter modes
-                        scope.launch {
-                            try {
-                                val result = vm.repository.getPlayedBeatmaps(accessToken, null, null, null, vm.filterMode, playedFilterMode, uid, vm.isSupporter, !onlyLeaderboardEnabled)
-                                val deduped = vm.searchService.dedupeByTitle(result.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
-                                vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
-                                vm.searchResults = deduped
-                                vm.currentCursor = result.cursor
-                                vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
-                            } catch (e: Exception) {
-                                Log.e("SearchScreen", "Background refresh failed", e)
-                                // Don't overwrite cached data if refresh fails
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("SearchScreen", "Initial load failed", e)
-                }
+        LaunchedEffect(accessToken, vm.filterMode, vm.userId, onlyLeaderboardEnabled, playedFilterMode) {
+            if (accessToken != null) {
+                vm.performInitialLoad(
+                    accessToken = accessToken,
+                    mode = vm.filterMode,
+                    uid = vm.userId,
+                    onlyLeaderboard = onlyLeaderboardEnabled,
+                    playedMode = playedFilterMode,
+                    searchAny = !onlyLeaderboardEnabled
+                )
             }
         }
     }

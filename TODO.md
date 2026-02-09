@@ -4,9 +4,8 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much).
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
-6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup. [V1.0]
-7. Fix screen frame buffer out of order issue. [V1.0]
-8. Recent filter mode does not load itself automatically when app first started, leaving the page blank. [V1.0]
+6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup. [v1.0]
+7. Fix screen frame buffer out of order issue. [v1.0]
 
 
 # UIUX improvement
@@ -19,25 +18,25 @@
 # New Feature
 0. Core Feature
     1. Implement Equalizer 
-    2. Implement Activity Heatmap from recent play data (should have week, month, and year view). [nextMajorUpdate]
+    2. Implement Activity Heatmap from recent play data (should have week, month, and year view). [v1.2]
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates
     1. Add HT(Half Time) similar to DT that doesn't change pitch.
-    2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion. [MajorUpdate]
-    3. Implement sound balancing base on loudness normalization algorithms [nextMajorUpdate]
-    4. Implement lyrics service with LRCLIB [nextMajorUpdate]
+    2. Implement Rubberband to replace the existing music controller to minimize double time metallic distortion. [v2.0]
+    3. Implement sound balancing base on loudness normalization algorithms [v1.2]
+    4. Implement lyrics service with LRCLIB [v1.2]
     5. Implement a current playing playlist, such that it keeps track of the list of music to be played. Also the list of music played. And, in random/shuffle mode, it should not be generating each number on the go but generate a list of random indexes that serves as the playlist. This means when you hit last song you can still find the song just been played, not another randomly found song.  
     6. Implement a current playing playlist display
 3. Playlist page updates
-    1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [nextMajorUpdate]
-    2. Long pressing a playlist in playlist page should be able to rename the playlist. [V1.0]
+    1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [v1.1]
+    2. Long pressing a playlist in playlist page should be able to rename the playlist: When long pressing, an edit icon should appear beside the name, when clicked, prompt a rename dialog and dialog feature a text field for updated name, a cancel button and a confirm button for renaming. [v1.0]
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
-    2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song.  [nextMajorUpdate] 
-    3. Add Top play filter mode. [V1.0]
+    2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song.  [v1.1] 
+    3. Add Top play filter mode. [v1.1]
 5. Library page update
-    1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [nextMajorUpdate]
+    1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [v1.1]
 
 
 ---
@@ -170,6 +169,7 @@
 43. Optimized region detection to avoid redundant background checks and potential state flickering.
 44. Bring back highlight indication for finding currently playing song. Songs inside expanded album has highlight indication but doesn't self-expand when it's collapsed and what's being find is its song.
 45. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view.
+46. Recent filter mode does not load itself automatically when app first started, leaving the page blank.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

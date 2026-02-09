@@ -1,6 +1,7 @@
 package com.mosu.app.ui.search
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,6 +14,7 @@ import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.domain.search.RecentItem
 import com.mosu.app.ui.components.DownloadProgress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -28,7 +30,7 @@ class SearchViewModel(
 
     // Search state
     var searchQuery by mutableStateOf("")
-    var filterMode by mutableStateOf("")
+    var filterMode by mutableStateOf("played")
     var searchResults by mutableStateOf<List<BeatmapsetCompact>>(emptyList())
     var recentGroupedResults by mutableStateOf<List<RecentItem>>(emptyList())
     var searchResultsMetadata by mutableStateOf<Map<Long, Pair<Int, Int>>>(emptyMap())
@@ -62,6 +64,7 @@ class SearchViewModel(
     var lastInitialLoadKey: String? = null
     var lastSyncedDefaultView: String? = null
     private var infoLoadJob: Job? = null
+    private var initialLoadJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -73,6 +76,94 @@ class SearchViewModel(
                         downloadedBeatmapSetIds = setIds
                         downloadedKeys = keys
                     }
+                }
+            }
+        }
+    }
+
+    fun performInitialLoad(
+        accessToken: String,
+        mode: String,
+        uid: String?,
+        onlyLeaderboard: Boolean,
+        playedMode: String,
+        searchAny: Boolean
+    ) {
+        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard"
+        if (lastInitialLoadKey == loadKey) return
+        lastInitialLoadKey = loadKey
+
+        initialLoadJob?.cancel()
+        initialLoadJob = viewModelScope.launch {
+            try {
+                if (mode == "recent") {
+                    // 1. Load local data immediately
+                    val (groupedItems, mergeGroupsResult, timestamps) = searchService.loadRecentFiltered(
+                        accessToken, uid, searchQuery, selectedGenreId, forceRefresh = false
+                    )
+                    mergeGroups = mergeGroupsResult
+                    recentGroupedResults = groupedItems
+                    searchResults = emptyList()
+                    currentCursor = null
+                    searchResultsMetadata = emptyMap()
+                    recentTimestamps = timestamps
+
+                    // 2. Refresh in background
+                    if (uid != null) {
+                        launch {
+                            try {
+                                val (freshItems, freshMergeGroups, freshTimestamps) = searchService.loadRecentFiltered(
+                                    accessToken, uid, searchQuery, selectedGenreId, forceRefresh = true
+                                )
+                                mergeGroups = freshMergeGroups
+                                recentGroupedResults = freshItems
+                                recentTimestamps = freshTimestamps
+                            } catch (e: Exception) {
+                                if (e !is CancellationException) {
+                                    Log.e("SearchViewModel", "Background recent refresh failed", e)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // 1. Load cached data
+                    val cachedResult = repository.getCachedPlayedBeatmaps(
+                        genreId = null,
+                        searchQuery = null,
+                        filterMode = mode,
+                        playedFilterMode = playedMode,
+                        userId = uid,
+                        searchAny = searchAny
+                    )
+                    if (cachedResult != null) {
+                        val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                        mergeGroups = searchService.buildMergeGroups(cachedResult.beatmaps)
+                        searchResults = deduped
+                        currentCursor = cachedResult.cursor
+                        searchResultsMetadata = searchService.filterMetadataFor(deduped, cachedResult.metadata)
+                    }
+
+                    // 2. Refresh in background
+                    launch {
+                        try {
+                            val result = repository.getPlayedBeatmaps(
+                                accessToken, null, null, null, mode, playedMode, uid, isSupporter, searchAny
+                            )
+                            val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                            mergeGroups = searchService.buildMergeGroups(result.beatmaps)
+                            searchResults = deduped
+                            currentCursor = result.cursor
+                            searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
+                        } catch (e: Exception) {
+                            if (e !is CancellationException) {
+                                Log.e("SearchViewModel", "Background refresh failed", e)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e !is CancellationException) {
+                    Log.e("SearchViewModel", "Initial load failed", e)
                 }
             }
         }

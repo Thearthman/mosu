@@ -95,10 +95,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import androidx.lifecycle.viewModelScope
+import com.mosu.app.ui.DeferredActionViewModel
+
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel,
+    deferredActionViewModel: DeferredActionViewModel,
     accessToken: String?,
     accountManager: com.mosu.app.data.AccountManager,
     settingsManager: com.mosu.app.data.SettingsManager,
@@ -168,8 +172,8 @@ fun SearchScreen(
     // Playlist dialog state
     val playlists by vm.db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     
-    // Pending Deletions State (for Deferred Deletion Redo)
-    var pendingDeletions by remember { mutableStateOf<Set<Long>>(emptySet()) } // Set IDs
+    // Deletion state from shared ViewModel
+    val pendingDeletions by deferredActionViewModel.pendingLibrarySetDeletions.collectAsState()
 
     val playlistTracks by vm.db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val playlistMembership = playlistTracks
@@ -315,14 +319,14 @@ fun SearchScreen(
             },
             onSwipeLeft = { set ->
                 if (set.isDownloaded) {
-                    pendingDeletions = pendingDeletions + set.id
+                    deferredActionViewModel.addPendingLibrarySet(set.id)
                 }
             },
             onSwipeLeftRevert = { set ->
-                pendingDeletions = pendingDeletions - set.id
+                deferredActionViewModel.removePendingLibrarySet(set.id)
             },
             onSwipeLeftConfirmed = { set ->
-                scope.launch {
+                deferredActionViewModel.viewModelScope.launch {
                     val tracksToDelete = withContext(Dispatchers.IO) {
                         val tracks = vm.db.beatmapDao().getTracksForSet(set.id)
                         if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(set.title, set.artist)
@@ -331,11 +335,11 @@ fun SearchScreen(
                     tracksToDelete.forEach { track ->
                         TrackService.deleteTrack(track, vm.db, context)
                     }
-                    pendingDeletions = pendingDeletions - set.id
+                    deferredActionViewModel.removePendingLibrarySet(set.id)
                 }
             },
             onSwipeLeftMessage = { set ->
-                "Removed ${set.title} from Library"
+                context.getString(R.string.snackbar_removed_from_library, set.title)
             },
             onSwipeRight = { set ->
                 if (set.isDownloaded) {
@@ -345,7 +349,7 @@ fun SearchScreen(
             swipeLeftIcon = Icons.Default.Delete,
             swipeRightIcon = Icons.Default.Add,
             snackbarHostState = snackbarHostState,
-            coroutineScope = scope
+            coroutineScope = deferredActionViewModel.viewModelScope
         )
     }
 
@@ -731,7 +735,13 @@ fun SearchScreen(
 
                     // Search Results
                     if (vm.filterMode == "recent") {
-                        items(vm.recentGroupedResults) { item ->
+                        val filteredRecentItems = vm.recentGroupedResults.filter { item ->
+                            when (item) {
+                                is RecentItem.Song -> item.beatmapset.id !in pendingDeletions
+                                else -> true
+                            }
+                        }
+                        items(filteredRecentItems) { item ->
                             when (item) {
                                 is RecentItem.Header -> {
                                     // Timestamp header/divider
@@ -786,13 +796,13 @@ fun SearchScreen(
                                         BeatmapSetSwipeItem(
                                             swipeActions = BeatmapSetSwipeActions(
                                                 onDelete = {
-                                                    pendingDeletions = pendingDeletions + map.id
+                                                    deferredActionViewModel.addPendingLibrarySet(map.id)
                                                 },
                                                 onDeleteRevert = {
-                                                    pendingDeletions = pendingDeletions - map.id
+                                                    deferredActionViewModel.removePendingLibrarySet(map.id)
                                                 },
                                                 onDeleteConfirmed = {
-                                                    scope.launch {
+                                                    deferredActionViewModel.viewModelScope.launch {
                                                         val tracksToDelete = withContext(Dispatchers.IO) {
                                                             val tracks = vm.db.beatmapDao().getTracksForSet(map.id)
                                                             if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
@@ -801,10 +811,10 @@ fun SearchScreen(
                                                         tracksToDelete.forEach { track ->
                                                             TrackService.deleteTrack(track, vm.db, context)
                                                         }
-                                                        pendingDeletions = pendingDeletions - map.id
+                                                        deferredActionViewModel.removePendingLibrarySet(map.id)
                                                     }
                                                 },
-                                                onDeleteMessage = "Removed ${map.title} from Library",
+                                                onDeleteMessage = context.getString(R.string.snackbar_removed_from_library, map.title),
                                                 onSwipeRight = { openPlaylistDialog(setData) }
                                             ),
                                             backgroundBrush = previewBrush,
@@ -812,7 +822,7 @@ fun SearchScreen(
                                             startToEndIcon = Icons.Default.Add,
                                             endToStartIcon = Icons.Default.Delete,
                                             snackbarHostState = snackbarHostState,
-                                            externalScope = scope
+                                            externalScope = deferredActionViewModel.viewModelScope
                                         ) {
                                             BeatmapSetItem(set = setData, actions = actions)
                                         }

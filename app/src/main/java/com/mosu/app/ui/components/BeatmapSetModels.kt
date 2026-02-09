@@ -68,7 +68,7 @@ data class BeatmapSetActions(
     val onTrackPlay: ((BeatmapTrackData) -> Unit)? = null,
     val onTrackSwipeLeft: ((BeatmapTrackData) -> Unit)? = null,
     val onTrackSwipeLeftRevert: ((BeatmapTrackData) -> Unit)? = null,
-    val onTrackSwipeLeftConfirmed: ((BeatmapTrackData) -> Unit)? = null,
+    val onTrackSwipeLeftConfirmed: (suspend (BeatmapTrackData) -> Unit)? = null,
     val onTrackSwipeLeftMessage: ((BeatmapTrackData) -> String)? = null,
     val onTrackSwipeRight: ((BeatmapTrackData) -> Unit)? = null,
     val onTrackSwipeRightRevert: ((BeatmapTrackData) -> Unit)? = null,
@@ -77,7 +77,7 @@ data class BeatmapSetActions(
     // Swipe Actions
     val onSwipeLeft: ((BeatmapSetData) -> Unit)? = null,
     val onSwipeLeftRevert: ((BeatmapSetData) -> Unit)? = null,
-    val onSwipeLeftConfirmed: ((BeatmapSetData) -> Unit)? = null,
+    val onSwipeLeftConfirmed: (suspend (BeatmapSetData) -> Unit)? = null,
     val onSwipeLeftMessage: ((BeatmapSetData) -> String)? = null,
     val onSwipeRight: ((BeatmapSetData) -> Unit)? = null,
     val onSwipeRightRevert: ((BeatmapSetData) -> Unit)? = null,

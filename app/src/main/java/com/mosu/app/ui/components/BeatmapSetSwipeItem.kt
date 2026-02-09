@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 data class BeatmapSetSwipeActions(
     val onDelete: (() -> Unit)? = null,
     val onDeleteRevert: (() -> Unit)? = null,
-    val onDeleteConfirmed: (() -> Unit)? = null,
+    val onDeleteConfirmed: (suspend () -> Unit)? = null,
     val onDeleteMessage: String? = null,
     val onSwipeRight: (() -> Unit)? = null,
     val onSwipeRightRevert: (() -> Unit)? = null,
@@ -67,6 +67,7 @@ fun BeatmapSetSwipeItem(
 ) {
     val localScope = rememberCoroutineScope()
     val scope = externalScope ?: localScope
+    val context = androidx.compose.ui.platform.LocalContext.current
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             Log.d("BeatmapSetSwipeItem", "Swipe detected: $value")
@@ -79,7 +80,7 @@ fun BeatmapSetSwipeItem(
                         scope.launch {
                             val result = snackbarHostState.showSnackbar(
                                 message = swipeActions.onSwipeRightMessage,
-                                actionLabel = "Redo",
+                                actionLabel = context.getString(R.string.snackbar_redo),
                                 duration = SnackbarDuration.Long
                             )
                             if (result == SnackbarResult.ActionPerformed) {
@@ -98,7 +99,7 @@ fun BeatmapSetSwipeItem(
                         scope.launch {
                             val result = snackbarHostState.showSnackbar(
                                 message = swipeActions.onDeleteMessage,
-                                actionLabel = "Redo",
+                                actionLabel = context.getString(R.string.snackbar_redo),
                                 duration = SnackbarDuration.Long
                             )
                             if (result == SnackbarResult.ActionPerformed) {
@@ -112,7 +113,9 @@ fun BeatmapSetSwipeItem(
                     } else {
                         Log.d("BeatmapSetSwipeItem", "Snackbar skipped: host=${snackbarHostState != null}, msg=${swipeActions.onDeleteMessage != null}")
                         // If no snackbar logic is provided, delete immediately
-                        swipeActions.onDeleteConfirmed?.invoke()
+                        scope.launch {
+                            swipeActions.onDeleteConfirmed?.invoke()
+                        }
                     }
                     dismissOnDelete // Return true to dismiss if configured, else snap back
                 }

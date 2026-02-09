@@ -76,6 +76,7 @@ import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
+import com.mosu.app.ui.DeferredActionViewModel
 import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.playlist.PlaylistScreen
 import com.mosu.app.ui.profile.ProfileScreen
@@ -186,6 +187,9 @@ fun MainScreen(
     val searchViewModel: SearchViewModel = viewModel(
         factory = SearchViewModelFactory(repository, db, context.applicationContext)
     )
+
+    // DeferredActionViewModel to manage deletions across screens
+    val deferredActionViewModel: DeferredActionViewModel = viewModel()
     
     // Access Token State (loaded from TokenManager or from OAuth)
     var accessToken by remember { mutableStateOf<String?>(null) }
@@ -429,15 +433,17 @@ fun MainScreen(
                             accessToken = accessToken,
                             scrollToTop = scrollLibraryToTop,
                             onScrolledToTop = { scrollLibraryToTop = false },
-                            snackbarHostState = snackbarHostState
+                            snackbarHostState = snackbarHostState,
+                            deferredActionViewModel = deferredActionViewModel
                         )
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController, repository, downloadService, accessToken, snackbarHostState)
+                        PlaylistScreen(db, musicController, repository, downloadService, accessToken, snackbarHostState, deferredActionViewModel)
                     }
                     composable("search") {
                         SearchScreen(
                             viewModel = searchViewModel,
+                            deferredActionViewModel = deferredActionViewModel,
                             accessToken = accessToken,
                             accountManager = accountManager,
                             settingsManager = settingsManager,

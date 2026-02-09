@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.api.model.BeatmapDetail
@@ -91,6 +92,8 @@ import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.SelectableBeatmapData
 import com.mosu.app.ui.components.SelectableBeatmapList
 import com.mosu.app.ui.components.beatmapSetList
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -102,7 +105,8 @@ fun PlaylistScreen(
     repository: OsuRepository,
     downloadService: BeatmapDownloadService,
     accessToken: String? = null,
-    snackbarHostState: SnackbarHostState? = null
+    snackbarHostState: SnackbarHostState? = null,
+    deferredActionViewModel: DeferredActionViewModel = viewModel()
 ) {
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
@@ -119,8 +123,8 @@ fun PlaylistScreen(
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
     
-    // Pending Deletions State (for Deferred Removal Redo)
-    var pendingDeletions by remember { mutableStateOf<Set<String>>(emptySet()) } // Set of "setId|difficultyName"
+    // Pending Deletions State from shared ViewModel
+    val pendingDeletions by deferredActionViewModel.pendingPlaylistRemovals.collectAsState()
 
     val playlistTracksWithStatus: List<PlaylistTrackWithBeatmap> by if (selectedPlaylistId != null) {
         db.playlistDao().getTracksWithStatusForPlaylist(selectedPlaylistId!!).collectAsState(initial = emptyList())
@@ -232,9 +236,9 @@ fun PlaylistScreen(
     }
 
     // Transform to BeatmapSetData for the list
-    val groupedTracks = remember(playlistTracksWithStatus, pendingDeletions) {
+    val groupedTracks = remember(playlistTracksWithStatus, pendingDeletions, selectedPlaylistId) {
         playlistTracksWithStatus
-            .filter { "${it.beatmapSetId}|${it.difficultyName ?: it.storedDifficultyName}" !in pendingDeletions }
+            .filter { "${selectedPlaylistId}|${it.beatmapSetId}|${it.difficultyName ?: it.storedDifficultyName}" !in pendingDeletions }
             .groupBy { it.beatmapSetId }
     }
 
@@ -291,28 +295,37 @@ fun PlaylistScreen(
             onTrackSwipeLeft = { trackData ->
                 // UI-only remove: hide it
                 if (selectedPlaylistId != null) {
-                    val key = "${trackData.beatmapSetId}|${trackData.difficultyName}"
-                    pendingDeletions = pendingDeletions + key
+                    val key = "${selectedPlaylistId}|${trackData.beatmapSetId}|${trackData.difficultyName}"
+                    deferredActionViewModel.addPendingPlaylistRemoval(key)
                 }
             },
             onTrackSwipeLeftRevert = { trackData ->
                 // Redo: just un-hide
-                val key = "${trackData.beatmapSetId}|${trackData.difficultyName}"
-                pendingDeletions = pendingDeletions - key
+                if (selectedPlaylistId != null) {
+                    val key = "${selectedPlaylistId}|${trackData.beatmapSetId}|${trackData.difficultyName}"
+                    deferredActionViewModel.removePendingPlaylistRemoval(key)
+                }
             },
             onTrackSwipeLeftConfirmed = { trackData ->
                 // Actual removal after timeout
                 if (selectedPlaylistId != null) {
-                    scope.launch {
-                        TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, trackData.beatmapSetId, trackData.difficultyName, db)
-                        val key = "${trackData.beatmapSetId}|${trackData.difficultyName}"
-                        pendingDeletions = pendingDeletions - key
+                    val playlistId = selectedPlaylistId!!
+                    val trackSetId = trackData.beatmapSetId
+                    val trackDiff = trackData.difficultyName
+                    deferredActionViewModel.viewModelScope.launch {
+                        TrackService.removeTrackFromPlaylist(playlistId, trackSetId, trackDiff, db)
+                        val key = "${playlistId}|${trackSetId}|${trackDiff}"
+                        deferredActionViewModel.removePendingPlaylistRemoval(key)
                     }
                 }
             },
             onTrackSwipeLeftMessage = { trackData ->
                 val title = trackData.title ?: trackData.difficultyName
-                "Removed $title from ${selectedPlaylist?.name ?: "Playlist"}"
+                context.getString(
+                    R.string.snackbar_removed_from_playlist,
+                    title,
+                    selectedPlaylist?.name ?: context.getString(R.string.playlist_default_name)
+                )
             },
             onTrackSwipeRight = { trackData ->
                 // Add to other playlist
@@ -322,30 +335,41 @@ fun PlaylistScreen(
             onSwipeLeft = { set ->
                 // UI-only remove: hide the whole set
                 if (selectedPlaylistId != null) {
-                    val keys = set.tracks.map { "${set.id}|${it.difficultyName}" }
-                    pendingDeletions = pendingDeletions + keys
+                    set.tracks.forEach {
+                        val key = "${selectedPlaylistId}|${set.id}|${it.difficultyName}"
+                        deferredActionViewModel.addPendingPlaylistRemoval(key)
+                    }
                 }
             },
             onSwipeLeftRevert = { set ->
                 // Redo: un-hide the set
-                val keys = set.tracks.map { "${set.id}|${it.difficultyName}" }
-                pendingDeletions = pendingDeletions - keys
+                if (selectedPlaylistId != null) {
+                    set.tracks.forEach {
+                        val key = "${selectedPlaylistId}|${set.id}|${it.difficultyName}"
+                        deferredActionViewModel.removePendingPlaylistRemoval(key)
+                    }
+                }
             },
             onSwipeLeftConfirmed = { set ->
                 // Actual removal after timeout
                 if (selectedPlaylistId != null) {
-                    scope.launch {
-                        val tracksToRemove = playlistTracksWithStatus.filter { it.beatmapSetId == set.id }
+                    val playlistId = selectedPlaylistId!!
+                    val tracksToRemove = playlistTracksWithStatus.filter { it.beatmapSetId == set.id }
+                    deferredActionViewModel.viewModelScope.launch {
                         tracksToRemove.forEach { track ->
-                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
+                            TrackService.removeTrackFromPlaylist(playlistId, track.beatmapSetId, track.storedDifficultyName, db)
+                            val key = "${playlistId}|${track.beatmapSetId}|${track.storedDifficultyName}"
+                            deferredActionViewModel.removePendingPlaylistRemoval(key)
                         }
-                        val keys = set.tracks.map { "${set.id}|${it.difficultyName}" }
-                        pendingDeletions = pendingDeletions - keys
                     }
                 }
             },
             onSwipeLeftMessage = { set ->
-                "Removed ${set.title} from ${selectedPlaylist?.name ?: "Playlist"}"
+                context.getString(
+                    R.string.snackbar_removed_from_playlist,
+                    set.title,
+                    selectedPlaylist?.name ?: context.getString(R.string.playlist_default_name)
+                )
             },
             onSwipeRight = { set ->
                 // Add to OTHER playlist
@@ -359,7 +383,7 @@ fun PlaylistScreen(
             swipeLeftIcon = Icons.Default.Remove,
             swipeRightIcon = Icons.Default.Add,
             snackbarHostState = snackbarHostState,
-            coroutineScope = scope
+            coroutineScope = deferredActionViewModel.viewModelScope
         )
     }
 

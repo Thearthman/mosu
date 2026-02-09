@@ -50,6 +50,9 @@
     <string name="playlist_rename_dialog_title">Rename playlist</string>
     <string name="playlist_rename_button">Rename</string>
     <string name="playlist_cd_rename_playlist">Rename playlist</string>
+    <string name="snackbar_removed_from_playlist">Removed %1$s from %2$s</string>
+    <string name="snackbar_removed_from_library">Removed %1$s from Library</string>
+    <string name="snackbar_redo">Redo</string>
 
     <!-- Profile Screen -->
     <string name="profile_title">Profile</string>

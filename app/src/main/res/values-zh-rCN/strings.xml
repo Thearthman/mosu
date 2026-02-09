@@ -47,6 +47,12 @@
     <string name="playlist_create_dialog_title">创建播放列表</string>
     <string name="playlist_name_label">名称</string>
     <string name="playlist_create_button">创建</string>
+    <string name="playlist_rename_dialog_title">重命名播放列表</string>
+    <string name="playlist_rename_button">重命名</string>
+    <string name="playlist_cd_rename_playlist">重命名播放列表</string>
+    <string name="snackbar_removed_from_playlist">已从 %2$s 中移除 %1$s</string>
+    <string name="snackbar_removed_from_library">已从曲库中移除 %1$s</string>
+    <string name="snackbar_redo">重做</string>
 
     <!-- 个人界面 -->
     <string name="profile_title">个人</string>

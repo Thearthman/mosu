@@ -122,7 +122,7 @@ fun BeatmapSetTrackItem(
     onPlay: () -> Unit,
     onDelete: (() -> Unit)?,
     onDeleteRevert: (() -> Unit)? = null,
-    onDeleteConfirmed: (() -> Unit)? = null,
+    onDeleteConfirmed: (suspend () -> Unit)? = null,
     onDeleteMessage: String? = null,
     onAddToPlaylist: (() -> Unit)?,
     onAddToPlaylistRevert: (() -> Unit)? = null,

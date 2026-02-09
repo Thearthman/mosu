@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import com.mosu.app.R
 import com.mosu.app.data.api.model.BeatmapDetail
 import com.mosu.app.data.api.model.BeatmapsetCompact
@@ -77,6 +78,8 @@ import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.beatmapSetList
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.widget.Toast
@@ -91,7 +94,8 @@ fun LibraryScreen(
     accessToken: String? = null,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {},
-    snackbarHostState: SnackbarHostState? = null
+    snackbarHostState: SnackbarHostState? = null,
+    deferredActionViewModel: DeferredActionViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
@@ -173,12 +177,12 @@ fun LibraryScreen(
     // Genre Filter State
     var selectedGenreId by remember { mutableStateOf<Int?>(null) }
 
+    // Deletion states from shared ViewModel
+    val pendingDeletions by deferredActionViewModel.pendingLibraryTrackDeletions.collectAsState()
+    val pendingSetDeletions by deferredActionViewModel.pendingLibrarySetDeletions.collectAsState()
+
     // Download States for Redo
     var downloadStates by remember { mutableStateOf<Map<Long, DownloadProgress>>(emptyMap()) }
-
-    // Pending Deletions State (for Deferred Deletion Redo)
-    var pendingDeletions by remember { mutableStateOf<Set<Long>>(emptySet()) } // Track IDs (uids)
-    var pendingSetDeletions by remember { mutableStateOf<Set<Long>>(emptySet()) } // Set IDs
 
     // Search State
     var searchQuery by remember { mutableStateOf("") }
@@ -292,24 +296,24 @@ fun LibraryScreen(
             },
             onTrackSwipeLeft = { trackData ->
                 // UI-only delete: hide it
-                pendingDeletions = pendingDeletions + trackData.id
+                deferredActionViewModel.addPendingLibraryTrack(trackData.id)
             },
             onTrackSwipeLeftRevert = { trackData ->
                 // Redo: just un-hide
-                pendingDeletions = pendingDeletions - trackData.id
+                deferredActionViewModel.removePendingLibraryTrack(trackData.id)
             },
             onTrackSwipeLeftConfirmed = { trackData ->
                 // Actual deletion after timeout
-                scope.launch {
+                deferredActionViewModel.viewModelScope.launch {
                     val track = downloadedMaps.find { it.uid == trackData.id }
                     if (track != null) {
                         TrackService.deleteTrack(track, db, context)
                     }
-                    pendingDeletions = pendingDeletions - trackData.id
+                    deferredActionViewModel.removePendingLibraryTrack(trackData.id)
                 }
             },
             onTrackSwipeLeftMessage = { trackData ->
-                "Removed ${trackData.difficultyName} from Library"
+                context.getString(R.string.snackbar_removed_from_library, trackData.difficultyName)
             },
             onTrackSwipeRight = { trackData ->
                 // Add to playlist
@@ -318,24 +322,24 @@ fun LibraryScreen(
             },
             onSwipeLeft = { set ->
                 // UI-only delete: hide the whole set
-                pendingSetDeletions = pendingSetDeletions + set.id
+                deferredActionViewModel.addPendingLibrarySet(set.id)
             },
             onSwipeLeftRevert = { set ->
                 // Redo: un-hide the set
-                pendingSetDeletions = pendingSetDeletions - set.id
+                deferredActionViewModel.removePendingLibrarySet(set.id)
             },
             onSwipeLeftConfirmed = { set ->
                 // Actual deletion after timeout
-                scope.launch {
+                deferredActionViewModel.viewModelScope.launch {
                     val tracksToDelete = downloadedMaps.filter { it.beatmapSetId == set.id }
                     tracksToDelete.forEach { track ->
                         TrackService.deleteTrack(track, db, context)
                     }
-                    pendingSetDeletions = pendingSetDeletions - set.id
+                    deferredActionViewModel.removePendingLibrarySet(set.id)
                 }
             },
             onSwipeLeftMessage = { set ->
-                "Removed ${set.title} from Library"
+                context.getString(R.string.snackbar_removed_from_library, set.title)
             },
             onSwipeRight = { set ->
                 // Add to playlist
@@ -349,7 +353,7 @@ fun LibraryScreen(
             swipeLeftIcon = Icons.Default.Delete,
             swipeRightIcon = Icons.Default.Add,
             snackbarHostState = snackbarHostState,
-            coroutineScope = scope
+            coroutineScope = deferredActionViewModel.viewModelScope
         )
     }
 

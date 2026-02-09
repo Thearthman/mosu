@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
@@ -132,6 +133,10 @@ fun PlaylistScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renamePlaylistId by remember { mutableStateOf<Long?>(null) }
+    var renamePlaylistName by remember { mutableStateOf("") }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var addSelection by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -425,6 +430,11 @@ fun PlaylistScreen(
                                     // Then delete the playlist itself
                                     db.playlistDao().deletePlaylist(playlist.id)
                                 }
+                            },
+                            onRename = {
+                                renamePlaylistId = playlist.id
+                                renamePlaylistName = playlist.name
+                                showRenameDialog = true
                             }
                         )
                     }
@@ -594,6 +604,43 @@ fun PlaylistScreen(
         )
     }
 
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text(stringResource(id = R.string.playlist_rename_dialog_title)) },
+            text = {
+                OutlinedTextField(
+                    value = renamePlaylistName,
+                    onValueChange = { renamePlaylistName = it },
+                    singleLine = true,
+                    label = { Text(stringResource(id = R.string.playlist_name_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = renamePlaylistName.trim()
+                        val id = renamePlaylistId
+                        if (name.isNotEmpty() && id != null) {
+                            scope.launch {
+                                db.playlistDao().updatePlaylistName(id, name)
+                            }
+                            showRenameDialog = false
+                        }
+                    }
+                ) {
+                    Text(stringResource(id = R.string.playlist_rename_button))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text(stringResource(id = R.string.playlist_cancel_button))
+                }
+            }
+        )
+    }
+
     if (showPlaylistDialog && dialogTrack != null) {
         val track = dialogTrack!!
         val playlistOptions = playlists.map { PlaylistOption(it.id, it.name) }
@@ -681,9 +728,10 @@ private fun PlaylistCard(
     trackCount: Int,
     coverPaths: List<String>,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRename: () -> Unit
 ) {
-    var showDeleteIcon by remember { mutableStateOf(false) }
+    var showEditIcons by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -691,15 +739,15 @@ private fun PlaylistCard(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
-                        if (showDeleteIcon) {
-                            // If delete icon is showing, hide it instead of opening playlist
-                            showDeleteIcon = false
+                        if (showEditIcons) {
+                            // If edit icons are showing, hide them instead of opening playlist
+                            showEditIcons = false
                         } else {
                             onClick()
                         }
                     },
                     onLongPress = {
-                        showDeleteIcon = true
+                        showEditIcons = true
                     }
                 )
             },
@@ -719,27 +767,51 @@ private fun PlaylistCard(
                     .background(Color.Black.copy(alpha = 0.25f))
                     .padding(12.dp)
             ) {
-                // Delete icon overlay (top-right corner)
-                if (showDeleteIcon) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = stringResource(id = R.string.playlist_cd_delete_playlist),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(24.dp)
-                            .background(
-                                color = Color.Black.copy(alpha = 0.7f),
-                                shape = androidx.compose.foundation.shape.CircleShape
-                            )
-                            .padding(4.dp)
-                            .clickable(
-                                onClick = {
-                                    onDelete()
-                                    showDeleteIcon = false  // Hide icon after deletion
-                                }
-                            )
-                    )
+                // Edit/Delete icon overlay (top-right corner)
+                if (showEditIcons) {
+                    Row(
+                        modifier = Modifier.align(Alignment.TopEnd),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Rename icon
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = stringResource(id = R.string.playlist_cd_rename_playlist),
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(
+                                    color = Color.Black.copy(alpha = 0.7f),
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                                .padding(6.dp)
+                                .clickable(
+                                    onClick = {
+                                        onRename()
+                                        showEditIcons = false
+                                    }
+                                )
+                        )
+                        // Delete icon
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = stringResource(id = R.string.playlist_cd_delete_playlist),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(
+                                    color = Color.Black.copy(alpha = 0.7f),
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                                .padding(6.dp)
+                                .clickable(
+                                    onClick = {
+                                        onDelete()
+                                        showEditIcons = false
+                                    }
+                                )
+                        )
+                    }
                 }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart)

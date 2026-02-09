@@ -47,6 +47,9 @@
     <string name="playlist_create_dialog_title">Create playlist</string>
     <string name="playlist_name_label">Name</string>
     <string name="playlist_create_button">Create</string>
+    <string name="playlist_rename_dialog_title">Rename playlist</string>
+    <string name="playlist_rename_button">Rename</string>
+    <string name="playlist_cd_rename_playlist">Rename playlist</string>
 
     <!-- Profile Screen -->
     <string name="profile_title">Profile</string>

@@ -20,6 +20,9 @@ interface PlaylistDao {
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deletePlaylist(playlistId: Long)
 
+    @Query("UPDATE playlists SET name = :newName WHERE id = :playlistId")
+    suspend fun updatePlaylistName(playlistId: Long, newName: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addTrack(crossRef: PlaylistTrackEntity)
 

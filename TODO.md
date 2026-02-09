@@ -5,7 +5,6 @@
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
 6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup. [v1.0]
-7. Fix screen frame buffer out of order issue. [v1.0]
 
 
 # UIUX improvement
@@ -30,7 +29,6 @@
     6. Implement a current playing playlist display
 3. Playlist page updates
     1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [v1.1]
-    2. Long pressing a playlist in playlist page should be able to rename the playlist: When long pressing, an edit icon should appear beside the name, when clicked, prompt a rename dialog and dialog feature a text field for updated name, a cancel button and a confirm button for renaming. [v1.0]
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
     2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song.  [v1.1] 
@@ -60,6 +58,7 @@
     1. Implement `single`/`loop`/`random`(that loops) feature. As of current, the playlist is the whole library, i.e., loop/random applies to the whole library. The library genre feature should work here to change the playlist.
     2. Long pressing a playlist in playlist page should call out a pop up menu which you can delete or rename the playlist.
     3. Inside a playlist, right swipe a song should remove it from the playlist (with a confirmation popup), left swipe should delete the song from the entire library as usual.
+    4. Long pressing a playlist in playlist page should be able to rename the playlist: When long pressing, an edit icon should appear beside the name, when clicked, prompt a rename dialog and dialog feature a text field for updated name, a cancel button and a confirm button for renaming.
 4. Search page updates
     1. When a song is downloaded is clicked in search page, it is played.
     2. Implement filter by `favorite`(extracted from user's osu account data) (it should be a part of the `played`/`all` button). So now it alternates between `played`, `all`, `favorite`.
@@ -170,6 +169,7 @@
 44. Bring back highlight indication for finding currently playing song. Songs inside expanded album has highlight indication but doesn't self-expand when it's collapsed and what's being find is its song.
 45. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view.
 46. Recent filter mode does not load itself automatically when app first started, leaving the page blank.
+47. Fix screen frame buffer out of order issue.
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

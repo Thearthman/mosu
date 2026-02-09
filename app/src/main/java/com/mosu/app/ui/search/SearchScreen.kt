@@ -326,17 +326,16 @@ fun SearchScreen(
                 deferredActionViewModel.removePendingLibrarySet(set.id)
             },
             onSwipeLeftConfirmed = { set ->
-                deferredActionViewModel.viewModelScope.launch {
-                    val tracksToDelete = withContext(Dispatchers.IO) {
-                        val tracks = vm.db.beatmapDao().getTracksForSet(set.id)
-                        if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(set.title, set.artist)
-                        else tracks
-                    }
-                    tracksToDelete.forEach { track ->
-                        TrackService.deleteTrack(track, vm.db, context)
-                    }
-                    deferredActionViewModel.removePendingLibrarySet(set.id)
+                // Actual deletion after timeout (already running in viewModelScope from BeatmapSetSwipeItem)
+                val tracksToDelete = withContext(Dispatchers.IO) {
+                    val tracks = vm.db.beatmapDao().getTracksForSet(set.id)
+                    if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(set.title, set.artist)
+                    else tracks
                 }
+                tracksToDelete.forEach { track ->
+                    TrackService.deleteTrack(track, vm.db, context)
+                }
+                deferredActionViewModel.removePendingLibrarySet(set.id)
             },
             onSwipeLeftMessage = { set ->
                 context.getString(R.string.snackbar_removed_from_library, set.title)
@@ -802,17 +801,16 @@ fun SearchScreen(
                                                     deferredActionViewModel.removePendingLibrarySet(map.id)
                                                 },
                                                 onDeleteConfirmed = {
-                                                    deferredActionViewModel.viewModelScope.launch {
-                                                        val tracksToDelete = withContext(Dispatchers.IO) {
-                                                            val tracks = vm.db.beatmapDao().getTracksForSet(map.id)
-                                                            if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
-                                                            else tracks
-                                                        }
-                                                        tracksToDelete.forEach { track ->
-                                                            TrackService.deleteTrack(track, vm.db, context)
-                                                        }
-                                                        deferredActionViewModel.removePendingLibrarySet(map.id)
+                                                    // Actual deletion after timeout (already running in viewModelScope from BeatmapSetSwipeItem)
+                                                    val tracksToDelete = withContext(Dispatchers.IO) {
+                                                        val tracks = vm.db.beatmapDao().getTracksForSet(map.id)
+                                                        if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
+                                                        else tracks
                                                     }
+                                                    tracksToDelete.forEach { track ->
+                                                        TrackService.deleteTrack(track, vm.db, context)
+                                                    }
+                                                    deferredActionViewModel.removePendingLibrarySet(map.id)
                                                 },
                                                 onDeleteMessage = context.getString(R.string.snackbar_removed_from_library, map.title),
                                                 onSwipeRight = { openPlaylistDialog(setData) }
@@ -824,12 +822,19 @@ fun SearchScreen(
                                             snackbarHostState = snackbarHostState,
                                             externalScope = deferredActionViewModel.viewModelScope
                                         ) {
-                                            BeatmapSetItem(set = setData, actions = actions)
+                                            BeatmapSetItem(
+                                                set = setData,
+                                                actions = actions,
+                                                highlight = highlight,
+                                                backgroundBrush = previewBrush,
+                                                backgroundColor = Color.Transparent
+                                            )
                                         }
                                     } else {
                                         BeatmapSetItem(
                                             set = setData,
                                             actions = actions,
+                                            highlight = highlight,
                                             backgroundBrush = previewBrush,
                                             backgroundColor = Color.Transparent
                                         )

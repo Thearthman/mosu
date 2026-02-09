@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
@@ -83,6 +84,7 @@ fun LazyListScope.beatmapSetList(
                             snackbarHostState = actions.snackbarHostState,
                             externalScope = actions.coroutineScope,
                             modifier = Modifier,
+                            highlight = isHighlightedTrack,
                             backgroundColor = when {
                                 isHighlightedTrack -> MaterialTheme.colorScheme.primaryContainer
                                 trackIndex % 2 == 0 -> MaterialTheme.colorScheme.surface
@@ -121,7 +123,10 @@ fun LazyListScope.beatmapSetList(
                         ) {
                             BeatmapSetItem(
                                 set = set,
-                                actions = actions
+                                actions = actions,
+                                highlight = isHighlighted,
+                                backgroundBrush = brush,
+                                backgroundColor = Color.Transparent
                             )
                         }
                     } else {

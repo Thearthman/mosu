@@ -61,6 +61,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import com.mosu.app.data.AccountManager
 import com.mosu.app.data.SettingsManager
@@ -398,14 +399,15 @@ fun MainScreen(
         val navigationBarHeight = navigationBarInsets.calculateBottomPadding()
         val navigationBarHeightPx = with(LocalDensity.current) { navigationBarHeight.toPx() }
 
-        // Animation Progress: 0f (Collapsed) -> 1f (Expanded)
-        val progress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
-        val miniPlayerAlpha = (1f - progress*4f).coerceIn(0f,1f)
+        // Animation Progress and Visibility (using derivedStateOf to minimize recomposition)
+        val isSheetOpen by remember {
+            derivedStateOf { sheetOffset.value < collapsedOffset }
+        }
+        
         val nowPlaying by musicController.nowPlaying.collectAsState()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
-        // Move Nav Bar down as sheet expands. 200f is an arbitrary sufficient offset.
-        val navBarTranslationY = progress * (300f + navigationBarHeightPx)
+
         val contentBottomPadding = when {
             currentRoute == "profile" -> 80.dp
             nowPlaying != null -> 144.dp
@@ -506,7 +508,7 @@ fun MainScreen(
             }
 
             // 2. Full Player Sheet (Middle Layer)
-            if (progress > 0f) {
+            if (isSheetOpen) {
                 Box(
                     modifier = Modifier
                         .zIndex(1f)
@@ -537,11 +539,9 @@ fun MainScreen(
                         .padding(bottom = 80.dp + navigationBarHeight) // Initial position above NavBar
                         .offset { IntOffset(0, ((sheetOffset.value - collapsedOffset)*0.3).roundToInt()) }
                         .graphicsLayer {
-                            alpha = miniPlayerAlpha
-                            // Optimize rendering by only updating transform when alpha changes significantly
-                            if (miniPlayerAlpha < 0.1f) {
-                                alpha = 0f // Fully hide when nearly invisible
-                            }
+                            val currentProgress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
+                            val alphaValue = (1f - currentProgress * 4f).coerceIn(0f, 1f)
+                            alpha = if (alphaValue < 0.1f) 0f else alphaValue
                         }
                         .draggable(
                             state = draggableState,
@@ -563,7 +563,11 @@ fun MainScreen(
                 modifier = Modifier
                     .zIndex(2f)
                     .align(Alignment.BottomCenter)
-                    .offset { IntOffset(0, navBarTranslationY.roundToInt()) }
+                    .offset { 
+                        val currentProgress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
+                        val translationY = currentProgress * (300f + navigationBarHeightPx)
+                        IntOffset(0, translationY.roundToInt()) 
+                    }
             ) {
                 val navBackStackEntryLocal by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntryLocal?.destination?.route

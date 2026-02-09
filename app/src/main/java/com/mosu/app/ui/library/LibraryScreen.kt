@@ -303,14 +303,12 @@ fun LibraryScreen(
                 deferredActionViewModel.removePendingLibraryTrack(trackData.id)
             },
             onTrackSwipeLeftConfirmed = { trackData ->
-                // Actual deletion after timeout
-                deferredActionViewModel.viewModelScope.launch {
-                    val track = downloadedMaps.find { it.uid == trackData.id }
-                    if (track != null) {
-                        TrackService.deleteTrack(track, db, context)
-                    }
-                    deferredActionViewModel.removePendingLibraryTrack(trackData.id)
+                // Actual deletion after timeout (already running in viewModelScope from BeatmapSetSwipeItem)
+                val track = downloadedMaps.find { it.uid == trackData.id }
+                if (track != null) {
+                    TrackService.deleteTrack(track, db, context)
                 }
+                deferredActionViewModel.removePendingLibraryTrack(trackData.id)
             },
             onTrackSwipeLeftMessage = { trackData ->
                 context.getString(R.string.snackbar_removed_from_library, trackData.difficultyName)
@@ -329,14 +327,12 @@ fun LibraryScreen(
                 deferredActionViewModel.removePendingLibrarySet(set.id)
             },
             onSwipeLeftConfirmed = { set ->
-                // Actual deletion after timeout
-                deferredActionViewModel.viewModelScope.launch {
-                    val tracksToDelete = downloadedMaps.filter { it.beatmapSetId == set.id }
-                    tracksToDelete.forEach { track ->
-                        TrackService.deleteTrack(track, db, context)
-                    }
-                    deferredActionViewModel.removePendingLibrarySet(set.id)
+                // Actual deletion after timeout (already running in viewModelScope from BeatmapSetSwipeItem)
+                val tracksToDelete = downloadedMaps.filter { it.beatmapSetId == set.id }
+                tracksToDelete.forEach { track ->
+                    TrackService.deleteTrack(track, db, context)
                 }
+                deferredActionViewModel.removePendingLibrarySet(set.id)
             },
             onSwipeLeftMessage = { set ->
                 context.getString(R.string.snackbar_removed_from_library, set.title)

@@ -129,6 +129,7 @@ fun BeatmapSetTrackItem(
     onAddToPlaylistMessage: String? = null,
     modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    highlight: Boolean = false,
     startToEndIcon: ImageVector = Icons.Default.Add,
     endToStartIcon: ImageVector = Icons.Default.Remove,
     snackbarHostState: SnackbarHostState? = null,
@@ -145,6 +146,7 @@ fun BeatmapSetTrackItem(
             onSwipeRightMessage = onAddToPlaylistMessage
         ),
         backgroundColor = backgroundColor,
+        highlight = highlight,
         modifier = modifier,
         dismissOnDelete = true,
         startToEndIcon = startToEndIcon,

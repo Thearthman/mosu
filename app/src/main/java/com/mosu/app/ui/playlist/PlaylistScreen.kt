@@ -351,16 +351,14 @@ fun PlaylistScreen(
                 }
             },
             onSwipeLeftConfirmed = { set ->
-                // Actual removal after timeout
+                // Actual removal after timeout (already running in viewModelScope from BeatmapSetSwipeItem)
                 if (selectedPlaylistId != null) {
                     val playlistId = selectedPlaylistId!!
                     val tracksToRemove = playlistTracksWithStatus.filter { it.beatmapSetId == set.id }
-                    deferredActionViewModel.viewModelScope.launch {
-                        tracksToRemove.forEach { track ->
-                            TrackService.removeTrackFromPlaylist(playlistId, track.beatmapSetId, track.storedDifficultyName, db)
-                            val key = "${playlistId}|${track.beatmapSetId}|${track.storedDifficultyName}"
-                            deferredActionViewModel.removePendingPlaylistRemoval(key)
-                        }
+                    tracksToRemove.forEach { track ->
+                        TrackService.removeTrackFromPlaylist(playlistId, track.beatmapSetId, track.storedDifficultyName, db)
+                        val key = "${playlistId}|${track.beatmapSetId}|${track.storedDifficultyName}"
+                        deferredActionViewModel.removePendingPlaylistRemoval(key)
                     }
                 }
             },

@@ -1,5 +1,7 @@
 package com.mosu.app.ui.components
 
+import androidx.compose.material3.SnackbarHostState
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.mosu.app.data.api.model.BeatmapsetCompact
@@ -50,7 +52,10 @@ data class BeatmapTrackData(
     val title: String? = null,
     val artist: String? = null,
     val audioPath: String? = null,
-    val isDownloaded: Boolean = true
+    val isDownloaded: Boolean = true,
+    val beatmapSetId: Long = 0,
+    val creator: String? = null,
+    val genreId: Int? = null
 )
 
 /**
@@ -62,16 +67,39 @@ data class BeatmapSetActions(
     val onSecondaryAction: ((BeatmapSetData) -> Unit)? = null, // e.g. Download, Add
     val onTrackPlay: ((BeatmapTrackData) -> Unit)? = null,
     val onTrackSwipeLeft: ((BeatmapTrackData) -> Unit)? = null,
+    val onTrackSwipeLeftRevert: ((BeatmapTrackData) -> Unit)? = null,
+    val onTrackSwipeLeftConfirmed: ((BeatmapTrackData) -> Unit)? = null,
+    val onTrackSwipeLeftMessage: ((BeatmapTrackData) -> String)? = null,
     val onTrackSwipeRight: ((BeatmapTrackData) -> Unit)? = null,
+    val onTrackSwipeRightRevert: ((BeatmapTrackData) -> Unit)? = null,
+    val onTrackSwipeRightMessage: ((BeatmapTrackData) -> String)? = null,
     
     // Swipe Actions
     val onSwipeLeft: ((BeatmapSetData) -> Unit)? = null,
+    val onSwipeLeftRevert: ((BeatmapSetData) -> Unit)? = null,
+    val onSwipeLeftConfirmed: ((BeatmapSetData) -> Unit)? = null,
+    val onSwipeLeftMessage: ((BeatmapSetData) -> String)? = null,
     val onSwipeRight: ((BeatmapSetData) -> Unit)? = null,
+    val onSwipeRightRevert: ((BeatmapSetData) -> Unit)? = null,
+    val onSwipeRightMessage: ((BeatmapSetData) -> String)? = null,
     
     // Icons for Swipe Actions
     val swipeLeftIcon: ImageVector? = null,
-    val swipeRightIcon: ImageVector? = null
+    val swipeRightIcon: ImageVector? = null,
+
+    // UI Feedback
+    val snackbarHostState: SnackbarHostState? = null,
+    val coroutineScope: CoroutineScope? = null
 )
+
+/**
+ * Data model for tracking download progress
+ */
+data class DownloadProgress(
+    val progress: Int, // 0-100
+    val status: String // "Downloading", "Extracting", "Done", "Error"
+)
+
 
 /**
  * Configuration for BeatmapSetList

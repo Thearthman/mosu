@@ -54,7 +54,7 @@ fun LazyListScope.beatmapSetList(
                         backgroundBrush = brush
                     )
                     if (config.showDividers) {
-                        HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
+                        HorizontalDivider(modifier = Modifier.padding(start = 64.dp, end = 16.dp))
                     }
                 }
             }
@@ -74,7 +74,14 @@ fun LazyListScope.beatmapSetList(
                             track = track,
                             onPlay = { actions.onTrackPlay?.invoke(track) },
                             onDelete = actions.onTrackSwipeLeft?.let { action -> { action(track) } },
+                            onDeleteRevert = actions.onTrackSwipeLeftRevert?.let { action -> { action(track) } },
+                            onDeleteConfirmed = actions.onTrackSwipeLeftConfirmed?.let { action -> { action(track) } },
+                            onDeleteMessage = actions.onTrackSwipeLeftMessage?.invoke(track),
                             onAddToPlaylist = actions.onTrackSwipeRight?.let { action -> { action(track) } },
+                            onAddToPlaylistRevert = actions.onTrackSwipeRightRevert?.let { action -> { action(track) } },
+                            onAddToPlaylistMessage = actions.onTrackSwipeRightMessage?.invoke(track),
+                            snackbarHostState = actions.snackbarHostState,
+                            externalScope = actions.coroutineScope,
                             modifier = Modifier,
                             backgroundColor = when {
                                 isHighlightedTrack -> MaterialTheme.colorScheme.primaryContainer
@@ -84,9 +91,6 @@ fun LazyListScope.beatmapSetList(
                             startToEndIcon = actions.swipeRightIcon ?: Icons.Default.Add,
                             endToStartIcon = actions.swipeLeftIcon ?: Icons.Default.Delete
                         )
-                        if (config.showDividers) {
-                            HorizontalDivider(modifier = Modifier.padding(start = 64.dp))
-                        }
                     }
                 }
             }
@@ -99,14 +103,21 @@ fun LazyListScope.beatmapSetList(
                         BeatmapSetSwipeItem(
                             swipeActions = BeatmapSetSwipeActions(
                                 onDelete = { actions.onSwipeLeft?.invoke(set) },
-                                onAddToPlaylist = actions.onSwipeRight?.let { action -> { action(set) } }
+                                onDeleteRevert = { actions.onSwipeLeftRevert?.invoke(set) },
+                                onDeleteConfirmed = { actions.onSwipeLeftConfirmed?.invoke(set) },
+                                onDeleteMessage = actions.onSwipeLeftMessage?.invoke(set),
+                                onSwipeRight = { actions.onSwipeRight?.invoke(set) },
+                                onSwipeRightRevert = { actions.onSwipeRightRevert?.invoke(set) },
+                                onSwipeRightMessage = actions.onSwipeRightMessage?.invoke(set)
                             ),
                             highlight = isHighlighted,
                             backgroundBrush = brush,
                             startToEndIcon = actions.swipeRightIcon ?: Icons.Default.Add,
                             endToStartIcon = actions.swipeLeftIcon ?: Icons.Default.Delete,
                             enableDismissFromStartToEnd = actions.onSwipeRight != null,
-                            enableDismissFromEndToStart = actions.onSwipeLeft != null
+                            enableDismissFromEndToStart = actions.onSwipeLeft != null,
+                            snackbarHostState = actions.snackbarHostState,
+                            externalScope = actions.coroutineScope
                         ) {
                             BeatmapSetItem(
                                 set = set,

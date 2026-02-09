@@ -35,6 +35,7 @@
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
     2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song.  [nextMajorUpdate] 
+    3. Add Top play filter mode. [V1.0]
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [nextMajorUpdate]
 
@@ -121,6 +122,7 @@
 35. Swipe actions for downloaded songs in search: left swipe delete, right swipe add to playlist (same as library). Playlist selector dialog in search.
 36. Stop search preview when starting playback (from search click, info popup play, or MiniPlayer controls).
 37. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
+38. Add Snackbar for beatmapset actions. For example, "Removed Buzz Cuzz from Energetic" (energetic is a playlist) The button in the Snackbar should be "Redo", which reverts the action that invoked it. 
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.

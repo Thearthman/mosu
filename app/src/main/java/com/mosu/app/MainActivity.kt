@@ -36,6 +36,8 @@ import com.mosu.app.ui.theme.MosuTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -368,6 +370,7 @@ fun MainScreen(
         // Sheet Offset: collapsedOffset (Collapsed) -> 0f (Expanded)
         val sheetOffset = remember { Animatable(collapsedOffset) }
         val scope = rememberCoroutineScope()
+        val snackbarHostState = remember { SnackbarHostState() }
 
         val draggableState = rememberDraggableState { delta ->
             scope.launch {
@@ -407,6 +410,7 @@ fun MainScreen(
 
         // 1. Content Layer (Scaffold without BottomBar)
         Scaffold(
+            // snackbarHost removed from here
             // No bottomBar here
         ) { innerPadding ->
                 NavHost(
@@ -422,12 +426,14 @@ fun MainScreen(
                             musicController = musicController,
                             repository = repository,
                             downloadService = downloadService,
+                            accessToken = accessToken,
                             scrollToTop = scrollLibraryToTop,
-                            onScrolledToTop = { scrollLibraryToTop = false }
+                            onScrolledToTop = { scrollLibraryToTop = false },
+                            snackbarHostState = snackbarHostState
                         )
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController, repository, downloadService, accessToken)
+                        PlaylistScreen(db, musicController, repository, downloadService, accessToken, snackbarHostState)
                     }
                     composable("search") {
                         SearchScreen(
@@ -438,7 +444,8 @@ fun MainScreen(
                             musicController = musicController,
                             downloadService = downloadService,
                             scrollToTop = scrollSearchToTop,
-                            onScrolledToTop = { scrollSearchToTop = false }
+                            onScrolledToTop = { scrollSearchToTop = false },
+                            snackbarHostState = snackbarHostState
                         )
                     }
                     composable("profile") {
@@ -469,6 +476,26 @@ fun MainScreen(
                             }
                         )
                     }
+                }
+            }
+
+            // 1.5 Snackbar Layer (Positioned above MiniPlayer/NavBar)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = contentBottomPadding + 8.dp) // Above miniplayer/navbar
+                    .zIndex(3f)
+            ) {
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) { data ->
+                    androidx.compose.material3.Snackbar(
+                        snackbarData = data,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        actionColor = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 

@@ -12,6 +12,7 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.domain.search.RecentItem
+import com.mosu.app.ui.components.DownloadProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch

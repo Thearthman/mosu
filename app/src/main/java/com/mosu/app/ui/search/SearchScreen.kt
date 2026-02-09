@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -87,16 +88,12 @@ import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.beatmapSetList
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.services.TrackService
+import com.mosu.app.ui.components.DownloadProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-data class DownloadProgress(
-    val progress: Int, // 0-100
-    val status: String // "Downloading", "Extracting", "Done", "Error"
-)
 
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -108,7 +105,8 @@ fun SearchScreen(
     musicController: MusicController,
     downloadService: BeatmapDownloadService,
     scrollToTop: Boolean = false,
-    onScrolledToTop: () -> Unit = {}
+    onScrolledToTop: () -> Unit = {},
+    snackbarHostState: SnackbarHostState? = null
 ) {
     val vm = viewModel
 
@@ -169,6 +167,10 @@ fun SearchScreen(
 
     // Playlist dialog state
     val playlists by vm.db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
+    
+    // Pending Deletions State (for Deferred Deletion Redo)
+    var pendingDeletions by remember { mutableStateOf<Set<Long>>(emptySet()) } // Set IDs
+
     val playlistTracks by vm.db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
     val playlistMembership = playlistTracks
         .groupBy { it.playlistId }
@@ -232,7 +234,7 @@ fun SearchScreen(
     }
 
     // Define Unified Actions
-    val actions = remember(accessToken, vm.downloadedBeatmapSetIds, vm.downloadedKeys) {
+    val actions = remember(accessToken, vm.downloadedBeatmapSetIds, vm.downloadedKeys, snackbarHostState) {
         BeatmapSetActions(
             onClick = { set ->
                 if (set.isDownloaded) {
@@ -276,7 +278,12 @@ fun SearchScreen(
                         val downloadId = set.id
                         val mergeGroupIds = vm.mergeGroups[vm.searchService.mergeKey(set.toCompact())] ?: setOf(downloadId)
 
-                        vm.downloadStates = vm.downloadStates + mergeGroupIds.associateWith { DownloadProgress(0, context.getString(R.string.search_download_starting)) }
+                        vm.downloadStates = vm.downloadStates + mergeGroupIds.associateWith {
+                            DownloadProgress(
+                                0,
+                                context.getString(R.string.search_download_starting)
+                            )
+                        }
                         downloadService.downloadBeatmap(
                             beatmapSetId = downloadId,
                             accessToken = accessToken,
@@ -308,17 +315,27 @@ fun SearchScreen(
             },
             onSwipeLeft = { set ->
                 if (set.isDownloaded) {
-                    scope.launch {
-                        val tracksToDelete = withContext(Dispatchers.IO) {
-                            val tracks = vm.db.beatmapDao().getTracksForSet(set.id)
-                            if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(set.title, set.artist)
-                            else tracks
-                        }
-                        tracksToDelete.forEach { track ->
-                            TrackService.deleteTrack(track, vm.db, context)
-                        }
-                    }
+                    pendingDeletions = pendingDeletions + set.id
                 }
+            },
+            onSwipeLeftRevert = { set ->
+                pendingDeletions = pendingDeletions - set.id
+            },
+            onSwipeLeftConfirmed = { set ->
+                scope.launch {
+                    val tracksToDelete = withContext(Dispatchers.IO) {
+                        val tracks = vm.db.beatmapDao().getTracksForSet(set.id)
+                        if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(set.title, set.artist)
+                        else tracks
+                    }
+                    tracksToDelete.forEach { track ->
+                        TrackService.deleteTrack(track, vm.db, context)
+                    }
+                    pendingDeletions = pendingDeletions - set.id
+                }
+            },
+            onSwipeLeftMessage = { set ->
+                "Removed ${set.title} from Library"
             },
             onSwipeRight = { set ->
                 if (set.isDownloaded) {
@@ -326,7 +343,9 @@ fun SearchScreen(
                 }
             },
             swipeLeftIcon = Icons.Default.Delete,
-            swipeRightIcon = Icons.Default.Add
+            swipeRightIcon = Icons.Default.Add,
+            snackbarHostState = snackbarHostState,
+            coroutineScope = scope
         )
     }
 
@@ -341,9 +360,11 @@ fun SearchScreen(
         }
     }
 
-    val beatmapSets = remember(sortedResults, vm.downloadStates, vm.searchResultsMetadata, vm.downloadedBeatmapSetIds, vm.downloadedKeys, previewManager.previewingId) {
-        sortedResults.map { map ->
-            val metadata = vm.searchResultsMetadata[map.id]
+    val beatmapSets = remember(sortedResults, vm.downloadStates, vm.searchResultsMetadata, vm.downloadedBeatmapSetIds, vm.downloadedKeys, previewManager.previewingId, pendingDeletions) {
+        sortedResults
+            .filter { it.id !in pendingDeletions }
+            .map { map ->
+                val metadata = vm.searchResultsMetadata[map.id]
             val progress = vm.downloadStates[map.id]
             val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
             val isDownloaded = vm.downloadedBeatmapSetIds.contains(map.id) || vm.downloadedKeys.contains(mapKey)
@@ -765,6 +786,12 @@ fun SearchScreen(
                                         BeatmapSetSwipeItem(
                                             swipeActions = BeatmapSetSwipeActions(
                                                 onDelete = {
+                                                    pendingDeletions = pendingDeletions + map.id
+                                                },
+                                                onDeleteRevert = {
+                                                    pendingDeletions = pendingDeletions - map.id
+                                                },
+                                                onDeleteConfirmed = {
                                                     scope.launch {
                                                         val tracksToDelete = withContext(Dispatchers.IO) {
                                                             val tracks = vm.db.beatmapDao().getTracksForSet(map.id)
@@ -774,14 +801,18 @@ fun SearchScreen(
                                                         tracksToDelete.forEach { track ->
                                                             TrackService.deleteTrack(track, vm.db, context)
                                                         }
+                                                        pendingDeletions = pendingDeletions - map.id
                                                     }
                                                 },
-                                                onAddToPlaylist = { openPlaylistDialog(setData) }
+                                                onDeleteMessage = "Removed ${map.title} from Library",
+                                                onSwipeRight = { openPlaylistDialog(setData) }
                                             ),
                                             backgroundBrush = previewBrush,
                                             backgroundColor = Color.Transparent,
                                             startToEndIcon = Icons.Default.Add,
-                                            endToStartIcon = Icons.Default.Delete
+                                            endToStartIcon = Icons.Default.Delete,
+                                            snackbarHostState = snackbarHostState,
+                                            externalScope = scope
                                         ) {
                                             BeatmapSetItem(set = setData, actions = actions)
                                         }

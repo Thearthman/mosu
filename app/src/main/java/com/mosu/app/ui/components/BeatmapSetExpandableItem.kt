@@ -7,12 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.R
+import kotlinx.coroutines.CoroutineScope
 import java.io.File
 
 /**
@@ -53,12 +54,19 @@ fun BeatmapSetHeaderItem(
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     backgroundBrush: Brush? = null,
     startToEndIcon: ImageVector = actions.swipeRightIcon ?: Icons.Default.Add,
-    endToStartIcon: ImageVector = actions.swipeLeftIcon ?: Icons.Default.Remove
+    endToStartIcon: ImageVector = actions.swipeLeftIcon ?: Icons.Default.Remove,
+    snackbarHostState: SnackbarHostState? = actions.snackbarHostState,
+    externalScope: CoroutineScope? = actions.coroutineScope
 ) {
     BeatmapSetSwipeItem(
         swipeActions = BeatmapSetSwipeActions(
             onDelete = { actions.onSwipeLeft?.invoke(album) },
-            onAddToPlaylist = actions.onSwipeRight?.let { action -> { action(album) } }
+            onDeleteRevert = { actions.onSwipeLeftRevert?.invoke(album) },
+            onDeleteConfirmed = { actions.onSwipeLeftConfirmed?.invoke(album) },
+            onDeleteMessage = actions.onSwipeLeftMessage?.invoke(album),
+            onSwipeRight = { actions.onSwipeRight?.invoke(album) },
+            onSwipeRightRevert = { actions.onSwipeRightRevert?.invoke(album) },
+            onSwipeRightMessage = actions.onSwipeRightMessage?.invoke(album)
         ),
         highlight = highlight,
         backgroundColor = backgroundColor,
@@ -66,7 +74,9 @@ fun BeatmapSetHeaderItem(
         startToEndIcon = startToEndIcon,
         endToStartIcon = endToStartIcon,
         enableDismissFromStartToEnd = actions.onSwipeRight != null,
-        enableDismissFromEndToStart = actions.onSwipeLeft != null
+        enableDismissFromEndToStart = actions.onSwipeLeft != null,
+        snackbarHostState = snackbarHostState,
+        externalScope = externalScope
     ) {
     Row(
         modifier = Modifier
@@ -111,16 +121,28 @@ fun BeatmapSetTrackItem(
     track: BeatmapTrackData,
     onPlay: () -> Unit,
     onDelete: (() -> Unit)?,
+    onDeleteRevert: (() -> Unit)? = null,
+    onDeleteConfirmed: (() -> Unit)? = null,
+    onDeleteMessage: String? = null,
     onAddToPlaylist: (() -> Unit)?,
+    onAddToPlaylistRevert: (() -> Unit)? = null,
+    onAddToPlaylistMessage: String? = null,
     modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     startToEndIcon: ImageVector = Icons.Default.Add,
-    endToStartIcon: ImageVector = Icons.Default.Remove
+    endToStartIcon: ImageVector = Icons.Default.Remove,
+    snackbarHostState: SnackbarHostState? = null,
+    externalScope: CoroutineScope? = null
 ) {
     BeatmapSetSwipeItem(
         swipeActions = BeatmapSetSwipeActions(
             onDelete = onDelete,
-            onAddToPlaylist = onAddToPlaylist
+            onDeleteRevert = onDeleteRevert,
+            onDeleteConfirmed = onDeleteConfirmed,
+            onDeleteMessage = onDeleteMessage,
+            onSwipeRight = onAddToPlaylist,
+            onSwipeRightRevert = onAddToPlaylistRevert,
+            onSwipeRightMessage = onAddToPlaylistMessage
         ),
         backgroundColor = backgroundColor,
         modifier = modifier,
@@ -128,7 +150,9 @@ fun BeatmapSetTrackItem(
         startToEndIcon = startToEndIcon,
         endToStartIcon = endToStartIcon,
         enableDismissFromStartToEnd = onAddToPlaylist != null,
-        enableDismissFromEndToStart = onDelete != null
+        enableDismissFromEndToStart = onDelete != null,
+        snackbarHostState = snackbarHostState,
+        externalScope = externalScope
     ) {
         Row(
             modifier = Modifier

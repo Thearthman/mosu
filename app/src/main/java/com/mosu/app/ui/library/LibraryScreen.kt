@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +62,7 @@ import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.download.BeatmapDownloadService
+import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.BeatmapSetActions
@@ -68,6 +70,7 @@ import com.mosu.app.ui.components.BeatmapSetData
 import com.mosu.app.ui.components.BeatmapSetList
 import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.BeatmapTrackData
+import com.mosu.app.ui.components.DownloadProgress
 import com.mosu.app.ui.components.GenreFilter
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
@@ -76,6 +79,7 @@ import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.beatmapSetList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.widget.Toast
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -84,8 +88,10 @@ fun LibraryScreen(
     musicController: MusicController,
     repository: OsuRepository,
     downloadService: BeatmapDownloadService,
+    accessToken: String? = null,
     scrollToTop: Boolean = false,
-    onScrolledToTop: () -> Unit = {}
+    onScrolledToTop: () -> Unit = {},
+    snackbarHostState: SnackbarHostState? = null
 ) {
     val context = LocalContext.current
     val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
@@ -167,6 +173,13 @@ fun LibraryScreen(
     // Genre Filter State
     var selectedGenreId by remember { mutableStateOf<Int?>(null) }
 
+    // Download States for Redo
+    var downloadStates by remember { mutableStateOf<Map<Long, DownloadProgress>>(emptyMap()) }
+
+    // Pending Deletions State (for Deferred Deletion Redo)
+    var pendingDeletions by remember { mutableStateOf<Set<Long>>(emptySet()) } // Track IDs (uids)
+    var pendingSetDeletions by remember { mutableStateOf<Set<Long>>(emptySet()) } // Set IDs
+
     // Search State
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
@@ -185,9 +198,9 @@ fun LibraryScreen(
 
     // Filter maps by selected genre and search query
     val genreFilteredMaps = if (selectedGenreId != null) {
-        downloadedMaps.filter { it.genreId == selectedGenreId }
+        downloadedMaps.filter { it.genreId == selectedGenreId && it.uid !in pendingDeletions && it.beatmapSetId !in pendingSetDeletions }
     } else {
-        downloadedMaps
+        downloadedMaps.filter { it.uid !in pendingDeletions && it.beatmapSetId !in pendingSetDeletions }
     }
 
     val filteredMaps = if (searchQuery.isNotBlank()) {
@@ -235,6 +248,7 @@ fun LibraryScreen(
         groupedMaps.map { (setId, tracks) ->
             val first = tracks.first()
             val isAlbumSet = tracks.any { it.isAlbum }
+            val progress = downloadStates[setId]
             
             BeatmapSetData(
                 id = setId,
@@ -244,12 +258,17 @@ fun LibraryScreen(
                 coverPath = first.coverPath,
                 isExpandable = isAlbumSet,
                 genreId = first.genreId,
+                downloadProgress = progress?.progress,
                 tracks = tracks.map { track ->
                     BeatmapTrackData(
                         id = track.uid,
                         difficultyName = track.difficultyName,
-                        artist = track.creator,
-                        isDownloaded = true
+                        title = track.title,
+                        artist = track.artist,
+                        creator = track.creator,
+                        isDownloaded = true,
+                        beatmapSetId = track.beatmapSetId,
+                        genreId = track.genreId
                     )
                 }
             )
@@ -257,7 +276,7 @@ fun LibraryScreen(
     }
 
     // Define Actions
-    val actions = remember(filteredMaps) {
+    val actions = remember(filteredMaps, snackbarHostState, accessToken, downloadStates) {
         BeatmapSetActions(
             onClick = { set ->
                 // For single tracks (not expandable), play the track
@@ -272,13 +291,25 @@ fun LibraryScreen(
                 if (track != null) musicController.playSong(track, filteredMaps)
             },
             onTrackSwipeLeft = { trackData ->
-                // Delete track
+                // UI-only delete: hide it
+                pendingDeletions = pendingDeletions + trackData.id
+            },
+            onTrackSwipeLeftRevert = { trackData ->
+                // Redo: just un-hide
+                pendingDeletions = pendingDeletions - trackData.id
+            },
+            onTrackSwipeLeftConfirmed = { trackData ->
+                // Actual deletion after timeout
                 scope.launch {
-                    val track = filteredMaps.find { it.uid == trackData.id }
+                    val track = downloadedMaps.find { it.uid == trackData.id }
                     if (track != null) {
                         TrackService.deleteTrack(track, db, context)
                     }
+                    pendingDeletions = pendingDeletions - trackData.id
                 }
+            },
+            onTrackSwipeLeftMessage = { trackData ->
+                "Removed ${trackData.difficultyName} from Library"
             },
             onTrackSwipeRight = { trackData ->
                 // Add to playlist
@@ -286,13 +317,25 @@ fun LibraryScreen(
                 if (track != null) openPlaylistDialog(track)
             },
             onSwipeLeft = { set ->
-                // Delete
+                // UI-only delete: hide the whole set
+                pendingSetDeletions = pendingSetDeletions + set.id
+            },
+            onSwipeLeftRevert = { set ->
+                // Redo: un-hide the set
+                pendingSetDeletions = pendingSetDeletions - set.id
+            },
+            onSwipeLeftConfirmed = { set ->
+                // Actual deletion after timeout
                 scope.launch {
-                    val tracksToDelete = filteredMaps.filter { it.beatmapSetId == set.id }
+                    val tracksToDelete = downloadedMaps.filter { it.beatmapSetId == set.id }
                     tracksToDelete.forEach { track ->
                         TrackService.deleteTrack(track, db, context)
                     }
+                    pendingSetDeletions = pendingSetDeletions - set.id
                 }
+            },
+            onSwipeLeftMessage = { set ->
+                "Removed ${set.title} from Library"
             },
             onSwipeRight = { set ->
                 // Add to playlist
@@ -304,7 +347,9 @@ fun LibraryScreen(
                  if (track != null) onSongLongPress(track)
             },
             swipeLeftIcon = Icons.Default.Delete,
-            swipeRightIcon = Icons.Default.Add
+            swipeRightIcon = Icons.Default.Add,
+            snackbarHostState = snackbarHostState,
+            coroutineScope = scope
         )
     }
 

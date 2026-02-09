@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -99,7 +100,8 @@ fun PlaylistScreen(
     musicController: MusicController,
     repository: OsuRepository,
     downloadService: BeatmapDownloadService,
-    accessToken: String? = null
+    accessToken: String? = null,
+    snackbarHostState: SnackbarHostState? = null
 ) {
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
@@ -115,6 +117,10 @@ fun PlaylistScreen(
         .mapValues { entry -> entry.value.map { "${it.beatmapSetId}|${it.difficultyName}" }.toSet() }
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
+    
+    // Pending Deletions State (for Deferred Removal Redo)
+    var pendingDeletions by remember { mutableStateOf<Set<String>>(emptySet()) } // Set of "setId|difficultyName"
+
     val playlistTracksWithStatus: List<PlaylistTrackWithBeatmap> by if (selectedPlaylistId != null) {
         db.playlistDao().getTracksWithStatusForPlaylist(selectedPlaylistId!!).collectAsState(initial = emptyList())
     } else {
@@ -221,8 +227,10 @@ fun PlaylistScreen(
     }
 
     // Transform to BeatmapSetData for the list
-    val groupedTracks = remember(playlistTracksWithStatus) {
-        playlistTracksWithStatus.groupBy { it.beatmapSetId }
+    val groupedTracks = remember(playlistTracksWithStatus, pendingDeletions) {
+        playlistTracksWithStatus
+            .filter { "${it.beatmapSetId}|${it.difficultyName ?: it.storedDifficultyName}" !in pendingDeletions }
+            .groupBy { it.beatmapSetId }
     }
 
     val beatmapSets = remember(groupedTracks) {
@@ -240,15 +248,20 @@ fun PlaylistScreen(
                     BeatmapTrackData(
                         id = track.uid ?: track.beatmapSetId, 
                         difficultyName = track.difficultyName ?: track.storedDifficultyName,
-                        artist = track.creator ?: track.storedArtist,
-                        isDownloaded = track.isDownloaded == true
+                        title = track.beatmapTitle ?: track.storedTitle,
+                        artist = track.beatmapArtist ?: track.storedArtist,
+                        creator = track.creator ?: track.storedArtist,
+                        isDownloaded = track.isDownloaded == true,
+                        beatmapSetId = track.beatmapSetId,
+                        genreId = track.genreId
                     )
                 }
             )
         }
     }
 
-    val actions = remember(playlistTracksWithStatus, selectedPlaylistId) {
+    val actions = remember(playlistTracksWithStatus, selectedPlaylistId, snackbarHostState) {
+        val selectedPlaylist = playlists.find { it.id == selectedPlaylistId }
         BeatmapSetActions(
             onClick = { set ->
                 if (!set.isExpandable && set.tracks.isNotEmpty()) {
@@ -271,15 +284,30 @@ fun PlaylistScreen(
                 }
             },
             onTrackSwipeLeft = { trackData ->
-                // Remove track from playlist
+                // UI-only remove: hide it
+                if (selectedPlaylistId != null) {
+                    val key = "${trackData.beatmapSetId}|${trackData.difficultyName}"
+                    pendingDeletions = pendingDeletions + key
+                }
+            },
+            onTrackSwipeLeftRevert = { trackData ->
+                // Redo: just un-hide
+                val key = "${trackData.beatmapSetId}|${trackData.difficultyName}"
+                pendingDeletions = pendingDeletions - key
+            },
+            onTrackSwipeLeftConfirmed = { trackData ->
+                // Actual removal after timeout
                 if (selectedPlaylistId != null) {
                     scope.launch {
-                        val track = playlistTracksWithStatus.find { it.uid == trackData.id }
-                        if (track != null) {
-                            TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
-                        }
+                        TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, trackData.beatmapSetId, trackData.difficultyName, db)
+                        val key = "${trackData.beatmapSetId}|${trackData.difficultyName}"
+                        pendingDeletions = pendingDeletions - key
                     }
                 }
+            },
+            onTrackSwipeLeftMessage = { trackData ->
+                val title = trackData.title ?: trackData.difficultyName
+                "Removed $title from ${selectedPlaylist?.name ?: "Playlist"}"
             },
             onTrackSwipeRight = { trackData ->
                 // Add to other playlist
@@ -287,15 +315,32 @@ fun PlaylistScreen(
                 if (track != null) openPlaylistDialog(track)
             },
             onSwipeLeft = { set ->
-                // Delete/Remove from playlist
+                // UI-only remove: hide the whole set
+                if (selectedPlaylistId != null) {
+                    val keys = set.tracks.map { "${set.id}|${it.difficultyName}" }
+                    pendingDeletions = pendingDeletions + keys
+                }
+            },
+            onSwipeLeftRevert = { set ->
+                // Redo: un-hide the set
+                val keys = set.tracks.map { "${set.id}|${it.difficultyName}" }
+                pendingDeletions = pendingDeletions - keys
+            },
+            onSwipeLeftConfirmed = { set ->
+                // Actual removal after timeout
                 if (selectedPlaylistId != null) {
                     scope.launch {
                         val tracksToRemove = playlistTracksWithStatus.filter { it.beatmapSetId == set.id }
                         tracksToRemove.forEach { track ->
                             TrackService.removeTrackFromPlaylist(selectedPlaylistId!!, track.beatmapSetId, track.storedDifficultyName, db)
                         }
+                        val keys = set.tracks.map { "${set.id}|${it.difficultyName}" }
+                        pendingDeletions = pendingDeletions - keys
                     }
                 }
+            },
+            onSwipeLeftMessage = { set ->
+                "Removed ${set.title} from ${selectedPlaylist?.name ?: "Playlist"}"
             },
             onSwipeRight = { set ->
                 // Add to OTHER playlist
@@ -307,7 +352,9 @@ fun PlaylistScreen(
                 if (track != null) onSongLongPress(track)
             },
             swipeLeftIcon = Icons.Default.Remove,
-            swipeRightIcon = Icons.Default.Add
+            swipeRightIcon = Icons.Default.Add,
+            snackbarHostState = snackbarHostState,
+            coroutineScope = scope
         )
     }
 

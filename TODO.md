@@ -5,6 +5,7 @@
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
 6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup. [v1.0]
+7. search page genre bar is not linked to the songlist filter. should implement Pending Refactor No.2 with this in mind and verify if the bug persist. [v1.0]
 
 
 # UIUX improvement
@@ -12,7 +13,7 @@
 
 # Pending Refactors(for v1.0)
 1. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
-
+2. add genre bar as a option to beatmapsetList and treat it as one element(unit tall). Also, add ability to display genre bar in the list config. This way the genre bar in library should be able to scroll along with the list.
 
 # New Feature
 0. Core Feature
@@ -27,12 +28,14 @@
     4. Implement lyrics service with LRCLIB [v1.2]
     5. Implement a current playing playlist, such that it keeps track of the list of music to be played. Also the list of music played. And, in random/shuffle mode, it should not be generating each number on the go but generate a list of random indexes that serves as the playlist. This means when you hit last song you can still find the song just been played, not another randomly found song.  
     6. Implement a current playing playlist display
+    7. add ability to view beatmap comments. [v1.2]
 3. Playlist page updates
     1. Implement Playlist management system allowing for rearrangement(placement) of playlists. [v1.1]
 4. Search page updates
     1. Long press should trigger vibration when the menu pops up.
     2. Make a toggle to enable Recent play filter to display every entry recorded. Make it a Play history, not a newest played song.  [v1.1] 
     3. Add Top play filter mode. [v1.1]
+    4. add search history [v1.0]
 5. Library page update
     1. add toggle for artist page, where the song list becomes the artist list. Song with artists of same/similar name will have their work collected at one place. Should have special char and space removed when querying for artist name to make prevent songs not showing up bcs of name typo from beatmap author. When a artist in the artist list is clicked, it should open up a playlist style next stage window that contains a list of songs from the same artist. [v1.1]
 

@@ -18,6 +18,8 @@
 0. Core Feature
     1. Implement Equalizer 
     2. Implement Activity Heatmap from recent play data (should have week, month, and year view). [v1.2]
+    3. Implement Song recommendation base on tags and genre and so on (had a discussion with perplexity) [v1.1]
+    4. Implement smart playlist generation based on how long the user stays on songs in a random playing mode. (This should have some connection with the above feature to make it "smarter") [v1.1]
 1. Settings page update
     1. Add guidance page on how to get get credential in the fill in credential page. Like a help button. I'll write a guidance markdown file on this topic placed in the root folder you'll need to make sure the app will display the markdown file (you can ask me to convert it to pdf or any other format that's best for display and storing in android app). If you can't find the file ask me to make it first.
 2. Player / Player view updates

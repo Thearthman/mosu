@@ -35,6 +35,12 @@ fun LazyListScope.beatmapSetList(
     backgroundBrush: @Composable (BeatmapSetData) -> Brush? = { null },
     swipeEnabled: (BeatmapSetData) -> Boolean = { true }
 ) {
+    if (config.header != null) {
+        item(key = "list_header") {
+            config.header.invoke()
+        }
+    }
+
     sets.forEach { set ->
         val isHighlighted = set.id == highlightedSetId
         val isExpanded = config.expandedIds.contains(set.id)
@@ -151,15 +157,16 @@ fun LazyListScope.beatmapSetList(
  */
 @Composable
 fun BeatmapSetList(
-    sets: List<BeatmapSetData>,
+    modifier: Modifier = Modifier,
+    sets: List<BeatmapSetData> = emptyList(),
     actions: BeatmapSetActions,
     config: BeatmapSetListConfig = BeatmapSetListConfig(),
-    modifier: Modifier = Modifier,
     highlightedSetId: Long? = null,
     highlightedTrackId: Long? = null,
     listState: LazyListState = rememberLazyListState(),
     backgroundBrush: @Composable (BeatmapSetData) -> Brush? = { null },
-    swipeEnabled: (BeatmapSetData) -> Boolean = { true }
+    swipeEnabled: (BeatmapSetData) -> Boolean = { true },
+    content: (LazyListScope.() -> Unit)? = null
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         LazyColumn(
@@ -167,15 +174,24 @@ fun BeatmapSetList(
             modifier = Modifier.fillMaxSize(),
             contentPadding = config.contentPadding
         ) {
-            beatmapSetList(
-                sets = sets,
-                actions = actions,
-                config = config,
-                highlightedSetId = highlightedSetId,
-                highlightedTrackId = highlightedTrackId,
-                backgroundBrush = backgroundBrush,
-                swipeEnabled = swipeEnabled
-            )
+            if (content != null) {
+                if (config.header != null) {
+                    item(key = "list_header") {
+                        config.header.invoke()
+                    }
+                }
+                content()
+            } else {
+                beatmapSetList(
+                    sets = sets,
+                    actions = actions,
+                    config = config,
+                    highlightedSetId = highlightedSetId,
+                    highlightedTrackId = highlightedTrackId,
+                    backgroundBrush = backgroundBrush,
+                    swipeEnabled = swipeEnabled
+                )
+            }
         }
 
         if (config.showScrollbar) {
@@ -183,7 +199,7 @@ fun BeatmapSetList(
                 state = listState,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(vertical = config.contentPadding.calculateTopPadding())
+                    .padding(config.scrollBarPadding)
             )
         }
     }

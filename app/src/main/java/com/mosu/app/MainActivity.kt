@@ -130,7 +130,8 @@ class MainActivity : ComponentActivity() {
         val beatmapDownloader = BeatmapDownloader(this, settingsManager)
         val zipExtractor = ZipExtractor(this)
         val coverDownloadService = CoverDownloadService(this)
-        val downloadService = BeatmapDownloadService(this, beatmapDownloader, zipExtractor, coverDownloadService, db)
+        val downloadService = BeatmapDownloadService(this, beatmapDownloader, zipExtractor, coverDownloadService, db, repository)
+        val downloadManager = com.mosu.app.domain.download.DownloadManager.getInstance(this, downloadService)
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
         val accountManager = AccountManager(this, tokenManager)
@@ -146,6 +147,7 @@ class MainActivity : ComponentActivity() {
                     accountManager = accountManager,
                     settingsManager = settingsManager,
                     downloadService = downloadService,
+                    downloadManager = downloadManager,
                     redirectUri = redirectUri
                 )
             }
@@ -168,6 +170,7 @@ fun MainScreen(
     accountManager: AccountManager,
     settingsManager: SettingsManager,
     downloadService: BeatmapDownloadService,
+    downloadManager: com.mosu.app.domain.download.DownloadManager,
     redirectUri: String
 ) {
     val navController = rememberNavController()
@@ -432,6 +435,7 @@ fun MainScreen(
                             musicController = musicController,
                             repository = repository,
                             downloadService = downloadService,
+                            downloadManager = downloadManager,
                             accessToken = accessToken,
                             scrollToTop = scrollLibraryToTop,
                             onScrolledToTop = { scrollLibraryToTop = false },
@@ -440,7 +444,7 @@ fun MainScreen(
                         )
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController, repository, downloadService, accessToken, snackbarHostState, deferredActionViewModel)
+                        PlaylistScreen(db, musicController, repository, downloadService, downloadManager, accessToken, snackbarHostState, deferredActionViewModel)
                     }
                     composable("search") {
                         SearchScreen(
@@ -451,6 +455,7 @@ fun MainScreen(
                             settingsManager = settingsManager,
                             musicController = musicController,
                             downloadService = downloadService,
+                            downloadManager = downloadManager,
                             scrollToTop = scrollSearchToTop,
                             onScrolledToTop = { scrollSearchToTop = false },
                             snackbarHostState = snackbarHostState
@@ -466,6 +471,7 @@ fun MainScreen(
                             accountManager = accountManager,
                             settingsManager = settingsManager,
                             downloadService = downloadService,
+                            downloadManager = downloadManager,
                             onLoginClick = {
                                 if (clientId.isNotEmpty()) {
                                     val intent = Intent(
@@ -507,139 +513,141 @@ fun MainScreen(
                 }
             }
 
-            // 2. Full Player Sheet (Middle Layer)
-            if (isSheetOpen) {
-                Box(
-                    modifier = Modifier
-                        .zIndex(1f)
-                        .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
-                        .fillMaxSize()
-                        .statusBarsPadding() // Always add status bar padding to prevent drawing under notification bar
-                        .draggable(
-                            state = draggableState,
-                            orientation = Orientation.Vertical,
-                            onDragStopped = { velocity -> snapToTarget(velocity) }
-                        )
-                ) {
-                    FullPlayer(
-                        musicController = musicController,
-                        onCollapse = {
-                            scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
-                        }
-                    )
+        // 2. Full Player Sheet (Middle Layer)
+        // Keep in composition but hide when collapsed to prevent surface re-allocation issues
+        Box(
+            modifier = Modifier
+                .zIndex(1f)
+                .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
+                .graphicsLayer { 
+                    alpha = if (sheetOffset.value >= collapsedOffset) 0f else 1f
                 }
-            }
-
-            // 3. MiniPlayer (Top Layer) - Moves UP with Sheet
-            if (nowPlaying != null && currentRoute != "profile") {
-                Box(
-                    modifier = Modifier
-                        .zIndex(2f)
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 80.dp + navigationBarHeight) // Initial position above NavBar
-                        .offset { IntOffset(0, ((sheetOffset.value - collapsedOffset)*0.3).roundToInt()) }
-                        .graphicsLayer {
-                            val currentProgress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
-                            val alphaValue = (1f - currentProgress * 4f).coerceIn(0f, 1f)
-                            alpha = if (alphaValue < 0.1f) 0f else alphaValue
-                        }
-                        .draggable(
-                            state = draggableState,
-                            orientation = Orientation.Vertical,
-                            onDragStopped = { velocity -> snapToTarget(velocity) }
-                        )
-                ) {
-                    MiniPlayer(
-                        musicController = musicController,
-                        onClick = {
-                            scope.launch { sheetOffset.animateTo(0f, tween(300)) }
-                        }
-                    )
+                .fillMaxSize()
+                .statusBarsPadding()
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical,
+                    onDragStopped = { velocity -> snapToTarget(velocity) }
+                )
+        ) {
+            FullPlayer(
+                musicController = musicController,
+                onCollapse = {
+                    scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
                 }
-            }
+            )
+        }
 
-            // 4. NavigationBar (Top Layer) - Moves DOWN
-            NavigationBar(
+        // 3. NavigationBar (Top Layer) - Moves DOWN
+        NavigationBar(
+            modifier = Modifier
+                .zIndex(2f)
+                .align(Alignment.BottomCenter)
+                .offset { 
+                    val currentProgress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
+                    val translationY = currentProgress * (300f + navigationBarHeightPx)
+                    IntOffset(0, translationY.roundToInt()) 
+                }
+        ) {
+            val navBackStackEntryLocal by navController.currentBackStackEntryAsState()
+            val currentDestination = navBackStackEntryLocal?.destination?.route
+
+            NavigationBarItem(
+                icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
+                label = { Text("Library") },
+                selected = currentDestination == "library",
+                onClick = {
+                    val currentTime = System.currentTimeMillis()
+                    if (currentDestination == "library" && (currentTime - lastLibraryTapTime) < 500) {
+                        scrollLibraryToTop = true
+                    } else {
+                        navController.navigate("library") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                    lastLibraryTapTime = currentTime
+                }
+            )
+            NavigationBarItem(
+                icon = { Icon(Icons.Default.LibraryMusic, contentDescription = "Playlists") },
+                label = { Text("Playlists") },
+                selected = currentDestination == "playlists",
+                onClick = {
+                    navController.navigate("playlists") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+            NavigationBarItem(
+                icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                label = { Text("Search") },
+                selected = currentDestination == "search",
+                onClick = {
+                    val currentTime = System.currentTimeMillis()
+                    if (currentDestination == "search" && (currentTime - lastSearchTapTime) < 500) {
+                        scrollSearchToTop = true
+                    } else {
+                        navController.navigate("search") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                    lastSearchTapTime = currentTime
+                }
+            )
+            NavigationBarItem(
+                icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                label = { Text("Profile") },
+                selected = currentDestination == "profile",
+                onClick = {
+                    navController.navigate("profile") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+
+        // 4. MiniPlayer (Top Layer) - Moves UP with Sheet
+        if (nowPlaying != null && currentRoute != "profile") {
+            Box(
                 modifier = Modifier
-                    .zIndex(2f)
+                    .zIndex(3f)
                     .align(Alignment.BottomCenter)
-                    .offset { 
+                    .padding(bottom = 80.dp + navigationBarHeight) // Initial position above NavBar
+                    .offset { IntOffset(0, ((sheetOffset.value - collapsedOffset)*0.3).roundToInt()) }
+                    .graphicsLayer {
                         val currentProgress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
-                        val translationY = currentProgress * (300f + navigationBarHeightPx)
-                        IntOffset(0, translationY.roundToInt()) 
+                        val alphaValue = (1f - currentProgress * 4f).coerceIn(0f, 1f)
+                        alpha = if (alphaValue < 0.1f) 0f else alphaValue
                     }
+                    .draggable(
+                        state = draggableState,
+                        orientation = Orientation.Vertical,
+                        onDragStopped = { velocity -> snapToTarget(velocity) }
+                    )
             ) {
-                val navBackStackEntryLocal by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntryLocal?.destination?.route
-
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
-                    label = { Text("Library") },
-                    selected = currentDestination == "library",
+                MiniPlayer(
+                    musicController = musicController,
                     onClick = {
-                        val currentTime = System.currentTimeMillis()
-                        if (currentDestination == "library" && (currentTime - lastLibraryTapTime) < 500) {
-                            scrollLibraryToTop = true
-                        } else {
-                            navController.navigate("library") {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                        lastLibraryTapTime = currentTime
+                        scope.launch { sheetOffset.animateTo(0f, tween(300)) }
                     }
                 )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.LibraryMusic, contentDescription = "Playlists") },
-                    label = { Text("Playlists") },
-                    selected = currentDestination == "playlists",
-                    onClick = {
-                        navController.navigate("playlists") {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                    label = { Text("Search") },
-                    selected = currentDestination == "search",
-                    onClick = {
-                        val currentTime = System.currentTimeMillis()
-                        if (currentDestination == "search" && (currentTime - lastSearchTapTime) < 500) {
-                            scrollSearchToTop = true
-                        } else {
-                            navController.navigate("search") {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                        lastSearchTapTime = currentTime
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile") },
-                    selected = currentDestination == "profile",
-                    onClick = {
-                        navController.navigate("profile") {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                }
+            }
+        }
     }
 }

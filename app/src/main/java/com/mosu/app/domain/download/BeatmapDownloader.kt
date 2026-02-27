@@ -5,6 +5,7 @@ import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.IOException
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.emitAll
 import com.mosu.app.data.SettingsManager
 import kotlinx.coroutines.flow.first
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.yield
 import java.util.concurrent.TimeUnit
 
 import com.mosu.app.data.api.model.BeatmapDetail
@@ -103,15 +105,26 @@ class BeatmapDownloader(
             val totalFiles = filesToDownload.size
             var completedFilesCount = 0
             for (filename in filesToDownload) {
+                kotlinx.coroutines.yield()
                 val downloadUrl = sayobotAudio.format(beatmapSetId, filename)
                 val targetFile = File(targetDir, filename)
                 
                 if (!targetFile.exists() || targetFile.length() == 0L) {
-                    emit(DownloadState.Downloading((completedFilesCount * 100) / totalFiles, "Downloading $filename"))
+                    val baseProgress = (completedFilesCount * 100) / totalFiles
+                    val nextBaseProgress = ((completedFilesCount + 1) * 100) / totalFiles
+                    
                     val request = Request.Builder().url(downloadUrl).build()
                     val response = client.newCall(request).execute()
                     if (response.isSuccessful && response.body != null) {
-                        saveToFile(response.body!!.byteStream(), response.body!!.contentLength(), targetFile) { _ -> }
+                        saveToFile(response.body!!.byteStream(), response.body!!.contentLength(), targetFile) { fileProgress ->
+                            if (fileProgress >= 0) {
+                                val overallProgress = baseProgress + (fileProgress * (nextBaseProgress - baseProgress) / 100)
+                                emit(DownloadState.Downloading(overallProgress, "Downloading $filename"))
+                            } else {
+                                // Unknown length, just emit the base progress and indicate it's downloading
+                                emit(DownloadState.Downloading(baseProgress, "Downloading $filename"))
+                            }
+                        }
                     }
                 }
                 completedFilesCount++
@@ -141,11 +154,16 @@ class BeatmapDownloader(
                 }
             }
             
+            if (extractedTracks.isEmpty()) {
+                throw IOException("No audio tracks found in Sayobot response")
+            }
+            
             emit(DownloadState.Completed(extractedTracks, beatmapSetId))
 
         } catch (e: Exception) {
             Log.e("Downloader", "Direct download failed", e)
-            emit(DownloadState.Error("Direct download failed: ${e.message}"))
+            val errorMessage = if (e.message?.contains("No audio tracks") == true) "No audio tracks found" else "Direct download failed: ${e.message}"
+            emit(DownloadState.Error(errorMessage))
         }
     }
 
@@ -214,21 +232,46 @@ class BeatmapDownloader(
     ) {
         if (inputStream == null) throw IOException("Empty body")
 
+        var lastEmitTime = 0L
+        var lastEmitProgress = -1
+
         inputStream.use { input ->
             FileOutputStream(targetFile).use { output ->
                 val buffer = ByteArray(8 * 1024)
                 var bytesCopied: Long = 0
                 var bytes = input.read(buffer)
                 while (bytes >= 0) {
+                    kotlinx.coroutines.yield()
                     output.write(buffer, 0, bytes)
                     bytesCopied += bytes
                     
+                    val currentTime = System.currentTimeMillis()
                     if (totalBytes > 0) {
                         val progress = (bytesCopied * 100 / totalBytes).toInt()
-                        onProgress(progress)
+                        // Throttle: emit at most every 200ms or if progress changed
+                        if (progress != lastEmitProgress && (currentTime - lastEmitTime > 200 || progress == 100)) {
+                            onProgress(progress)
+                            lastEmitProgress = progress
+                            lastEmitTime = currentTime
+                        }
+                    } else {
+                        // Unknown total bytes - just show we're alive every 500ms
+                        // We could use a special progress value or just keep it at -1/0 but update the UI
+                        if (currentTime - lastEmitTime > 500) {
+                            onProgress(-1) // Signal "indeterminate progress"
+                            lastEmitTime = currentTime
+                        }
                     }
                     
                     bytes = input.read(buffer)
+                }
+                
+                // Final progress
+                if (totalBytes > 0) onProgress(100)
+                
+                // Verify download completion if totalBytes is known
+                if (totalBytes > 0 && bytesCopied < totalBytes) {
+                    throw IOException("Download truncated: expected $totalBytes bytes, got $bytesCopied")
                 }
             }
         }

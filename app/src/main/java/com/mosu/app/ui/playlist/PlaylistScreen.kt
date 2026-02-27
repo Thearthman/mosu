@@ -104,6 +104,7 @@ fun PlaylistScreen(
     musicController: MusicController,
     repository: OsuRepository,
     downloadService: BeatmapDownloadService,
+    downloadManager: com.mosu.app.domain.download.DownloadManager,
     accessToken: String? = null,
     snackbarHostState: SnackbarHostState? = null,
     deferredActionViewModel: DeferredActionViewModel = viewModel()
@@ -162,6 +163,9 @@ fun PlaylistScreen(
     val context = LocalContext.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
     var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
+
+    // Download Tasks from global manager
+    val downloadTasks by downloadManager.tasks.collectAsState()
 
     // Long press handler for song items
     val onSongLongPress: (BeatmapEntity) -> Unit = { track ->
@@ -242,9 +246,16 @@ fun PlaylistScreen(
             .groupBy { it.beatmapSetId }
     }
 
-    val beatmapSets = remember(groupedTracks) {
+    val beatmapSets = remember(groupedTracks, downloadTasks) {
         groupedTracks.map { (setId, tracks) ->
             val first = tracks.first()
+            val task = downloadTasks[setId]
+            
+            val showProgress = task != null && 
+                (task.status == com.mosu.app.domain.download.DownloadStatus.Downloading || 
+                 task.status == com.mosu.app.domain.download.DownloadStatus.Queued || 
+                 task.status == com.mosu.app.domain.download.DownloadStatus.Extracting)
+
             BeatmapSetData(
                 id = setId,
                 title = first.beatmapTitle ?: first.storedTitle,
@@ -253,6 +264,7 @@ fun PlaylistScreen(
                 coverPath = first.coverPath,
                 isExpandable = first.isAlbum == true,
                 genreId = first.genreId,
+                downloadProgress = if (showProgress) task?.progress else null,
                 tracks = tracks.map { track ->
                     BeatmapTrackData(
                         id = track.uid ?: track.beatmapSetId, 
@@ -520,6 +532,7 @@ fun PlaylistScreen(
                     config = BeatmapSetListConfig(
                         showDividers = true,
                         showScrollbar = true,
+                        scrollBarPadding = PaddingValues(horizontal = 4.dp),
                         expandedIds = expandedBeatmapSets,
                         onExpansionChanged = { id, isExpanded ->
                             expandedBeatmapSets = if (isExpanded) {
@@ -703,42 +716,26 @@ fun PlaylistScreen(
             infoCoverEnabled = false, // Disable cover in playlist popup
             showConfirmButton = false, // Hide confirm button in playlist
             onDownloadClick = { beatmapset ->
-                scope.launch {
-                    downloadService.downloadBeatmap(
-                        beatmapSetId = beatmapset.id,
-                        accessToken = accessToken,
-                        title = beatmapset.title,
-                        artist = beatmapset.artist,
-                        creator = beatmapset.creator,
-                        genreId = beatmapset.genreId,
-                        coversListUrl = beatmapset.covers.listUrl
-                    ).collect { state ->
-                        if (state is UnifiedDownloadState.Error) {
-                            android.widget.Toast.makeText(context, state.message, android.widget.Toast.LENGTH_SHORT).show()
-                        } else if (state is UnifiedDownloadState.Success) {
-                            android.widget.Toast.makeText(context, context.getString(R.string.search_download_done), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
+                downloadManager.enqueue(
+                    setId = beatmapset.id,
+                    title = beatmapset.title,
+                    artist = beatmapset.artist,
+                    creator = beatmapset.creator,
+                    accessToken = accessToken,
+                    genreId = beatmapset.genreId,
+                    coverUrl = beatmapset.covers.listUrl
+                )
             },
             onRestoreClick = { beatmapset ->
-                scope.launch {
-                    downloadService.downloadBeatmap(
-                        beatmapSetId = beatmapset.id,
-                        accessToken = accessToken,
-                        title = beatmapset.title,
-                        artist = beatmapset.artist,
-                        creator = beatmapset.creator,
-                        genreId = beatmapset.genreId,
-                        coversListUrl = beatmapset.covers.listUrl
-                    ).collect { state ->
-                        if (state is UnifiedDownloadState.Error) {
-                            android.widget.Toast.makeText(context, state.message, android.widget.Toast.LENGTH_SHORT).show()
-                        } else if (state is UnifiedDownloadState.Success) {
-                            android.widget.Toast.makeText(context, context.getString(R.string.search_download_done), android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
+                downloadManager.enqueue(
+                    setId = beatmapset.id,
+                    title = beatmapset.title,
+                    artist = beatmapset.artist,
+                    creator = beatmapset.creator,
+                    accessToken = accessToken,
+                    genreId = beatmapset.genreId,
+                    coverUrl = beatmapset.covers.listUrl
+                )
             }
         )
     )

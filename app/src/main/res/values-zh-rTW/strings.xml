@@ -102,6 +102,8 @@
     <string name="search_download_extracting">解壓縮…</string>
     <string name="search_download_done">完成 ✓</string>
     <string name="search_download_failed">失敗</string>
+    <string name="download_trying_alternatives">在鏡像中未找到 %1$s，正在嘗試其他版本…</string>
+    <string name="download_error_no_audio">%1$s 的音檔缺失，正在嘗試其他版本…</string>
     <string name="profile_restore_downloads_title">恢復下載</string>
     <string name="profile_restore_button">恢復</string>
     <string name="profile_restore_description">首數據庫重置後之前下載的譜面</string>

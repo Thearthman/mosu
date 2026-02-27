@@ -115,7 +115,7 @@ class MusicController(
                 if (controller != null) {
                     _currentPosition.value = controller.currentPosition
                 }
-                delay(300) // Update 2 times per second to reduce graphics load
+                delay(300) // changed back to 300ms for smoother look
             }
         }
     }

@@ -41,9 +41,8 @@ class SearchViewModel(
     var isRefreshing by mutableStateOf(false)
     var expandedBeatmapSets by mutableStateOf<Set<Long>>(emptySet())
     var refreshTick by mutableStateOf(0)
-
+    
     // Download state
-    var downloadStates by mutableStateOf<Map<Long, DownloadProgress>>(emptyMap())
     var downloadedBeatmapSetIds by mutableStateOf<Set<Long>>(emptySet())
     var downloadedKeys by mutableStateOf<Set<String>>(emptySet())
     var mergeGroups by mutableStateOf<Map<String, Set<Long>>>(emptyMap())
@@ -89,7 +88,7 @@ class SearchViewModel(
         playedMode: String,
         searchAny: Boolean
     ) {
-        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard"
+        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard|$selectedGenreId"
         if (lastInitialLoadKey == loadKey) return
         lastInitialLoadKey = loadKey
 
@@ -128,7 +127,7 @@ class SearchViewModel(
                 } else {
                     // 1. Load cached data
                     val cachedResult = repository.getCachedPlayedBeatmaps(
-                        genreId = null,
+                        genreId = selectedGenreId,
                         searchQuery = null,
                         filterMode = mode,
                         playedFilterMode = playedMode,
@@ -147,7 +146,7 @@ class SearchViewModel(
                     launch {
                         try {
                             val result = repository.getPlayedBeatmaps(
-                                accessToken, null, null, null, mode, playedMode, uid, isSupporter, searchAny
+                                accessToken, selectedGenreId, null, null, mode, playedMode, uid, isSupporter, searchAny
                             )
                             val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                             mergeGroups = searchService.buildMergeGroups(result.beatmaps)

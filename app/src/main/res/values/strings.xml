@@ -102,6 +102,8 @@
     <string name="search_download_extracting">Extracting…</string>
     <string name="search_download_done">Done ✓</string>
     <string name="search_download_failed">Failed</string>
+    <string name="download_trying_alternatives">Failed to find %1$s in mirror, trying other versions…</string>
+    <string name="download_error_no_audio">Audio missing for %1$s, trying other versions…</string>
     <string name="profile_restore_downloads_title">Restore Downloads</string>
     <string name="profile_restore_button">Restore</string>
     <string name="profile_restore_description">previously downloaded beatmaps after database reset</string>

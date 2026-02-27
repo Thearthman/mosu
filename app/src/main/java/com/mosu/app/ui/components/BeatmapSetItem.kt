@@ -124,10 +124,16 @@ fun BeatmapSetItem(
 
             // Download Progress Bar
             if (set.downloadProgress != null) {
-                LinearProgressIndicator(
-                    progress = { set.downloadProgress / 100f },
-                    modifier = Modifier.fillMaxWidth().height(5.dp).padding(top = 2.dp)
-                )
+                if (set.downloadProgress >= 0) {
+                    LinearProgressIndicator(
+                        progress = { set.downloadProgress / 100f },
+                        modifier = Modifier.fillMaxWidth().height(5.dp).padding(top = 2.dp)
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(5.dp).padding(top = 2.dp)
+                    )
+                }
             }
         }
 

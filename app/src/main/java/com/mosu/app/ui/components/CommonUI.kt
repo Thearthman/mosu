@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -178,9 +179,10 @@ fun DraggableScrollbar(
     }
 
     scrollbarInfo?.let { info ->
-        // Sync scrollbar position when not dragging
-        LaunchedEffect(info.scrollbarOffset, isDragging) {
-            if (!isDragging) {
+        // Sync dragOffset when not dragging - do it in a side effect to avoid recomposition during scroll
+        // This is safe because we only update if it's actually different
+        SideEffect {
+            if (!isDragging && dragOffset != info.scrollbarOffset) {
                 dragOffset = info.scrollbarOffset
             }
         }
@@ -188,7 +190,7 @@ fun DraggableScrollbar(
         Box(
             modifier = modifier
                 .fillMaxHeight()
-                .width(30.dp)
+                .width(10.dp)
                 .draggable(
                     orientation = Orientation.Vertical,
                     onDragStarted = { isDragging = true },
@@ -211,9 +213,10 @@ fun DraggableScrollbar(
         ) {
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 12.dp)
                     .align(Alignment.TopCenter)
-                    .graphicsLayer { translationY = dragOffset }
+                    .graphicsLayer { 
+                        translationY = if (isDragging) dragOffset else info.scrollbarOffset 
+                    }
                     .width(4.dp)
                     .height(with(density) { info.sliderHeight.toDp() })
                     .clip(RoundedCornerShape(2.dp))

@@ -4,8 +4,7 @@
 3. Swipe to dismiss should not be activated when the lateral motion is smaller than the horizontal motion, it should only allow motions with a tight angle with the horizontal. Try this first and decide whether we still need to fix bug 3(because it seems like that apple music also has velocity dependent slider but it didn't bothered that much).
 4. When Deleting an account in account manager, snap the slider back to the start and call out an warning box with warning and confirmation & decline button. When confirmation is pressed, remove the account from the account manager UI and also physically from storage. 
 5. Type things in search view when leaderboard only filter is disabled and clear the text with the clear icon would load a search result that looks like has the filter enabled. Could hint to greater issues in how cached result is used. 
-6. Sayobot sometimes cannot download certain beatmaps though they are ranked and wasn't really that new. When download failed, try beatmapset of same name and author. It's like automatically clicking one of the options offered by infoPopup. [v1.0]
-7. search page genre bar is not linked to the songlist filter. should implement Pending Refactor No.2 with this in mind and verify if the bug persist. [v1.0]
+6. Music should stop playing when audio option changed (for example headphone disconnected)
 
 
 # UIUX improvement
@@ -13,7 +12,7 @@
 
 # Pending Refactors(for v1.0)
 1. examine the current codebase, down to each file, and propose better naming, code organization so it's intuitive to find functions just by the filename and grouping of functions that serves similar features. Also, Business logic and UI should be separate from each other only UI can be in the UI head folder. 
-2. add genre bar as a option to beatmapsetList and treat it as one element(unit tall). Also, add ability to display genre bar in the list config. This way the genre bar in library should be able to scroll along with the list.
+2. Judging from bug 6,7 and UIUX issue 2, seems like we need a download logic overhaul. What's the currently download logic and we want a centralized, independent manager that can handle multiple parallel requests, and is uninterrupted by and detached from UI. 
 
 # New Feature
 0. Core Feature
@@ -124,6 +123,7 @@
 36. Stop search preview when starting playback (from search click, info popup play, or MiniPlayer controls).
 37. Make the three rows align vertically along their center @app/src/main/java/com/mosu/app/ui/components/InfoPopup.kt:199-359 
 38. Add Snackbar for beatmapset actions. For example, "Removed Buzz Cuzz from Energetic" (energetic is a playlist) The button in the Snackbar should be "Redo", which reverts the action that invoked it. 
+39. Make library songlist consistent with search screen songlist in all filter, i.e., the genre bar should be a part of the song list so they scroll together and give more space to display songs. This should be achieved by Pending Refactors 2, adding genre bar as a option to beatmapsetList. [done]
 
 # Bugs fixed
 1. When removing song, the red bar persist to exist when the item to be deleted is not the bottom one after deleting it. This could be due to the "fill in" strategy after clearing out the deleted song's space. Also check the red bar disappear condition. Maybe refresh red bar condition after song is deleted.
@@ -173,6 +173,13 @@
 45. When exiting from search page, and there is text in the search bar. Save the page view and when we comeback restore the view.
 46. Recent filter mode does not load itself automatically when app first started, leaving the page blank.
 47. Fix screen frame buffer out of order issue.
+48. Cannot download beatmapset that are newly uploaded and not in mirror database. When download failed, try beatmapset of same name and author but uploaded earlier. It's like automatically clicking one of the other options offered by infoPopup. [v1.0] [done]
+49. search screen genre bar does not work for favorite mode. library screen genre bar does not work at all.[done]
+50. deleting a song in search page should not remove the item from the song list, should only change downloaded status [done]
+51. downloading songs in favorite page often results in corruption of music file (missing ends of the songs) or beatmapset downloaded state simply not updated correctly. [done]
+52. Download should not be paused or cancelled because of app went to background. [v1.0]
+53. Download progress sometimes aren't passed correctly. [v1.0]
+54. Search page should have a button on the top right corner to reveal a drop down menu of "task view" to see what are the currently downloading beatmapsets. [v1.0]
 
 # Codebase Maintenances
 1. Refactored song list components into specialized UI components: SwipeableSongList, SearchResultList, and SelectableSongList for better separation of concerns.

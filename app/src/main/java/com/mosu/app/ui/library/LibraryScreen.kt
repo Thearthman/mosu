@@ -83,6 +83,7 @@ import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.widget.Toast
+import androidx.compose.foundation.layout.PaddingValues
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -91,6 +92,7 @@ fun LibraryScreen(
     musicController: MusicController,
     repository: OsuRepository,
     downloadService: BeatmapDownloadService,
+    downloadManager: com.mosu.app.domain.download.DownloadManager,
     accessToken: String? = null,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {},
@@ -98,13 +100,13 @@ fun LibraryScreen(
     deferredActionViewModel: DeferredActionViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val downloadedMaps by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
+    val downloadedMaps by remember { db.beatmapDao().getAllBeatmaps() }.collectAsState(initial = emptyList())
     val downloadedBeatmapSetIds = remember(downloadedMaps) { downloadedMaps.map { it.beatmapSetId }.toSet() }
     val downloadedKeys = remember(downloadedMaps) {
         downloadedMaps.map { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }.toSet()
     }
-    val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
-    val playlistTracks by db.playlistDao().getAllPlaylistTracks().collectAsState(initial = emptyList())
+    val playlists by remember { db.playlistDao().getPlaylists() }.collectAsState(initial = emptyList())
+    val playlistTracks by remember { db.playlistDao().getAllPlaylistTracks() }.collectAsState(initial = emptyList())
     val playlistMembership = playlistTracks
         .groupBy { it.playlistId }
         .mapValues { entry -> entry.value.map { "${it.beatmapSetId}|${it.difficultyName}" }.toSet() }
@@ -181,8 +183,8 @@ fun LibraryScreen(
     val pendingDeletions by deferredActionViewModel.pendingLibraryTrackDeletions.collectAsState()
     val pendingSetDeletions by deferredActionViewModel.pendingLibrarySetDeletions.collectAsState()
 
-    // Download States for Redo
-    var downloadStates by remember { mutableStateOf<Map<Long, DownloadProgress>>(emptyMap()) }
+    // Download Tasks from global manager
+    val downloadTasks by downloadManager.tasks.collectAsState()
 
     // Search State
     var searchQuery by remember { mutableStateOf("") }
@@ -201,25 +203,40 @@ fun LibraryScreen(
     }
 
     // Filter maps by selected genre and search query
-    val genreFilteredMaps = if (selectedGenreId != null) {
-        downloadedMaps.filter { it.genreId == selectedGenreId && it.uid !in pendingDeletions && it.beatmapSetId !in pendingSetDeletions }
-    } else {
-        downloadedMaps.filter { it.uid !in pendingDeletions && it.beatmapSetId !in pendingSetDeletions }
-    }
-
-    val filteredMaps = if (searchQuery.isNotBlank()) {
-        genreFilteredMaps.filter { map ->
-            map.title.contains(searchQuery, ignoreCase = true) ||
-            map.artist.contains(searchQuery, ignoreCase = true) ||
-            map.difficultyName.contains(searchQuery, ignoreCase = true) ||
-            map.creator.contains(searchQuery, ignoreCase = true)
+    val filteredMaps = remember(downloadedMaps, selectedGenreId, searchQuery, pendingDeletions, pendingSetDeletions) {
+        val genreFiltered = if (selectedGenreId != null) {
+            downloadedMaps.filter { 
+                val effectiveGenreId = when (it.genreId) {
+                    null, 0, 1 -> 6 // Treat null, Any, or Unspecified as Other
+                    else -> it.genreId
+                }
+                effectiveGenreId == selectedGenreId && 
+                it.uid !in pendingDeletions && 
+                it.beatmapSetId !in pendingSetDeletions 
+            }
+        } else {
+            downloadedMaps.filter { 
+                it.uid !in pendingDeletions && 
+                it.beatmapSetId !in pendingSetDeletions 
+            }
         }
-    } else {
-        genreFilteredMaps
+
+        if (searchQuery.isNotBlank()) {
+            genreFiltered.filter { map ->
+                map.title.contains(searchQuery, ignoreCase = true) ||
+                map.artist.contains(searchQuery, ignoreCase = true) ||
+                map.difficultyName.contains(searchQuery, ignoreCase = true) ||
+                map.creator.contains(searchQuery, ignoreCase = true)
+            }
+        } else {
+            genreFiltered
+        }
     }
     
     // Group maps by Set ID
-    val groupedMaps = filteredMaps.groupBy { it.beatmapSetId }
+    val groupedMaps = remember(filteredMaps) {
+        filteredMaps.groupBy { it.beatmapSetId }
+    }
 
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var dialogTrack by remember { mutableStateOf<BeatmapEntity?>(null) }
@@ -248,12 +265,17 @@ fun LibraryScreen(
     }
 
     // Transform to BeatmapSetData for the list
-    val beatmapSets = remember(groupedMaps, expandedBeatmapSets) {
+    val beatmapSets = remember(groupedMaps, expandedBeatmapSets, downloadTasks) {
         groupedMaps.map { (setId, tracks) ->
             val first = tracks.first()
             val isAlbumSet = tracks.any { it.isAlbum }
-            val progress = downloadStates[setId]
+            val task = downloadTasks[setId]
             
+            val showProgress = task != null && 
+                (task.status == com.mosu.app.domain.download.DownloadStatus.Downloading || 
+                 task.status == com.mosu.app.domain.download.DownloadStatus.Queued || 
+                 task.status == com.mosu.app.domain.download.DownloadStatus.Extracting)
+
             BeatmapSetData(
                 id = setId,
                 title = first.title,
@@ -262,7 +284,7 @@ fun LibraryScreen(
                 coverPath = first.coverPath,
                 isExpandable = isAlbumSet,
                 genreId = first.genreId,
-                downloadProgress = progress?.progress,
+                downloadProgress = if (showProgress) task?.progress else null,
                 tracks = tracks.map { track ->
                     BeatmapTrackData(
                         id = track.uid,
@@ -280,7 +302,7 @@ fun LibraryScreen(
     }
 
     // Define Actions
-    val actions = remember(filteredMaps, snackbarHostState, accessToken, downloadStates) {
+    val actions = remember(filteredMaps, snackbarHostState, accessToken, downloadTasks) {
         BeatmapSetActions(
             onClick = { set ->
                 // For single tracks (not expandable), play the track
@@ -479,14 +501,6 @@ fun LibraryScreen(
 
             }
 
-            // Genre Filter
-            Text(text = stringResource(id = R.string.library_filter_genre), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp))
-            GenreFilter(
-                selectedGenreId = selectedGenreId,
-                onGenreSelected = { selectedGenreId = it },
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp, start = 16.dp, end = 16.dp)
-            )
-
             // BeatmapSet List
             BeatmapSetList(
                 sets = beatmapSets,
@@ -497,12 +511,27 @@ fun LibraryScreen(
                 highlightedTrackId = highlightTrackId,
                 config = BeatmapSetListConfig(
                     showScrollbar = true,
+                    scrollBarPadding = PaddingValues(horizontal = 4.dp),
                     expandedIds = expandedBeatmapSets,
                     onExpansionChanged = { id, isExpanded ->
                         expandedBeatmapSets = if (isExpanded) {
                             expandedBeatmapSets + id
                         } else {
                             expandedBeatmapSets - id
+                        }
+                    },
+                    header = {
+                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                            Text(
+                                text = stringResource(id = R.string.library_filter_genre),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            GenreFilter(
+                                selectedGenreId = selectedGenreId,
+                                onGenreSelected = { selectedGenreId = it },
+                                modifier = Modifier.padding(top = 4.dp, start = 16.dp, end = 16.dp)
+                            )
                         }
                     }
                 )
@@ -563,7 +592,7 @@ fun LibraryScreen(
                             delay(50)
 
                             // 3. Calculate actual flattened index
-                            var flattenedIndex = 0
+                            var flattenedIndex = 1 // Start at 1 because of genre header
                             for (set in beatmapSets) {
                                 if (set.id == match.beatmapSetId) {
                                     if (isAlbumTrack) {

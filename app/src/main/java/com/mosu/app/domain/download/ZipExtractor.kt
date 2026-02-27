@@ -11,6 +11,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import java.io.IOException
 
 class ZipExtractor(private val context: Context) {
 
@@ -38,6 +40,7 @@ class ZipExtractor(private val context: Context) {
                 val uniqueAudioFiles = mutableSetOf<String>()
                 
                 osuFiles.forEach { osuFileName ->
+                    kotlinx.coroutines.yield()
                     val osuFile = File(outputDir, osuFileName)
                     val metadata = parseOsuFile(osuFile)
                     
@@ -163,6 +166,10 @@ class ZipExtractor(private val context: Context) {
             if (oszFile.exists()) {
                 oszFile.delete()
             }
+        }
+        
+        if (extractedTracks.isEmpty()) {
+            throw IOException("No audio tracks found in zip")
         }
         
         return@withContext extractedTracks

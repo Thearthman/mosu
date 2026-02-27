@@ -143,25 +143,6 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
     ): PlayedBeatmapsResult {
         val safeQuery = sanitizeQuery(searchQuery)
 
-        if (filterMode == "favorite" && userId != null && cursorString != "cache") {
-            val offset = cursorString?.toIntOrNull() ?: 0
-            val limit = 50
-            val favourites = RetrofitClient.api.getUserFavoriteBeatmapsets(
-                authHeader = "Bearer $accessToken",
-                userId = userId,
-                limit = limit,
-                offset = offset
-            )
-            val filtered = if (!safeQuery.isNullOrEmpty()) {
-                favourites.filter {
-                    it.title.contains(safeQuery, ignoreCase = true) ||
-                            it.artist.contains(safeQuery, ignoreCase = true)
-                }
-            } else favourites
-            val nextCursor = if (favourites.size < limit) null else (offset + limit).toString()
-            return PlayedBeatmapsResult(filtered, nextCursor)
-        }
-
         // Explicit most_played view
         if (filterMode == "most_played" && userId != null && cursorString == null) {
             val mostPlayedData = RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100)
@@ -183,7 +164,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
                 metadata[item.beatmapset.id] = Pair(index + 1, item.count)
             }
             val beatmaps = sortedData.map { it.beatmapset }
-            val searchFiltered = if (!searchQuery.isNullOrEmpty()) {
+            val filteredBySearch = if (!searchQuery.isNullOrEmpty()) {
                 beatmaps.filter {
                     val query = safeQuery ?: return@filter true
                     it.title.contains(query, ignoreCase = true) ||
@@ -192,7 +173,12 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             } else {
                 beatmaps
             }
-            return PlayedBeatmapsResult(searchFiltered, null, metadata)
+
+            val filteredByGenre = if (genreId != null) {
+                filteredBySearch.filter { it.genreId == genreId }
+            } else filteredBySearch
+
+            return PlayedBeatmapsResult(filteredByGenre, null, metadata)
         }
 
         // Auto-fallback: If non-supporter tries "played" filter with URL mode, use most_played endpoint
@@ -230,9 +216,8 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             
             val beatmaps = sortedData.map { it.beatmapset }
             
-            // Genre filter is NOT applied for most_played (UI should hide it)
             // Apply search query filter if specified
-            val searchFiltered = if (!searchQuery.isNullOrEmpty()) {
+            val filteredBySearch = if (!searchQuery.isNullOrEmpty()) {
                 beatmaps.filter { 
                     val query = safeQuery ?: return@filter true
                     it.title.contains(query, ignoreCase = true) || 
@@ -241,8 +226,12 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             } else {
                 beatmaps
             }
+
+            val filteredByGenre = if (genreId != null) {
+                filteredBySearch.filter { it.genreId == genreId }
+            } else filteredBySearch
             
-            return PlayedBeatmapsResult(searchFiltered, null, metadata) // No cursor for most played
+            return PlayedBeatmapsResult(filteredByGenre, null, metadata) // No cursor for most played
         }
         
         // Otherwise use URL-based filtering (original logic)

@@ -18,9 +18,7 @@ import androidx.compose.material.rememberDismissState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.FractionalThreshold
@@ -33,7 +31,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.res.stringResource
@@ -43,7 +40,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.AccountManager
@@ -54,22 +50,18 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.domain.download.UnifiedDownloadState
-import com.mosu.app.domain.download.ZipExtractor
 import com.mosu.app.utils.RegionUtils
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.io.File
 
 suspend fun performRestore(
     context: Context,
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
-    downloadService: BeatmapDownloadService,
+    downloadManager: com.mosu.app.domain.download.DownloadManager,
     updateProgress: (Int, String) -> Unit,
     updateRestoring: (Boolean) -> Unit
 ) {
@@ -90,44 +82,23 @@ suspend fun performRestore(
         val total = preservedSetIds.size
 
         for (preservedSetId in preservedSetIds) {
-            try {
-                // Check if this beatmap set is already downloaded
-                val existingTracks = db.beatmapDao().getTracksForSet(preservedSetId.beatmapSetId)
-                if (existingTracks.isNotEmpty()) {
-                    completed++
-                    val progress = (completed * 100) / total
-                    updateProgress(progress, context.getString(R.string.profile_restore_skipped, preservedSetId.beatmapSetId))
-                    continue
-                }
-
-                updateProgress(((completed * 100) / total), context.getString(R.string.profile_restore_downloading, preservedSetId.beatmapSetId))
-
-                downloadService.downloadBeatmap(
-                    beatmapSetId = preservedSetId.beatmapSetId,
-                    accessToken = accessToken,
-                    title = "", // Metadata will be fetched or handled by downloader
-                    artist = "",
-                    creator = "",
-                    genreId = null,
-                    coversListUrl = null
-                ).collect { state ->
-                    when (state) {
-                        is UnifiedDownloadState.Progress -> {
-                            updateProgress(((completed * 100) / total), "${context.getString(R.string.profile_restore_downloading, preservedSetId.beatmapSetId)}: ${state.status}")
-                        }
-                        is UnifiedDownloadState.Success -> {
-                            completed++
-                            val progress = (completed * 100) / total
-                            updateProgress(progress, "Restored $completed/$total beatmaps")
-                        }
-                        is UnifiedDownloadState.Error -> {
-                            android.util.Log.e("ProfileScreen", "Failed to restore beatmap ${preservedSetId.beatmapSetId}: ${state.message}")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("ProfileScreen", "Failed to restore beatmap ${preservedSetId.beatmapSetId}", e)
+            // Check if this beatmap set is already downloaded
+            val existingTracks = db.beatmapDao().getTracksForSet(preservedSetId.beatmapSetId)
+            if (existingTracks.isNotEmpty()) {
+                completed++
+                continue
             }
+
+            downloadManager.enqueue(
+                setId = preservedSetId.beatmapSetId,
+                title = "Beatmap ${preservedSetId.beatmapSetId}", // Generic title if unknown
+                artist = "",
+                creator = "",
+                accessToken = accessToken,
+                genreId = null,
+                coverUrl = null
+            )
+            completed++
         }
 
         updateProgress(100, context.getString(R.string.profile_restore_completed_progress, completed, total))
@@ -153,6 +124,7 @@ fun ProfileScreen(
     accountManager: AccountManager,
     settingsManager: SettingsManager,
     downloadService: BeatmapDownloadService,
+    downloadManager: com.mosu.app.domain.download.DownloadManager,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -685,7 +657,7 @@ fun ProfileScreen(
                                             repository,
                                             db,
                                             tokenManager,
-                                            downloadService,
+                                            downloadManager,
                                             { progress, message ->
                                                 restoreProgress = progress
                                                 restoreMessage = message

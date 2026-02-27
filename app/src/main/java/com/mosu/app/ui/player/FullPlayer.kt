@@ -88,38 +88,11 @@ fun FullPlayer(
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val isPlaying by musicController.isPlaying.collectAsState()
     val duration by musicController.duration.collectAsState()
-    val currentPosition by musicController.currentPosition.collectAsState()
     val repeatMode by musicController.repeatMode.collectAsState()
     val shuffleModeEnabled by musicController.shuffleModeEnabled.collectAsState()
     val playbackMod by musicController.playbackMod.collectAsState()
 
-    // For smooth seeking
-    var isDragging by remember { mutableStateOf(false) }
     var modMenuExpanded by remember { mutableStateOf(false) }
-
-    val sliderRange = 0f..duration.toFloat().coerceAtLeast(1f)
-    val sliderInteraction = remember { MutableInteractionSource() }
-    var sliderValue by remember { mutableFloatStateOf(0f) }
-
-    LaunchedEffect(sliderInteraction) {
-        sliderInteraction.interactions.collect { interaction ->
-            when (interaction) {
-                is DragInteraction.Start -> isDragging = true
-                is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
-            }
-        }
-    }
-
-    // Throttle position updates to reduce recompositions - only update when not dragging
-    val throttledPosition by remember(currentPosition, isDragging) {
-        derivedStateOf {
-            if (isDragging) sliderValue.toFloat() else currentPosition.toFloat()
-        }
-    }
-
-    LaunchedEffect(throttledPosition, sliderRange) {
-        sliderValue = throttledPosition.coerceIn(sliderRange.start, sliderRange.endInclusive)
-    }
 
     if (nowPlaying != null) {
         Box(
@@ -211,71 +184,11 @@ fun FullPlayer(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Progress Bar
-                val sliderColors = SliderDefaults.colors(
-                    thumbColor = Color(0x00000000),
-                    disabledThumbColor = Color(0x00000000),
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+                // Isolated Progress Bar and Time Labels
+                PlayerProgressBar(
+                    musicController = musicController,
+                    duration = duration
                 )
-                val activeTrackColor = MaterialTheme.colorScheme.primary
-                val inactiveTrackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
-                Slider(
-                    modifier = Modifier.height(36.dp),
-                    value = sliderValue,
-                    onValueChange = { newValue ->
-                        isDragging = true
-                        sliderValue = newValue.coerceIn(sliderRange.start, sliderRange.endInclusive)
-                    },
-                    onValueChangeFinished = {
-                        isDragging = false
-                        musicController.seekTo(sliderValue.toLong())
-                    },
-                    valueRange = sliderRange,
-                    interactionSource = sliderInteraction,
-                    colors = sliderColors,
-                    thumb = {
-                        // Replace SliderDefaults.Thumb with an empty Box
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                // No background, no indication, no alpha needed
-                        )
-                    },
-                    track = { sliderState ->
-                        val fraction = if (sliderRange.endInclusive > 0) {
-                            sliderState.value / sliderRange.endInclusive
-                        } else 0f
-
-                        Track(
-                            activeRange = 0f..fraction,
-                            activeTrackColor = activeTrackColor,
-                            inactiveTrackColor = inactiveTrackColor,
-                            activeTickColor = activeTrackColor.copy(alpha = 0.6f),
-                            inactiveTickColor = inactiveTrackColor.copy(alpha = 0.6f),
-                            tickFractions = emptyList(),
-                            trackHeight = 10.dp,
-                            horizontalExpansion = 50f
-                        )
-                    }
-                )
-                
-                // Time Labels
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatTime(sliderValue.toLong()),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                    Text(
-                        text = formatTime(duration),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                }
 
                 Spacer(modifier = Modifier.height(30.dp))
 
@@ -431,6 +344,98 @@ fun FullPlayer(
                 }
                 Spacer(modifier = Modifier.height(55.dp))
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayerProgressBar(
+    musicController: MusicController,
+    duration: Long
+) {
+    val currentPosition by musicController.currentPosition.collectAsState()
+    var isDragging by remember { mutableStateOf(false) }
+    var sliderValue by remember { mutableFloatStateOf(0f) }
+    val sliderRange = 0f..duration.toFloat().coerceAtLeast(1f)
+    val sliderInteraction = remember { MutableInteractionSource() }
+
+    // Sync sliderValue with currentPosition when not dragging
+    LaunchedEffect(currentPosition, isDragging) {
+        if (!isDragging) {
+            sliderValue = currentPosition.toFloat().coerceIn(sliderRange)
+        }
+    }
+
+    LaunchedEffect(sliderInteraction) {
+        sliderInteraction.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> isDragging = true
+                is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
+            }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        val sliderColors = SliderDefaults.colors(
+            thumbColor = Color.Transparent,
+            disabledThumbColor = Color.Transparent,
+            activeTrackColor = MaterialTheme.colorScheme.primary,
+            inactiveTrackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+        )
+        val activeTrackColor = MaterialTheme.colorScheme.primary
+        val inactiveTrackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
+
+        Slider(
+            modifier = Modifier.height(36.dp),
+            value = sliderValue,
+            onValueChange = { newValue ->
+                isDragging = true
+                sliderValue = newValue.coerceIn(sliderRange)
+            },
+            onValueChangeFinished = {
+                isDragging = false
+                musicController.seekTo(sliderValue.toLong())
+            },
+            valueRange = sliderRange,
+            interactionSource = sliderInteraction,
+            colors = sliderColors,
+            thumb = {
+                Box(modifier = Modifier.size(28.dp))
+            },
+            track = { sliderState ->
+                val fraction = if (sliderRange.endInclusive > 0) {
+                    sliderState.value / sliderRange.endInclusive
+                } else 0f
+
+                Track(
+                    activeRange = 0f..fraction,
+                    activeTrackColor = activeTrackColor,
+                    inactiveTrackColor = inactiveTrackColor,
+                    activeTickColor = activeTrackColor.copy(alpha = 0.6f),
+                    inactiveTickColor = inactiveTrackColor.copy(alpha = 0.6f),
+                    tickFractions = emptyList(),
+                    trackHeight = 10.dp,
+                    horizontalExpansion = 50f
+                )
+            }
+        )
+
+        // Time Labels
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = formatTime(sliderValue.toLong()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+            )
+            Text(
+                text = formatTime(duration),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+            )
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.mosu.app.ui.components
 
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
 import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -109,5 +110,7 @@ data class BeatmapSetListConfig(
     val showScrollbar: Boolean = false,
     val expandedIds: Set<Long> = emptySet(),
     val onExpansionChanged: (Long, Boolean) -> Unit = { _, _ -> },
-    val contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp)
+    val contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    val scrollBarPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    val header: @Composable (() -> Unit)? = null
 )

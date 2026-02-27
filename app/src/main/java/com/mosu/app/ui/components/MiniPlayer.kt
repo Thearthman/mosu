@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,32 +59,6 @@ fun MiniPlayer(
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val isPlaying by musicController.isPlaying.collectAsState()
     val duration by musicController.duration.collectAsState()
-    val currentPosition by musicController.currentPosition.collectAsState()
-
-    // For smooth seeking
-    var isDragging by remember { mutableStateOf(false) }
-    val sliderRange = 0f..duration.toFloat().coerceAtLeast(1f)
-    val sliderInteraction = remember { MutableInteractionSource() }
-    var sliderValue by remember { mutableFloatStateOf(0f) }
-
-    LaunchedEffect(sliderInteraction) {
-        sliderInteraction.interactions.collect { interaction ->
-            when (interaction) {
-                is DragInteraction.Start -> isDragging = true
-                is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
-            }
-        }
-    }
-
-    val throttledPosition by remember(currentPosition, isDragging) {
-        derivedStateOf {
-            if (isDragging) sliderValue.toFloat() else currentPosition.toFloat()
-        }
-    }
-
-    LaunchedEffect(throttledPosition, sliderRange) {
-        sliderValue = throttledPosition.coerceIn(sliderRange.start, sliderRange.endInclusive)
-    }
 
     if (nowPlaying != null) {
         Surface(
@@ -151,50 +126,83 @@ fun MiniPlayer(
                     }
                 }
                 
-                // Progress Bar at the absolute bottom
-                val sliderColors = SliderDefaults.colors(
-                    thumbColor = Color.Transparent,
-                    disabledThumbColor = Color.Transparent,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                )
-                
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { newValue ->
-                        isDragging = true
-                        sliderValue = newValue.coerceIn(sliderRange.start, sliderRange.endInclusive)
-                    },
-                    onValueChangeFinished = {
-                        isDragging = false
-                        musicController.seekTo(sliderValue.toLong())
-                    },
-                    valueRange = sliderRange,
-                    interactionSource = sliderInteraction,
-                    colors = sliderColors,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .height(10.dp) // Touch area
-                        .offset(y = 4.dp), // Align visual track to bottom edge
-                    thumb = {
-                        Box(modifier = Modifier.size(0.dp))
-                    },
-                    track = { sliderState ->
-                        val fraction = if (sliderRange.endInclusive > 0) {
-                            sliderState.value / sliderRange.endInclusive
-                        } else 0f
-
-                        Track(
-                            activeRange = 0f..fraction,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                            trackHeight = 2.dp, // Thin visual track
-                            horizontalExpansion = 0f
-                        )
-                    }
+                // Progress Bar at the absolute bottom (isolated)
+                MiniPlayerProgressBar(
+                    musicController = musicController,
+                    duration = duration
                 )
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BoxScope.MiniPlayerProgressBar(
+    musicController: MusicController,
+    duration: Long
+) {
+    val currentPosition by musicController.currentPosition.collectAsState()
+    var isDragging by remember { mutableStateOf(false) }
+    var sliderValue by remember { mutableFloatStateOf(0f) }
+    val sliderRange = 0f..duration.toFloat().coerceAtLeast(1f)
+    val sliderInteraction = remember { MutableInteractionSource() }
+
+    LaunchedEffect(currentPosition, isDragging) {
+        if (!isDragging) {
+            sliderValue = currentPosition.toFloat().coerceIn(sliderRange)
+        }
+    }
+
+    LaunchedEffect(sliderInteraction) {
+        sliderInteraction.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> isDragging = true
+                is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
+            }
+        }
+    }
+
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = Color.Transparent,
+        disabledThumbColor = Color.Transparent,
+        activeTrackColor = MaterialTheme.colorScheme.primary,
+        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+    )
+
+    Slider(
+        value = sliderValue,
+        onValueChange = { newValue ->
+            isDragging = true
+            sliderValue = newValue.coerceIn(sliderRange)
+        },
+        onValueChangeFinished = {
+            isDragging = false
+            musicController.seekTo(sliderValue.toLong())
+        },
+        valueRange = sliderRange,
+        interactionSource = sliderInteraction,
+        colors = sliderColors,
+        modifier = Modifier
+            .fillMaxWidth()
+            .align(Alignment.BottomCenter)
+            .height(10.dp) // Touch area
+            .offset(y = 4.dp), // Align visual track to bottom edge
+        thumb = {
+            Box(modifier = Modifier.size(0.dp))
+        },
+        track = { sliderState ->
+            val fraction = if (sliderRange.endInclusive > 0) {
+                sliderState.value / sliderRange.endInclusive
+            } else 0f
+
+            Track(
+                activeRange = 0f..fraction,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                trackHeight = 2.dp, // Thin visual track
+                horizontalExpansion = 0f
+            )
+        }
+    )
 }

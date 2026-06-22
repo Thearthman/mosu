@@ -4,6 +4,19 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val releaseStoreFile = providers.gradleProperty("MOSU_RELEASE_STORE_FILE")
+    .orElse(providers.environmentVariable("MOSU_RELEASE_STORE_FILE"))
+val releaseStorePassword = providers.gradleProperty("MOSU_RELEASE_STORE_PASSWORD")
+    .orElse(providers.environmentVariable("MOSU_RELEASE_STORE_PASSWORD"))
+val releaseKeyAlias = providers.gradleProperty("MOSU_RELEASE_KEY_ALIAS")
+    .orElse(providers.environmentVariable("MOSU_RELEASE_KEY_ALIAS"))
+val releaseKeyPassword = providers.gradleProperty("MOSU_RELEASE_KEY_PASSWORD")
+    .orElse(providers.environmentVariable("MOSU_RELEASE_KEY_PASSWORD"))
+val hasReleaseSigning = releaseStoreFile.isPresent &&
+    releaseStorePassword.isPresent &&
+    releaseKeyAlias.isPresent &&
+    releaseKeyPassword.isPresent
+
 android {
     namespace = "com.mosu.app"
     compileSdk = 34
@@ -12,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.mosu.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -22,9 +35,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile.get())
+                storePassword = releaseStorePassword.get()
+                keyAlias = releaseKeyAlias.get()
+                keyPassword = releaseKeyPassword.get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -4,8 +4,8 @@
 
 ### Bugs
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
-- [ ] Quick swipe can still delete a song when the swipe distance is very small. Measure absolute distance instead of only velocity.
-- [ ] Swipe-to-dismiss should only trigger for gestures with a tight horizontal angle, not diagonal/vertical motion.
+- [x] Quick swipe can still delete a song when the swipe distance is very small. Measure absolute distance instead of only velocity.
+- [x] Swipe-to-dismiss should only trigger for gestures with a tight horizontal angle, not diagonal/vertical motion.
 - [x] When deleting an account in account manager, snap the slider back, show a warning confirmation dialog, then remove the account from UI and storage only after confirmation.
 - [x] Clearing Search text while "Only songs with Leaderboard" is disabled can load results that look like leaderboard-only mode is enabled. This may indicate a cached-result issue.
 - [x] [v1.0] Preferred Mirror doesn't work most of the time. should have used a more durable and persistent way to determine user's geolocation.
@@ -188,6 +188,9 @@
 - [x] [v1.0] Download progress updates are passed through the centralized manager consistently.
 - [x] [v1.0] Search page has a task-view dropdown for current download tasks.
 - [x] Music stops when the audio output changes, for example when headphones disconnect.
+- [x] Music and Search previews pause when another app starts media playback.
+- [x] Beatmap swipe actions now require distance threshold instead of velocity-only dismissal.
+- [x] Beatmap swipe actions now reject diagonal/vertical gestures and allow reversing direction within the same swipe.
 
 ### Codebase Maintenance
 - [x] Refactored song list components into specialized UI components.

@@ -4,6 +4,8 @@ import android.content.Context
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
+import com.mosu.app.data.media.MediaStoreFileService
+import com.mosu.app.data.media.MosuBackupService
 
 /**
  * Comprehensive service for handling all track operations.
@@ -49,8 +51,9 @@ class TrackService {
             // Delete from database
             db.beatmapDao().deleteBeatmap(track)
             // Delete audio and cover files
-            java.io.File(track.audioPath).delete()
-            java.io.File(track.coverPath).delete()
+            val mediaStore = MediaStoreFileService(context)
+            mediaStore.deletePath(track.audioPath)
+            mediaStore.deletePath(track.coverPath)
 
             // Remove from preserved list if no more tracks from this set remain
             val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
@@ -64,6 +67,7 @@ class TrackService {
                 val updatedPrefs = currentPrefs.filter { it != track.beatmapSetId.toString() }.toSet()
                 prefs.edit().putStringSet(preservedSetIdsKey, updatedPrefs).apply()
             }
+            MosuBackupService.exportState(context, db)
         }
 
         /**
@@ -75,7 +79,8 @@ class TrackService {
             title: String,
             artist: String,
             difficultyName: String,
-            db: AppDatabase
+            db: AppDatabase,
+            context: Context? = null
         ) {
             val playlistTrack = PlaylistTrackEntity(
                 playlistId = playlistId,
@@ -85,6 +90,9 @@ class TrackService {
                 difficultyName = difficultyName
             )
             db.playlistDao().addTrack(playlistTrack)
+            if (context != null) {
+                MosuBackupService.exportState(context, db)
+            }
         }
 
         /**
@@ -94,9 +102,13 @@ class TrackService {
             playlistId: Long,
             beatmapSetId: Long,
             difficultyName: String,
-            db: AppDatabase
+            db: AppDatabase,
+            context: Context? = null
         ) {
             db.playlistDao().removeTrack(playlistId, beatmapSetId, difficultyName)
+            if (context != null) {
+                MosuBackupService.exportState(context, db)
+            }
         }
 
         /**

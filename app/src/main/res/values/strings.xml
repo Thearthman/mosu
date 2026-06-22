@@ -26,6 +26,9 @@
     <string name="search_filter_most_played">Most Played</string>
     <string name="search_filter_all">All</string>
     <string name="search_filter_select">Select</string>
+    <string name="search_history_title">Recent</string>
+    <string name="search_history_delete">Remove search history item</string>
+    <string name="search_history_clear">Clear search history</string>
 
     <!-- Library Screen -->
     <string name="library_title">Library</string>
@@ -74,6 +77,10 @@
     <string name="profile_account_not_logged_in">Not logged in</string>
     <string name="profile_account_needs_login">Needs login - tap to login</string>
     <string name="profile_account_expired_login">Expired - click to login</string>
+    <string name="profile_account_delete_title">Delete Account?</string>
+    <string name="profile_account_delete_message">Remove %1$s from this device?</string>
+    <string name="profile_account_delete_confirm">Delete</string>
+    <string name="profile_account_delete_cancel">Cancel</string>
 
     <!-- OAuth Credentials -->
     <string name="profile_oauth_dialog_title">OAuth Credentials</string>
@@ -116,6 +123,13 @@
     <string name="profile_restore_completed_progress">Restore completed! Restored %1$d/%2$d beatmaps</string>
     <string name="profile_restore_failed_progress">Restore failed: %1$s</string>
     <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
+    <string name="profile_config_backup_title">Config Backup</string>
+    <string name="profile_config_backup_desc">Export or import the library and playlist manifest.</string>
+    <string name="profile_config_export">Export</string>
+    <string name="profile_config_import">Import</string>
+    <string name="profile_config_exported">Config exported</string>
+    <string name="profile_config_imported">Imported %1$d tracks from config</string>
+    <string name="profile_config_failed">Config backup failed: %1$s</string>
 
     <!-- Info Popup -->
     <string name="info_cover_title">Show cover in info popup</string>

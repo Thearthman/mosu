@@ -4,17 +4,17 @@ import android.content.Context
 import android.util.Log
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
+import com.mosu.app.data.media.MediaStoreFileService
+import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.services.TrackService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import java.io.File
 
 import android.widget.Toast
 import com.mosu.app.R
 import com.mosu.app.data.repository.OsuRepository
-import kotlinx.coroutines.withContext
+import com.mosu.app.domain.model.ExtractedTrack
 import kotlinx.coroutines.flow.collect
 
 sealed class UnifiedDownloadState {
@@ -62,52 +62,34 @@ class BeatmapDownloadService(
                                 coverDownloadService.downloadFallbackCoverImage(targetId, targetCoversUrl)
                             } else null
 
-                            extractedTracks.forEach { track ->
-                                // For album sets, use individual track titles from .osu files.
-                                // For single sets, use the global search title/artist for state consistency.
-                                val finalTitle = if (isAlbumSet) track.title else title
-                                val finalArtist = if (isAlbumSet) track.artist else artist
-                                
-                                val entity = BeatmapEntity(
-                                    beatmapSetId = targetId,
-                                    title = finalTitle,
-                                    artist = finalArtist,
-                                    creator = creator,
-                                    difficultyName = track.difficultyName,
-                                    audioPath = track.audioFile.absolutePath,
-                                    coverPath = track.coverFile?.absolutePath ?: fallbackCoverPath ?: "",
-                                    genreId = genreId,
-                                    isAlbum = isAlbumSet
-                                )
-                                TrackService.addTrack(entity, db, context)
-                            }
-                            TrackService.updateTrackDownloadStatus(targetId, true, db)
+                            registerExtractedTracks(
+                                targetId = targetId,
+                                tracks = extractedTracks,
+                                title = title,
+                                artist = artist,
+                                creator = creator,
+                                genreId = genreId,
+                                isAlbumSet = isAlbumSet,
+                                fallbackCoverPath = fallbackCoverPath
+                            )
                             emit(UnifiedDownloadState.Success(targetId))
                             attemptSuccess = true
                         }
                         is DownloadState.Completed -> {
                             emit(UnifiedDownloadState.Progress(100, "Registering..."))
                             if (state.tracks.isEmpty()) throw Exception("No audio tracks found")
-                            
+
                             val isAlbumSet = state.tracks.size > 1
-                            state.tracks.forEach { track ->
-                                val finalTitle = if (isAlbumSet) track.title else title
-                                val finalArtist = if (isAlbumSet) track.artist else artist
-                                
-                                val entity = BeatmapEntity(
-                                    beatmapSetId = targetId,
-                                    title = finalTitle,
-                                    artist = finalArtist,
-                                    creator = creator,
-                                    difficultyName = track.difficultyName,
-                                    audioPath = track.audioFile.absolutePath,
-                                    coverPath = track.coverFile?.absolutePath ?: "",
-                                    genreId = genreId,
-                                    isAlbum = isAlbumSet
-                                )
-                                TrackService.addTrack(entity, db, context)
-                            }
-                            TrackService.updateTrackDownloadStatus(targetId, true, db)
+                            registerExtractedTracks(
+                                targetId = targetId,
+                                tracks = state.tracks,
+                                title = title,
+                                artist = artist,
+                                creator = creator,
+                                genreId = genreId,
+                                isAlbumSet = isAlbumSet,
+                                fallbackCoverPath = null
+                            )
                             emit(UnifiedDownloadState.Success(targetId))
                             attemptSuccess = true
                         }
@@ -177,5 +159,58 @@ class BeatmapDownloadService(
         if (!downloadSuccessful) {
             emit(UnifiedDownloadState.Error(lastErrorMessage.ifEmpty { "Download failed" }))
         }
+    }
+
+    private suspend fun registerExtractedTracks(
+        targetId: Long,
+        tracks: List<ExtractedTrack>,
+        title: String,
+        artist: String,
+        creator: String,
+        genreId: Int?,
+        isAlbumSet: Boolean,
+        fallbackCoverPath: String?
+    ) {
+        val mediaStore = MediaStoreFileService(context)
+
+        tracks.forEach { track ->
+            // For album sets, use individual track titles from .osu files.
+            // For single sets, use the global search title/artist for state consistency.
+            val finalTitle = if (isAlbumSet) track.title else title
+            val finalArtist = if (isAlbumSet) track.artist else artist
+            val audioUri = mediaStore.copyAudioToMediaStore(
+                source = track.audioFile,
+                beatmapSetId = targetId,
+                title = finalTitle,
+                artist = finalArtist,
+                difficultyName = track.difficultyName
+            )
+            val coverSource = track.coverFile?.takeIf { it.exists() }
+                ?: fallbackCoverPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+            val coverUri = coverSource?.let {
+                mediaStore.copyImageToMediaStore(
+                    source = it,
+                    beatmapSetId = targetId,
+                    title = finalTitle,
+                    difficultyName = track.difficultyName
+                )
+            }.orEmpty()
+
+            val entity = BeatmapEntity(
+                beatmapSetId = targetId,
+                title = finalTitle,
+                artist = finalArtist,
+                creator = creator,
+                difficultyName = track.difficultyName,
+                audioPath = audioUri,
+                coverPath = coverUri,
+                genreId = genreId,
+                isAlbum = isAlbumSet
+            )
+            TrackService.addTrack(entity, db, context)
+        }
+
+        TrackService.updateTrackDownloadStatus(targetId, true, db)
+        MosuBackupService.exportState(context, db)
     }
 }

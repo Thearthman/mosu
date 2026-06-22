@@ -1,10 +1,17 @@
 package com.mosu.app.ui.search
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -18,12 +25,22 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class SearchPreviewManager(
-    private val context: Context,
+    context: Context,
     private val musicController: MusicController
 ) {
+    private val appContext = context.applicationContext
     private var exoPlayer: ExoPlayer? = null
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var progressJob: Job? = null
+    private var noisyAudioReceiverRegistered = false
+
+    private val noisyAudioReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                stop()
+            }
+        }
+    }
     
     var previewingId by mutableStateOf<Long?>(null)
         private set
@@ -33,7 +50,14 @@ class SearchPreviewManager(
 
     private fun getPlayer(): ExoPlayer {
         if (exoPlayer == null) {
-            exoPlayer = ExoPlayer.Builder(context).build().apply {
+            exoPlayer = ExoPlayer.Builder(appContext).build().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .build(),
+                    true
+                )
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED) {
@@ -70,6 +94,7 @@ class SearchPreviewManager(
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
         player.play()
+        registerNoisyAudioReceiver()
         
         startProgressPolling()
     }
@@ -94,6 +119,7 @@ class SearchPreviewManager(
         progressJob?.cancel()
         progressJob = null
         exoPlayer?.stop()
+        unregisterNoisyAudioReceiver()
         previewingId = null
         progress = 0f
     }
@@ -102,5 +128,22 @@ class SearchPreviewManager(
         stop()
         exoPlayer?.release()
         exoPlayer = null
+    }
+
+    private fun registerNoisyAudioReceiver() {
+        if (noisyAudioReceiverRegistered) return
+        ContextCompat.registerReceiver(
+            appContext,
+            noisyAudioReceiver,
+            IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        noisyAudioReceiverRegistered = true
+    }
+
+    private fun unregisterNoisyAudioReceiver() {
+        if (!noisyAudioReceiverRegistered) return
+        appContext.unregisterReceiver(noisyAudioReceiver)
+        noisyAudioReceiverRegistered = false
     }
 }

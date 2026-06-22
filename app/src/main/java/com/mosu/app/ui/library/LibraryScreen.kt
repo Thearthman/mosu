@@ -62,8 +62,6 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
-import com.mosu.app.domain.download.BeatmapDownloadService
-import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.BeatmapSetActions
@@ -82,7 +80,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import android.widget.Toast
 import androidx.compose.foundation.layout.PaddingValues
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -91,7 +88,6 @@ fun LibraryScreen(
     db: AppDatabase,
     musicController: MusicController,
     repository: OsuRepository,
-    downloadService: BeatmapDownloadService,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     accessToken: String? = null,
     scrollToTop: Boolean = false,
@@ -551,12 +547,12 @@ fun LibraryScreen(
                 },
                 onAddToPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, track.difficultyName, db)
+                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, track.difficultyName, db, context)
                     }
                 },
                 onRemoveFromPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, track.difficultyName, db)
+                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, track.difficultyName, db, context)
                     }
                 },
                 beatmapSetId = track.beatmapSetId,

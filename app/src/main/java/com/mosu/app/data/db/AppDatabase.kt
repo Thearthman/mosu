@@ -17,9 +17,11 @@ import kotlinx.coroutines.withContext
         RecentPlayEntity::class,
         PlaylistEntity::class,
         PlaylistTrackEntity::class,
-        PreservedBeatmapSetIdEntity::class
+        PreservedBeatmapSetIdEntity::class,
+        SearchHistoryEntity::class,
+        DownloadTaskEntity::class
     ],
-    version = 15,
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +30,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recentPlayDao(): RecentPlayDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun preservedBeatmapSetIdDao(): PreservedBeatmapSetIdDao
+    abstract fun searchHistoryDao(): SearchHistoryDao
+    abstract fun downloadTaskDao(): DownloadTaskDao
 
     companion object {
         @Volatile
@@ -195,6 +199,41 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 15 to 16: Add persistent search history
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS search_history (
+                        query TEXT PRIMARY KEY NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """)
+            }
+        }
+
+        // Migration from version 16 to 17: Add persistent download task state.
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS download_tasks (
+                        setId INTEGER PRIMARY KEY NOT NULL,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        creator TEXT NOT NULL,
+                        accessToken TEXT,
+                        genreId INTEGER,
+                        coverUrl TEXT,
+                        status TEXT NOT NULL,
+                        progress INTEGER NOT NULL DEFAULT 0,
+                        statusMessage TEXT NOT NULL DEFAULT '',
+                        errorMessage TEXT,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """)
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -202,7 +241,17 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mosu_database"
                 )
-                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                .addMigrations(
+                    MIGRATION_8_9,
+                    MIGRATION_9_10,
+                    MIGRATION_10_11,
+                    MIGRATION_11_12,
+                    MIGRATION_12_13,
+                    MIGRATION_13_14,
+                    MIGRATION_14_15,
+                    MIGRATION_15_16,
+                    MIGRATION_16_17
+                )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()
                 INSTANCE = instance

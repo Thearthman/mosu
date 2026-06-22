@@ -1,8 +1,10 @@
 package com.mosu.app.ui.profile
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +38,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.core.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,71 +50,16 @@ import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.db.AppDatabase
+import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.repository.OsuRepository
-import com.mosu.app.domain.download.BeatmapDownloadService
-import com.mosu.app.domain.download.UnifiedDownloadState
+import com.mosu.app.domain.restore.RestoreDownloadsService
 import com.mosu.app.utils.RegionUtils
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-suspend fun performRestore(
-    context: Context,
-    repository: OsuRepository,
-    db: AppDatabase,
-    tokenManager: TokenManager,
-    downloadManager: com.mosu.app.domain.download.DownloadManager,
-    updateProgress: (Int, String) -> Unit,
-    updateRestoring: (Boolean) -> Unit
-) {
-    try {
-        updateRestoring(true)
-        updateProgress(0, context.getString(R.string.profile_restore_starting))
-
-        val preservedSetIds = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().firstOrNull() ?: emptyList()
-        if (preservedSetIds.isEmpty()) {
-            android.widget.Toast.makeText(context, context.getString(R.string.profile_restore_no_beatmaps), android.widget.Toast.LENGTH_SHORT).show()
-            updateRestoring(false)
-            return
-        }
-
-        val accessToken = tokenManager.getCurrentAccessToken()
-
-        var completed = 0
-        val total = preservedSetIds.size
-
-        for (preservedSetId in preservedSetIds) {
-            // Check if this beatmap set is already downloaded
-            val existingTracks = db.beatmapDao().getTracksForSet(preservedSetId.beatmapSetId)
-            if (existingTracks.isNotEmpty()) {
-                completed++
-                continue
-            }
-
-            downloadManager.enqueue(
-                setId = preservedSetId.beatmapSetId,
-                title = "Beatmap ${preservedSetId.beatmapSetId}", // Generic title if unknown
-                artist = "",
-                creator = "",
-                accessToken = accessToken,
-                genreId = null,
-                coverUrl = null
-            )
-            completed++
-        }
-
-        updateProgress(100, context.getString(R.string.profile_restore_completed_progress, completed, total))
-        android.widget.Toast.makeText(context, context.getString(R.string.profile_restore_completed_toast, completed), android.widget.Toast.LENGTH_LONG).show()
-
-    } catch (e: Exception) {
-        android.util.Log.e("ProfileScreen", "Restore failed", e)
-        updateProgress(0, context.getString(R.string.profile_restore_failed_progress, e.message))
-        android.widget.Toast.makeText(context, context.getString(R.string.profile_restore_failed_toast, e.message), android.widget.Toast.LENGTH_LONG).show()
-    } finally {
-        updateRestoring(false)
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class,ExperimentalMaterialApi::class)
 @Composable
@@ -123,7 +71,6 @@ fun ProfileScreen(
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
-    downloadService: BeatmapDownloadService,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit
@@ -135,6 +82,7 @@ fun ProfileScreen(
     var isRestoring by remember { mutableStateOf(false) }
     var restoreProgress by remember { mutableStateOf(0) }
     var restoreMessage by remember { mutableStateOf("") }
+    var pendingExportJson by remember { mutableStateOf<String?>(null) }
     
     var isRegionRefreshing by remember { mutableStateOf(false) }
     val regionRefreshRotation by rememberInfiniteTransition(label = "regionRefresh").animateFloat(
@@ -172,6 +120,8 @@ fun ProfileScreen(
     var showAddAccountDialog by remember { mutableStateOf(false) }
     var showAccountSwitcher by remember { mutableStateOf(false) }
     var showCredentialsDialog by remember { mutableStateOf(false) }
+    var pendingDeleteAccountId by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteAccountName by remember { mutableStateOf("") }
     var selectedAccountForCredentials by remember { mutableStateOf<String?>(null) }
     var newClientId by remember { mutableStateOf("") }
     var newClientSecret by remember { mutableStateOf("") }
@@ -180,6 +130,55 @@ fun ProfileScreen(
     val availableAccounts by accountManager.accounts.collectAsState(initial = emptyList())
     
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val exportConfigLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        val json = pendingExportJson
+        pendingExportJson = null
+        if (result.resultCode == Activity.RESULT_OK && uri != null && json != null) {
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(json.toByteArray(Charsets.UTF_8))
+                        } ?: error("Unable to open export file")
+                    }
+                    android.widget.Toast.makeText(context, context.getString(R.string.profile_config_exported), android.widget.Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, context.getString(R.string.profile_config_failed, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    val importConfigLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null) {
+            scope.launch {
+                try {
+                    val json = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                            ?: error("Unable to open import file")
+                    }
+                    val restored = MosuBackupService.restoreFromJson(
+                        context = context,
+                        db = db,
+                        json = json,
+                        requireEmptyLibrary = false
+                    )
+                    MosuBackupService.exportState(context, db)
+                    android.widget.Toast.makeText(context, context.getString(R.string.profile_config_imported, restored), android.widget.Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, context.getString(R.string.profile_config_failed, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     // Load cached user info immediately, update in background
     LaunchedEffect(currentAccountId) {
@@ -230,8 +229,6 @@ fun ProfileScreen(
             totalDownloaded = maps.groupBy { it.beatmapSetId }.size
         }
     }
-
-    val context = LocalContext.current
 
     // Fetch preserved count and sync with SharedPreferences backup (separate effect)
     LaunchedEffect(Unit) {
@@ -652,18 +649,35 @@ fun ProfileScreen(
                             onClick = {
                                 if (!isRestoring) {
                                     scope.launch {
-                                        performRestore(
-                                            context,
-                                            repository,
-                                            db,
-                                            tokenManager,
-                                            downloadManager,
-                                            { progress, message ->
+                                        try {
+                                            isRestoring = true
+                                            val result = RestoreDownloadsService(
+                                                context = context,
+                                                db = db,
+                                                tokenManager = tokenManager,
+                                                downloadManager = downloadManager
+                                            ).enqueueMissingPreservedDownloads { progress, message ->
                                                 restoreProgress = progress
                                                 restoreMessage = message
-                                            },
-                                            { restoring -> isRestoring = restoring }
-                                        )
+                                            }
+                                            val toastMessage = if (result.total == 0) {
+                                                context.getString(R.string.profile_restore_no_beatmaps)
+                                            } else {
+                                                context.getString(R.string.profile_restore_completed_toast, result.completed)
+                                            }
+                                            android.widget.Toast.makeText(context, toastMessage, android.widget.Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("ProfileScreen", "Restore failed", e)
+                                            restoreProgress = 0
+                                            restoreMessage = context.getString(R.string.profile_restore_failed_progress, e.message)
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                context.getString(R.string.profile_restore_failed_toast, e.message),
+                                                android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                        } finally {
+                                            isRestoring = false
+                                        }
                                     }
                                 }
                             },
@@ -686,6 +700,76 @@ fun ProfileScreen(
                             } else {
                                 Text(stringResource(R.string.profile_restore_button))
                             }
+                        }
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
+                    ) {
+                        Text(stringResource(R.string.profile_config_backup_title), style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.profile_config_backup_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    type = "*/*"
+                                    putExtra(
+                                        Intent.EXTRA_MIME_TYPES,
+                                        arrayOf("application/json", "text/json", "text/plain")
+                                    )
+                                }
+                                importConfigLauncher.launch(intent)
+                            }
+                        ) {
+                            Text(stringResource(R.string.profile_config_import))
+                        }
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        pendingExportJson = MosuBackupService.createManifestJson(db)
+                                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                            addCategory(Intent.CATEGORY_OPENABLE)
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TITLE, "mosu_manifest.json")
+                                        }
+                                        exportConfigLauncher.launch(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            context.getString(R.string.profile_config_failed, e.message ?: ""),
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }
+                        ) {
+                            Text(stringResource(R.string.profile_config_export))
                         }
                     }
                 }
@@ -885,6 +969,57 @@ fun ProfileScreen(
         )
     }
 
+    if (pendingDeleteAccountId != null) {
+        val accountIdToDelete = pendingDeleteAccountId!!
+        AlertDialog(
+            onDismissRequest = {
+                pendingDeleteAccountId = null
+                pendingDeleteAccountName = ""
+            },
+            title = { Text(stringResource(R.string.profile_account_delete_title)) },
+            text = {
+                Text(stringResource(R.string.profile_account_delete_message, pendingDeleteAccountName))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val wasCurrentAccount = accountIdToDelete == currentAccountId
+                            accountManager.deleteAccount(accountIdToDelete)
+
+                            if (wasCurrentAccount) {
+                                val remainingAccounts = availableAccounts.filter { it.id != accountIdToDelete }
+                                if (remainingAccounts.isNotEmpty()) {
+                                    accountManager.switchToAccount(remainingAccounts.first().id)
+                                } else {
+                                    tokenManager.setCurrentAccount("")
+                                }
+                            }
+
+                            pendingDeleteAccountId = null
+                            pendingDeleteAccountName = ""
+                        }
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.profile_account_delete_confirm),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeleteAccountId = null
+                        pendingDeleteAccountName = ""
+                    }
+                ) {
+                    Text(stringResource(R.string.profile_account_delete_cancel))
+                }
+            }
+        )
+    }
+
     // Account switcher bottom sheet
     if (showAccountSwitcher) {
         val sheetState = rememberModalBottomSheetState()
@@ -914,22 +1049,9 @@ fun ProfileScreen(
                         val dismissState = rememberDismissState(
                             confirmStateChange = { dismissValue ->
                                 if (dismissValue == DismissValue.DismissedToStart) {
-                                    // Left swipe - delete account
-                                    scope.launch {
-                                        val wasCurrentAccount = account.id == currentAccountId
-                                        accountManager.deleteAccount(account.id)
-
-                                        if (wasCurrentAccount) {
-                                            // If deleting current account, switch to first available account or clear
-                                            val remainingAccounts = availableAccounts.filter { it.id != account.id }
-                                            if (remainingAccounts.isNotEmpty()) {
-                                                accountManager.switchToAccount(remainingAccounts.first().id)
-                                            } else {
-                                                tokenManager.setCurrentAccount("")
-                                            }
-                                        }
-                                    }
-                                    true
+                                    pendingDeleteAccountId = account.id
+                                    pendingDeleteAccountName = account.userInfo?.username ?: account.id
+                                    false
                                 } else {
                                     false
                                 }
@@ -1207,11 +1329,17 @@ private fun MirrorSourceToggle(
     onSourceSelected: (String) -> Unit
 ) {
     val options = listOf("nerinyan", "sayobot")
+    val isLightTheme = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val outerPillColor = if (isLightTheme) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    }
     
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = outerPillColor
         ),
         modifier = Modifier.height(36.dp).wrapContentWidth()
     ) {
@@ -1257,4 +1385,3 @@ private fun languageLabel(code: String): String = when (code) {
     "zh-TW" -> stringResource(R.string.language_traditional_chinese)
     else -> stringResource(R.string.language_english)
 }
-

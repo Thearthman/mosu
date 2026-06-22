@@ -17,6 +17,9 @@ interface PlaylistDao {
     @Insert
     suspend fun insertPlaylist(playlist: PlaylistEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPlaylist(playlist: PlaylistEntity): Long
+
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deletePlaylist(playlistId: Long)
 
@@ -79,4 +82,3 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_tracks")
     fun getAllPlaylistTracks(): Flow<List<PlaylistTrackEntity>>
 }
-

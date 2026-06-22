@@ -30,7 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import java.io.File
+import com.mosu.app.utils.MediaPathUtils
 
 /**
  * Data class representing a simple beatmap item for selection
@@ -91,7 +91,7 @@ private fun SimpleBeatmapItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
-            model = File(beatmap.coverPath),
+            model = MediaPathUtils.asImageModel(beatmap.coverPath),
             contentDescription = null,
             modifier = Modifier
                 .padding(start = coverStartPadding)

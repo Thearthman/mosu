@@ -13,6 +13,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.SettingsManager
+import com.mosu.app.utils.MediaPathUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.File
 
 class MusicController(
     context: Context,
@@ -127,9 +127,9 @@ class MusicController(
         // Group by beatmapSetId to identify songs that are part of beatmapsets vs standalone
         val beatmapSetsInPlaylist = playlist.groupBy { it.beatmapSetId }
 
-        val mediaItems = playlist.map { beatmap ->
-            val file = File(beatmap.audioPath)
-
+        val mediaItems = playlist.mapNotNull { beatmap ->
+            val audioUri = MediaPathUtils.asUri(beatmap.audioPath) ?: return@mapNotNull null
+            val artworkUri = MediaPathUtils.asUri(beatmap.coverPath)
             // Check if this beatmap is part of a multi-difficulty beatmapset in the current playlist
             val isPartOfBeatmapset = beatmapSetsInPlaylist[beatmap.beatmapSetId]?.size ?: 0 > 1
 
@@ -144,11 +144,13 @@ class MusicController(
             val metadata = MediaMetadata.Builder()
                 .setTitle(displayTitle)
                 .setArtist(displayArtist)
-                .setArtworkUri(Uri.fromFile(File(beatmap.coverPath)))
+                .apply {
+                    artworkUri?.let { setArtworkUri(it) }
+                }
                 .build()
 
             MediaItem.Builder()
-                .setUri(Uri.fromFile(file))
+                .setUri(audioUri)
                 .setMediaId(beatmap.uid.toString())
                 .setMediaMetadata(metadata)
                 .build()

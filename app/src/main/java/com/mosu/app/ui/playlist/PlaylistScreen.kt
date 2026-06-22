@@ -74,10 +74,9 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.db.PlaylistTrackWithBeatmap
+import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
-import com.mosu.app.domain.download.BeatmapDownloadService
-import com.mosu.app.domain.download.UnifiedDownloadState
 import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.BeatmapSetActions
@@ -92,10 +91,10 @@ import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.SelectableBeatmapData
 import com.mosu.app.ui.components.SelectableBeatmapList
 import com.mosu.app.ui.components.beatmapSetList
+import com.mosu.app.utils.MediaPathUtils
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.launch
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,7 +102,6 @@ fun PlaylistScreen(
     db: AppDatabase,
     musicController: MusicController,
     repository: OsuRepository,
-    downloadService: BeatmapDownloadService,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     accessToken: String? = null,
     snackbarHostState: SnackbarHostState? = null,
@@ -325,7 +323,7 @@ fun PlaylistScreen(
                     val trackSetId = trackData.beatmapSetId
                     val trackDiff = trackData.difficultyName
                     deferredActionViewModel.viewModelScope.launch {
-                        TrackService.removeTrackFromPlaylist(playlistId, trackSetId, trackDiff, db)
+                        TrackService.removeTrackFromPlaylist(playlistId, trackSetId, trackDiff, db, context)
                         val key = "${playlistId}|${trackSetId}|${trackDiff}"
                         deferredActionViewModel.removePendingPlaylistRemoval(key)
                     }
@@ -368,7 +366,7 @@ fun PlaylistScreen(
                     val playlistId = selectedPlaylistId!!
                     val tracksToRemove = playlistTracksWithStatus.filter { it.beatmapSetId == set.id }
                     tracksToRemove.forEach { track ->
-                        TrackService.removeTrackFromPlaylist(playlistId, track.beatmapSetId, track.storedDifficultyName, db)
+                        TrackService.removeTrackFromPlaylist(playlistId, track.beatmapSetId, track.storedDifficultyName, db, context)
                         val key = "${playlistId}|${track.beatmapSetId}|${track.storedDifficultyName}"
                         deferredActionViewModel.removePendingPlaylistRemoval(key)
                     }
@@ -463,6 +461,7 @@ fun PlaylistScreen(
                                     db.playlistDao().removeAllTracksFromPlaylist(playlist.id)
                                     // Then delete the playlist itself
                                     db.playlistDao().deletePlaylist(playlist.id)
+                                    MosuBackupService.exportState(context, db)
                                 }
                             },
                             onRename = {
@@ -584,7 +583,7 @@ fun PlaylistScreen(
                                     addSelection.forEach { uid ->
                                         val track = downloadedTracks.find { it.uid == uid }
                                         if (track != null) {
-                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, track.title, track.artist, track.difficultyName, db)
+                                            TrackService.addTrackToPlaylist(playlistId, track.beatmapSetId, track.title, track.artist, track.difficultyName, db, context)
                                         }
                                     }
                                 }
@@ -622,6 +621,7 @@ fun PlaylistScreen(
                         if (name.isNotEmpty()) {
                             scope.launch {
                                 db.playlistDao().insertPlaylist(PlaylistEntity(name = name))
+                                MosuBackupService.exportState(context, db)
                             }
                             newPlaylistName = ""
                             showCreateDialog = false
@@ -660,6 +660,7 @@ fun PlaylistScreen(
                         if (name.isNotEmpty() && id != null) {
                             scope.launch {
                                 db.playlistDao().updatePlaylistName(id, name)
+                                MosuBackupService.exportState(context, db)
                             }
                             showRenameDialog = false
                         }
@@ -689,12 +690,12 @@ fun PlaylistScreen(
             },
                 onAddToPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, track.difficultyName, db)
+                        TrackService.addTrackToPlaylist(playlistId, beatmapSetId, track.title, track.artist, track.difficultyName, db, context)
                     }
                 },
                 onRemoveFromPlaylist = { playlistId, beatmapSetId ->
                     scope.launch {
-                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, track.difficultyName, db)
+                        TrackService.removeTrackFromPlaylist(playlistId, beatmapSetId, track.difficultyName, db, context)
                     }
                 },
             beatmapSetId = track.beatmapSetId,
@@ -895,7 +896,7 @@ private fun CollageBackground(
             Row(modifier = Modifier.weight(1f)) {
                 row.forEach { path ->
                     AsyncImage(
-                        model = File(path),
+                        model = MediaPathUtils.asImageModel(path),
                         contentDescription = null,
                         modifier = Modifier
                             .weight(1f)

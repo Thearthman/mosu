@@ -26,6 +26,9 @@
     <string name="search_filter_most_played">最多游玩</string>
     <string name="search_filter_all">全部</string>
     <string name="search_filter_select">选择</string>
+    <string name="search_history_title">最近</string>
+    <string name="search_history_delete">移除搜索历史项</string>
+    <string name="search_history_clear">清空搜索历史</string>
 
     <!-- 曲库界面 -->
     <string name="library_title">曲库</string>
@@ -74,6 +77,10 @@
     <string name="profile_account_not_logged_in">未登录</string>
     <string name="profile_account_needs_login">需要登录 - 点击登录</string>
     <string name="profile_account_expired_login">已过期 - 点击登录</string>
+    <string name="profile_account_delete_title">删除账户？</string>
+    <string name="profile_account_delete_message">从此设备移除 %1$s？</string>
+    <string name="profile_account_delete_confirm">删除</string>
+    <string name="profile_account_delete_cancel">取消</string>
 
     <!-- OAuth 凭证 -->
     <string name="profile_oauth_dialog_title">OAuth 凭证</string>
@@ -116,6 +123,13 @@
     <string name="profile_restore_completed_progress">恢复完成！已恢复 %1$d/%2$d 首谱面</string>
     <string name="profile_restore_failed_progress">恢复失败: %1$s</string>
     <string name="profile_restore_failed_toast">恢复失败: %1$s</string>
+    <string name="profile_config_backup_title">配置备份</string>
+    <string name="profile_config_backup_desc">导出或导入曲库和歌单清单。</string>
+    <string name="profile_config_export">导出</string>
+    <string name="profile_config_import">导入</string>
+    <string name="profile_config_exported">配置已导出</string>
+    <string name="profile_config_imported">已从配置导入 %1$d 首歌曲</string>
+    <string name="profile_config_failed">配置备份失败: %1$s</string>
 
     <!-- 信息弹窗 -->
     <string name="info_cover_title">信息弹窗显示封面</string>

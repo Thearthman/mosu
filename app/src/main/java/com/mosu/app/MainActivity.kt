@@ -1,8 +1,12 @@
 package com.mosu.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -57,6 +61,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.asPaddingValues
@@ -66,14 +72,11 @@ import androidx.compose.ui.Alignment
 import com.mosu.app.data.AccountManager
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
+import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.utils.RegionUtils
-import com.mosu.app.utils.RegionInfo
 import com.mosu.app.data.api.TokenAuthenticator
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
-import com.mosu.app.domain.download.CoverDownloadService
-import com.mosu.app.domain.download.ZipExtractor
-import com.mosu.app.domain.download.BeatmapDownloadService
 import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
@@ -90,10 +93,47 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
 import com.mosu.app.data.api.RetrofitClient
-import com.mosu.app.domain.download.BeatmapDownloader
-import kotlinx.coroutines.runBlocking
+
+private const val REGION_RECHECK_INTERVAL_MS = 30L * 24L * 60L * 60L * 1000L
 
 class MainActivity : ComponentActivity() {
+    private fun mediaRestorePermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(
+                Manifest.permission.READ_MEDIA_AUDIO,
+                Manifest.permission.READ_MEDIA_IMAGES
+            )
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    private fun hasRequiredMediaRestorePermissions(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun restoreMediaStoreBackupWhenAllowed(db: AppDatabase) {
+        if (hasRequiredMediaRestorePermissions()) {
+            restoreMediaStoreBackup(db)
+        } else {
+            ActivityCompat.requestPermissions(this, mediaRestorePermissions(), MEDIA_RESTORE_PERMISSION_REQUEST)
+        }
+    }
+
+    private fun restoreMediaStoreBackup(db: AppDatabase) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                MosuBackupService.restoreIfLibraryEmpty(this@MainActivity, db)
+            } catch (e: Exception) {
+                Log.w("MainActivity", "MediaStore restore failed", e)
+            }
+        }
+    }
 
     private fun scheduleCacheCleanup() {
         // Run cache cleanup in background thread
@@ -127,15 +167,12 @@ class MainActivity : ComponentActivity() {
         val db = AppDatabase.getDatabase(this)
         val repository = OsuRepository(db.searchCacheDao())
         val settingsManager = SettingsManager(this)
-        val beatmapDownloader = BeatmapDownloader(this, settingsManager)
-        val zipExtractor = ZipExtractor(this)
-        val coverDownloadService = CoverDownloadService(this)
-        val downloadService = BeatmapDownloadService(this, beatmapDownloader, zipExtractor, coverDownloadService, db, repository)
-        val downloadManager = com.mosu.app.domain.download.DownloadManager.getInstance(this, downloadService)
+        val downloadManager = com.mosu.app.domain.download.DownloadManager.getInstance(this, db)
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
         val accountManager = AccountManager(this, tokenManager)
 
+        restoreMediaStoreBackupWhenAllowed(db)
 
         setContent {
             MosuTheme {
@@ -146,7 +183,6 @@ class MainActivity : ComponentActivity() {
                     tokenManager = tokenManager,
                     accountManager = accountManager,
                     settingsManager = settingsManager,
-                    downloadService = downloadService,
                     downloadManager = downloadManager,
                     redirectUri = redirectUri
                 )
@@ -159,6 +195,21 @@ class MainActivity : ComponentActivity() {
         // Schedule periodic cache cleanup
         scheduleCacheCleanup()
     }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == MEDIA_RESTORE_PERMISSION_REQUEST && hasRequiredMediaRestorePermissions()) {
+            restoreMediaStoreBackup(AppDatabase.getDatabase(this))
+        }
+    }
+
+    companion object {
+        private const val MEDIA_RESTORE_PERMISSION_REQUEST = 2001
+    }
 }
 
 @Composable
@@ -169,7 +220,6 @@ fun MainScreen(
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
-    downloadService: BeatmapDownloadService,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     redirectUri: String
 ) {
@@ -235,27 +285,25 @@ fun MainScreen(
 
     // Initialize accounts and migrate settings on first launch
     LaunchedEffect(Unit) {
-        // Fetch preferred mirror asynchronously
-        val mirror = settingsManager.preferredMirror.first()
-        // preferredMirror state will be updated by the collectAsState below
-        
-        // Region check for automatic API switching
+        // Region check for automatic mirror selection
         launch {
             val isChecked = settingsManager.regionChecked.first()
             val storedRegion = settingsManager.detectedRegion.first()
-            
-            // Re-check only if never checked
-            if (!isChecked) {
-                val region = RegionUtils.getDeviceRegion()
+            val checkedAt = settingsManager.regionCheckedAt.first()
+            val mirrorManuallySelected = settingsManager.mirrorManuallySelected.first()
+            val now = System.currentTimeMillis()
+            val regionCheckIsStale = checkedAt == 0L || now - checkedAt > REGION_RECHECK_INTERVAL_MS
+
+            if (!mirrorManuallySelected && (!isChecked || storedRegion.isNullOrBlank() || regionCheckIsStale)) {
+                val region = RegionUtils.getDeviceRegion(context.applicationContext)
                 if (region != null) {
-                    settingsManager.setDetectedRegion(region.countryCode)
-                    if (region.countryCode == "CN") {
-                        settingsManager.setPreferredMirror("sayobot")
-                        android.util.Log.d("MainActivity", "Region detected as CN, switched to Sayobot API")
-                    } else {
-                        settingsManager.setPreferredMirror("nerinyan")
-                        android.util.Log.d("MainActivity", "Region detected as ${region.countryCode}, using official API")
-                    }
+                    val mirror = RegionUtils.preferredMirrorFor(region)
+                    settingsManager.setDetectedRegion(region.countryCode, region.source)
+                    settingsManager.setPreferredMirror(mirror, manual = false)
+                    android.util.Log.d(
+                        "MainActivity",
+                        "Region detected as ${region.countryCode} via ${region.source}, using $mirror mirror"
+                    )
                 }
                 settingsManager.setRegionChecked(true)
             }
@@ -434,7 +482,6 @@ fun MainScreen(
                             db = db,
                             musicController = musicController,
                             repository = repository,
-                            downloadService = downloadService,
                             downloadManager = downloadManager,
                             accessToken = accessToken,
                             scrollToTop = scrollLibraryToTop,
@@ -444,7 +491,7 @@ fun MainScreen(
                         )
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController, repository, downloadService, downloadManager, accessToken, snackbarHostState, deferredActionViewModel)
+                        PlaylistScreen(db, musicController, repository, downloadManager, accessToken, snackbarHostState, deferredActionViewModel)
                     }
                     composable("search") {
                         SearchScreen(
@@ -454,7 +501,6 @@ fun MainScreen(
                             accountManager = accountManager,
                             settingsManager = settingsManager,
                             musicController = musicController,
-                            downloadService = downloadService,
                             downloadManager = downloadManager,
                             scrollToTop = scrollSearchToTop,
                             onScrolledToTop = { scrollSearchToTop = false },
@@ -470,7 +516,6 @@ fun MainScreen(
                             tokenManager = tokenManager,
                             accountManager = accountManager,
                             settingsManager = settingsManager,
-                            downloadService = downloadService,
                             downloadManager = downloadManager,
                             onLoginClick = {
                                 if (clientId.isNotEmpty()) {

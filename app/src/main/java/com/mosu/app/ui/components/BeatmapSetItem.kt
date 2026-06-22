@@ -34,7 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.R
-import java.io.File
+import com.mosu.app.utils.MediaPathUtils
 
 /**
  * A reusable component for displaying a BeatmapSet item (flat row)
@@ -83,7 +83,7 @@ fun BeatmapSetItem(
 
         // Cover Art
         AsyncImage(
-            model = if (set.coverPath != null) File(set.coverPath) else set.coverUrl,
+            model = MediaPathUtils.asImageModel(set.coverPath, set.coverUrl),
             contentDescription = null,
             modifier = Modifier
                 .size(44.dp) // Slightly smaller to fit 60dp

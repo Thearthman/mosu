@@ -10,10 +10,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.db.AppDatabase
+import com.mosu.app.data.db.SearchHistoryEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.search.BeatmapSearchService
 import com.mosu.app.domain.search.RecentItem
-import com.mosu.app.ui.components.DownloadProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -88,7 +88,7 @@ class SearchViewModel(
         playedMode: String,
         searchAny: Boolean
     ) {
-        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard|$selectedGenreId"
+        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$selectedGenreId"
         if (lastInitialLoadKey == loadKey) return
         lastInitialLoadKey = loadKey
 
@@ -189,6 +189,32 @@ class SearchViewModel(
         searchResultsMetadata = emptyMap()
         recentTimestamps = emptyMap()
         lastInitialLoadKey = null
+    }
+
+    fun recordSearchHistory(query: String = searchQuery) {
+        val normalized = normalizeHistoryQuery(query) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            db.searchHistoryDao().upsertSearch(SearchHistoryEntity(normalized))
+            db.searchHistoryDao().trimTo(50)
+        }
+    }
+
+    fun deleteSearchHistory(query: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.searchHistoryDao().deleteSearch(query)
+        }
+    }
+
+    fun clearSearchHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.searchHistoryDao().clearSearches()
+        }
+    }
+
+    private fun normalizeHistoryQuery(query: String): String? {
+        val noControl = query.replace(Regex("[\\p{Cntrl}]"), "")
+        val collapsedSpaces = noControl.replace(Regex("\\s+"), " ").trim()
+        return collapsedSpaces.ifEmpty { null }
     }
 }
 

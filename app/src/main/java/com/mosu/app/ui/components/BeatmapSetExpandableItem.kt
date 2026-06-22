@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.R
 import kotlinx.coroutines.CoroutineScope
-import java.io.File
+import com.mosu.app.utils.MediaPathUtils
 
 /**
  * An expandable beatmap set item header with swipe actions.
@@ -91,7 +91,7 @@ fun BeatmapSetHeaderItem(
     ) {
         // Cover Art
         AsyncImage(
-            model = if (album.coverPath != null) File(album.coverPath) else album.coverUrl,
+            model = MediaPathUtils.asImageModel(album.coverPath, album.coverUrl),
             contentDescription = null,
             modifier = Modifier
                 .size(44.dp) // Adjusted for 60dp

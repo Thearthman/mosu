@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.media3.common.Player
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,9 @@ class SettingsManager(private val context: Context) {
         private val API_SOURCE_KEY_OLD = stringPreferencesKey("api_source") // Deprecated
         private val REGION_CHECKED_KEY = booleanPreferencesKey("region_checked")
         private val DETECTED_REGION_KEY = stringPreferencesKey("detected_region")
+        private val DETECTED_REGION_SOURCE_KEY = stringPreferencesKey("detected_region_source")
+        private val REGION_CHECKED_AT_KEY = longPreferencesKey("region_checked_at")
+        private val MIRROR_MANUAL_OVERRIDE_KEY = booleanPreferencesKey("mirror_manual_override")
     }
 
     val detectedRegion: Flow<String?> = context.settingsDataStore.data
@@ -37,9 +41,22 @@ class SettingsManager(private val context: Context) {
             preferences[DETECTED_REGION_KEY]
         }
 
-    suspend fun setDetectedRegion(region: String) {
+    val detectedRegionSource: Flow<String?> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[DETECTED_REGION_SOURCE_KEY]
+        }
+
+    val regionCheckedAt: Flow<Long> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[REGION_CHECKED_AT_KEY] ?: 0L
+        }
+
+    suspend fun setDetectedRegion(region: String, source: String = "unknown") {
         context.settingsDataStore.edit { preferences ->
             preferences[DETECTED_REGION_KEY] = region
+            preferences[DETECTED_REGION_SOURCE_KEY] = source
+            preferences[REGION_CHECKED_KEY] = true
+            preferences[REGION_CHECKED_AT_KEY] = System.currentTimeMillis()
         }
     }
 
@@ -58,9 +75,15 @@ class SettingsManager(private val context: Context) {
             }
         }
 
-    suspend fun setPreferredMirror(mirror: String) {
+    val mirrorManuallySelected: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[MIRROR_MANUAL_OVERRIDE_KEY] ?: false
+        }
+
+    suspend fun setPreferredMirror(mirror: String, manual: Boolean = true) {
         context.settingsDataStore.edit { preferences ->
             preferences[PREFERRED_MIRROR_KEY] = mirror
+            preferences[MIRROR_MANUAL_OVERRIDE_KEY] = manual
         }
     }
 
@@ -72,6 +95,9 @@ class SettingsManager(private val context: Context) {
     suspend fun setRegionChecked(checked: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[REGION_CHECKED_KEY] = checked
+            if (checked) {
+                preferences[REGION_CHECKED_AT_KEY] = System.currentTimeMillis()
+            }
         }
     }
 
@@ -176,4 +202,3 @@ class SettingsManager(private val context: Context) {
         }
     }
 }
-

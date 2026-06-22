@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
         android:allowBackup="true"
@@ -51,10 +54,11 @@
         </service>
 
         <service
-            android:name=".domain.download.DownloadService"
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:exported="false"
             android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            tools:node="merge" />
+
     </application>
 
 </manifest>
-

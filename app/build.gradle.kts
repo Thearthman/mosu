@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.mosu.app"
     compileSdk = 34
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.mosu.app"

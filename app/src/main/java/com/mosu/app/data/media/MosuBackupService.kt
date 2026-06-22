@@ -2,6 +2,9 @@ package com.mosu.app.data.media
 
 import android.content.Context
 import android.util.Log
+import com.mosu.app.data.AccountCredentialBackup
+import com.mosu.app.data.AccountManager
+import com.mosu.app.data.TokenManager
 import com.google.gson.Gson
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
@@ -18,19 +21,28 @@ object MosuBackupService {
 
     suspend fun exportState(context: Context, db: AppDatabase) = withContext(Dispatchers.IO) {
         runCatching {
-            MediaStoreFileService(context).writeManifest(createManifestJson(db))
+            MediaStoreFileService(context).writeManifest(
+                createManifestJson(
+                    db = db,
+                    accountManager = AccountManager(context, TokenManager(context))
+                )
+            )
         }.onFailure { error ->
             Log.w(TAG, "Unable to export MediaStore manifest", error)
         }
     }
 
-    suspend fun createManifestJson(db: AppDatabase): String = withContext(Dispatchers.IO) {
+    suspend fun createManifestJson(
+        db: AppDatabase,
+        accountManager: AccountManager? = null
+    ): String = withContext(Dispatchers.IO) {
         val beatmaps = db.beatmapDao().getAllBeatmaps().first()
         val playlists = db.playlistDao().getPlaylists().first()
         val playlistTracks = db.playlistDao().getAllPlaylistTracks().first()
 
         val manifest = MosuManifest(
             exportedAt = System.currentTimeMillis(),
+            accountCredentials = accountManager?.getCredentialBackups().orEmpty(),
             tracks = beatmaps.map { it.toBackupTrack() },
             playlists = playlists.map { it.toBackupPlaylist() },
             playlistTracks = playlistTracks.map { it.toBackupPlaylistTrack() }
@@ -52,7 +64,8 @@ object MosuBackupService {
         context: Context,
         db: AppDatabase,
         json: String,
-        requireEmptyLibrary: Boolean
+        requireEmptyLibrary: Boolean,
+        accountManager: AccountManager? = null
     ): Int = withContext(Dispatchers.IO) {
         if (requireEmptyLibrary && db.beatmapDao().getAllBeatmaps().first().isNotEmpty()) {
             return@withContext 0
@@ -62,6 +75,9 @@ object MosuBackupService {
             .onFailure { Log.w(TAG, "Unable to parse MediaStore manifest", it) }
             .getOrNull()
             ?: return@withContext 0
+
+        val effectiveAccountManager = accountManager ?: AccountManager(context, TokenManager(context))
+        effectiveAccountManager.restoreCredentialBackups(manifest.accountCredentials)
 
         val mediaStore = MediaStoreFileService(context)
         val restoredKeys = mutableSetOf<String>()
@@ -161,6 +177,7 @@ object MosuBackupService {
 data class MosuManifest(
     val version: Int = 1,
     val exportedAt: Long = System.currentTimeMillis(),
+    val accountCredentials: List<AccountCredentialBackup> = emptyList(),
     val tracks: List<BackupTrack> = emptyList(),
     val playlists: List<BackupPlaylist> = emptyList(),
     val playlistTracks: List<BackupPlaylistTrack> = emptyList()

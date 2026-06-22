@@ -261,6 +261,22 @@ class TokenManager(private val context: Context) {
         return accountIds.toList()
     }
 
+    suspend fun getAccountCredentialIds(): List<String> {
+        val preferences = context.dataStore.data.first()
+        val accountIds = mutableSetOf<String>()
+
+        preferences.asMap().keys.forEach { key ->
+            if (key.name.startsWith("client_id_")) {
+                val accountId = key.name.removePrefix("client_id_")
+                if (!preferences[clientSecretKey(accountId)].isNullOrBlank()) {
+                    accountIds.add(accountId)
+                }
+            }
+        }
+
+        return accountIds.toList()
+    }
+
 
     /**
      * Check if a specific account needs login (no token or expired token)
@@ -274,4 +290,3 @@ class TokenManager(private val context: Context) {
         return token == null || (expiry != null && System.currentTimeMillis() >= expiry)
     }
 }
-

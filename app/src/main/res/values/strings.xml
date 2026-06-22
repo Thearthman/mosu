@@ -124,7 +124,7 @@
     <string name="profile_restore_failed_progress">Restore failed: %1$s</string>
     <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
     <string name="profile_config_backup_title">Config Backup</string>
-    <string name="profile_config_backup_desc">Export or import the library and playlist manifest.</string>
+    <string name="profile_config_backup_desc">Export or import library, playlists, and account credentials.</string>
     <string name="profile_config_export">Export</string>
     <string name="profile_config_import">Import</string>
     <string name="profile_config_exported">Config exported</string>

@@ -102,6 +102,59 @@ class AccountManager(
         val userInfoJson = preferences[userInfoKey(accountId)]
         return userInfoJson?.let { gson.fromJson(it, OsuUserCompact::class.java) }
     }
+
+    suspend fun getCredentialBackups(): List<AccountCredentialBackup> {
+        val accountIds = tokenManager.getAccountCredentialIds()
+        val preferences = context.accountDataStore.data.first()
+        return accountIds.mapNotNull { accountId ->
+            val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
+            if (clientId.isNullOrBlank() || clientSecret.isNullOrBlank()) {
+                null
+            } else {
+                AccountCredentialBackup(
+                    accountId = accountId,
+                    clientId = clientId,
+                    clientSecret = clientSecret,
+                    userInfoJson = preferences[userInfoKey(accountId)]
+                )
+            }
+        }
+    }
+
+    suspend fun restoreCredentialBackups(accounts: List<AccountCredentialBackup>) {
+        accounts.forEach { account ->
+            if (account.accountId.isBlank() ||
+                account.clientId.isBlank() ||
+                account.clientSecret.isBlank()
+            ) {
+                return@forEach
+            }
+
+            tokenManager.saveAccountCredentials(
+                accountId = account.accountId,
+                clientId = account.clientId,
+                clientSecret = account.clientSecret
+            )
+            account.userInfoJson
+                ?.takeIf { it.isNotBlank() }
+                ?.let { userInfoJson ->
+                    context.accountDataStore.edit { preferences ->
+                        preferences[userInfoKey(account.accountId)] = userInfoJson
+                    }
+                }
+        }
+
+        val currentAccountId = tokenManager.getCurrentAccountId()
+        val firstRestoredAccount = accounts.firstOrNull {
+            it.accountId.isNotBlank() &&
+                it.clientId.isNotBlank() &&
+                it.clientSecret.isNotBlank()
+        }?.accountId
+        if (currentAccountId == null && firstRestoredAccount != null) {
+            tokenManager.setCurrentAccount(firstRestoredAccount)
+        }
+    }
+
     // Delete account
     suspend fun deleteAccount(accountId: String) {
         context.accountDataStore.edit { preferences ->
@@ -205,3 +258,10 @@ class AccountManager(
         }
     }
 }
+
+data class AccountCredentialBackup(
+    val accountId: String,
+    val clientId: String,
+    val clientSecret: String,
+    val userInfoJson: String? = null
+)

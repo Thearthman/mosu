@@ -169,7 +169,8 @@ fun ProfileScreen(
                         context = context,
                         db = db,
                         json = json,
-                        requireEmptyLibrary = false
+                        requireEmptyLibrary = false,
+                        accountManager = accountManager
                     )
                     MosuBackupService.exportState(context, db)
                     android.widget.Toast.makeText(context, context.getString(R.string.profile_config_imported, restored), android.widget.Toast.LENGTH_LONG).show()
@@ -752,7 +753,10 @@ fun ProfileScreen(
                             onClick = {
                                 scope.launch {
                                     try {
-                                        pendingExportJson = MosuBackupService.createManifestJson(db)
+                                        pendingExportJson = MosuBackupService.createManifestJson(
+                                            db = db,
+                                            accountManager = accountManager
+                                        )
                                         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                             addCategory(Intent.CATEGORY_OPENABLE)
                                             type = "application/json"

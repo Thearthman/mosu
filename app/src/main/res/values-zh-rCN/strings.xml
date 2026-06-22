@@ -124,7 +124,7 @@
     <string name="profile_restore_failed_progress">恢复失败: %1$s</string>
     <string name="profile_restore_failed_toast">恢复失败: %1$s</string>
     <string name="profile_config_backup_title">配置备份</string>
-    <string name="profile_config_backup_desc">导出或导入曲库和歌单清单。</string>
+    <string name="profile_config_backup_desc">导出或导入曲库、歌单和账号凭证。</string>
     <string name="profile_config_export">导出</string>
     <string name="profile_config_import">导入</string>
     <string name="profile_config_exported">配置已导出</string>

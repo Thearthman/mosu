@@ -4,8 +4,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val defaultReleaseStoreFile = providers.provider {
+    rootProject.file("../keystores/mosu.jks")
+        .takeIf { it.isFile }
+        ?.absolutePath
+}
 val releaseStoreFile = providers.gradleProperty("MOSU_RELEASE_STORE_FILE")
     .orElse(providers.environmentVariable("MOSU_RELEASE_STORE_FILE"))
+    .orElse(defaultReleaseStoreFile)
 val releaseStorePassword = providers.gradleProperty("MOSU_RELEASE_STORE_PASSWORD")
     .orElse(providers.environmentVariable("MOSU_RELEASE_STORE_PASSWORD"))
 val releaseKeyAlias = providers.gradleProperty("MOSU_RELEASE_KEY_ALIAS")

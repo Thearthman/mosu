@@ -11,12 +11,14 @@ import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.db.PlaylistEntity
 import com.mosu.app.data.db.PlaylistTrackEntity
 import com.mosu.app.data.db.PreservedBeatmapSetIdEntity
+import com.mosu.app.data.db.RecentPlayEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 object MosuBackupService {
     private const val TAG = "MosuBackupService"
+    private const val MAX_RECENT_PLAYS = 500
     private val gson = Gson()
 
     suspend fun exportState(context: Context, db: AppDatabase) = withContext(Dispatchers.IO) {
@@ -39,13 +41,15 @@ object MosuBackupService {
         val beatmaps = db.beatmapDao().getAllBeatmaps().first()
         val playlists = db.playlistDao().getPlaylists().first()
         val playlistTracks = db.playlistDao().getAllPlaylistTracks().first()
+        val recentPlays = db.recentPlayDao().getRecentPlays()
 
         val manifest = MosuManifest(
             exportedAt = System.currentTimeMillis(),
             accountCredentials = accountManager?.getCredentialBackups().orEmpty(),
             tracks = beatmaps.map { it.toBackupTrack() },
             playlists = playlists.map { it.toBackupPlaylist() },
-            playlistTracks = playlistTracks.map { it.toBackupPlaylistTrack() }
+            playlistTracks = playlistTracks.map { it.toBackupPlaylistTrack() },
+            recentPlays = recentPlays.map { it.toBackupRecentPlay() }
         )
 
         gson.toJson(manifest)
@@ -76,12 +80,16 @@ object MosuBackupService {
             .getOrNull()
             ?: return@withContext 0
 
+        val tracks = manifest.tracks.orEmpty()
+        val playlists = manifest.playlists.orEmpty()
+        val playlistTracks = manifest.playlistTracks.orEmpty()
+
         val effectiveAccountManager = accountManager ?: AccountManager(context, TokenManager(context))
-        effectiveAccountManager.restoreCredentialBackups(manifest.accountCredentials)
+        effectiveAccountManager.restoreCredentialBackups(manifest.accountCredentials.orEmpty())
 
         val mediaStore = MediaStoreFileService(context)
         val restoredKeys = mutableSetOf<String>()
-        manifest.tracks.forEach { backup ->
+        tracks.forEach { backup ->
             if (!mediaStore.canRead(backup.audioUri)) return@forEach
 
             val coverUri = backup.coverUri.takeIf { mediaStore.canRead(it) }.orEmpty()
@@ -104,7 +112,7 @@ object MosuBackupService {
             restoredKeys += backup.trackKey()
         }
 
-        manifest.playlists
+        playlists
             .sortedBy { it.createdAt }
             .forEach { playlist ->
                 db.playlistDao().upsertPlaylist(
@@ -116,7 +124,7 @@ object MosuBackupService {
                 )
             }
 
-        manifest.playlistTracks.forEach { backup ->
+        playlistTracks.forEach { backup ->
             db.playlistDao().addTrack(
                 PlaylistTrackEntity(
                     playlistId = backup.playlistId,
@@ -130,7 +138,9 @@ object MosuBackupService {
             )
         }
 
-        Log.i(TAG, "Restored ${restoredKeys.size} tracks and ${manifest.playlists.size} playlists from MediaStore manifest")
+        restoreRecentPlays(db, manifest.recentPlays.orEmpty())
+
+        Log.i(TAG, "Restored ${restoredKeys.size} tracks and ${playlists.size} playlists from MediaStore manifest")
         restoredKeys.size
     }
 
@@ -169,6 +179,49 @@ object MosuBackupService {
         )
     }
 
+    private fun RecentPlayEntity.toBackupRecentPlay(): BackupRecentPlay {
+        return BackupRecentPlay(
+            scoreId = scoreId,
+            beatmapSetId = beatmapSetId,
+            title = title,
+            artist = artist,
+            creator = creator,
+            coverUrl = coverUrl,
+            genreId = genreId,
+            playedAt = playedAt
+        )
+    }
+
+    private fun BackupRecentPlay.toRecentPlayEntity(): RecentPlayEntity {
+        return RecentPlayEntity(
+            scoreId = scoreId,
+            beatmapSetId = beatmapSetId,
+            title = title,
+            artist = artist,
+            creator = creator,
+            coverUrl = coverUrl,
+            genreId = genreId,
+            playedAt = playedAt
+        )
+    }
+
+    private suspend fun restoreRecentPlays(db: AppDatabase, imported: List<BackupRecentPlay>) {
+        if (imported.isEmpty()) return
+
+        val existing = db.recentPlayDao().getRecentPlays().map { it.toBackupRecentPlay() }
+        val merged = (imported + existing)
+            .sortedByDescending { it.playedAt }
+            .distinctBy { it.dedupKey() }
+            .take(MAX_RECENT_PLAYS)
+            .map { it.toRecentPlayEntity() }
+
+        db.recentPlayDao().replaceAll(merged)
+    }
+
+    private fun BackupRecentPlay.dedupKey(): String {
+        return scoreId?.let { "score:$it" } ?: "beatmap-set:$beatmapSetId:$playedAt"
+    }
+
     private fun BackupTrack.trackKey(): String = "$beatmapSetId|$difficultyName"
 
     private fun BackupPlaylistTrack.trackKey(): String = "$beatmapSetId|$difficultyName"
@@ -177,10 +230,11 @@ object MosuBackupService {
 data class MosuManifest(
     val version: Int = 1,
     val exportedAt: Long = System.currentTimeMillis(),
-    val accountCredentials: List<AccountCredentialBackup> = emptyList(),
-    val tracks: List<BackupTrack> = emptyList(),
-    val playlists: List<BackupPlaylist> = emptyList(),
-    val playlistTracks: List<BackupPlaylistTrack> = emptyList()
+    val accountCredentials: List<AccountCredentialBackup>? = emptyList(),
+    val tracks: List<BackupTrack>? = emptyList(),
+    val playlists: List<BackupPlaylist>? = emptyList(),
+    val playlistTracks: List<BackupPlaylistTrack>? = emptyList(),
+    val recentPlays: List<BackupRecentPlay>? = emptyList()
 )
 
 data class BackupTrack(
@@ -210,4 +264,15 @@ data class BackupPlaylistTrack(
     val difficultyName: String,
     val addedAt: Long,
     val isDownloaded: Boolean
+)
+
+data class BackupRecentPlay(
+    val scoreId: Long? = null,
+    val beatmapSetId: Long,
+    val title: String,
+    val artist: String,
+    val creator: String,
+    val coverUrl: String? = null,
+    val genreId: Int? = null,
+    val playedAt: Long
 )

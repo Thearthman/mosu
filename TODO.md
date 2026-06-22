@@ -50,7 +50,7 @@
 - [x] Added ability to log in two accounts and preserve both login records.
 - [x] Implemented automatic region check on app launch to switch to Sayobot API for users in Mainland China.
 - [x] Added manual API/mirror switching after finding the original API was often fast enough in Mainland China.
-- [x] [v1.0] Stored downloaded audio/covers in MediaStore and added an automatic manifest restore path for reinstall recovery.
+- [x] [v1.0] Stored downloaded audio/covers in MediaStore and added an automatic manifest restore path for reinstall recovery, including library data, playlists, account credentials, and played history.
 
 #### Settings
 - [x] Implemented setting for whether played-song filtering uses the literal search URL tag or the user's most-played data.

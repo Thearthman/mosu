@@ -7,7 +7,6 @@
 - [x] Quick swipe can still delete a song when the swipe distance is very small. Measure absolute distance instead of only velocity.
 - [x] Swipe-to-dismiss should only trigger for gestures with a tight horizontal angle, not diagonal/vertical motion.
 - [x] When deleting an account in account manager, snap the slider back, show a warning confirmation dialog, then remove the account from UI and storage only after confirmation.
-- [x] Clearing Search text while "Only songs with Leaderboard" is disabled can load results that look like leaderboard-only mode is enabled. This may indicate a cached-result issue.
 - [x] [v1.0] Preferred Mirror doesn't work most of the time. should have used a more durable and persistent way to determine user's geolocation.
 
 ### Features
@@ -136,6 +135,7 @@
 ### Bug Fixes
 - [x] Fixed delete swipe red background persisting after removing a non-bottom item.
 - [x] Fixed Search `Load More` button disappearing after quick navigation.
+- [x] Fixed cached Search results when clearing text with "Only songs with Leaderboard" disabled.
 - [x] Locked played filter to most-played data for non-supporters when URL played search is unavailable.
 - [x] Fixed cover extraction for beatmaps with cover images in subdirectories.
 - [x] Fixed mod button changing previous button position.

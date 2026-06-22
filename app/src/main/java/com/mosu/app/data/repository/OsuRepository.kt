@@ -12,6 +12,7 @@ import com.mosu.app.data.api.model.SayobotSearchResponse
 import com.mosu.app.data.db.SearchCacheDao
 import com.mosu.app.data.db.SearchCacheEntity
 import com.mosu.app.data.db.RecentPlayEntity
+import com.mosu.app.domain.model.sortedByTotalBeatmapPlayCountDescending
 import java.time.OffsetDateTime
 
 class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
@@ -56,6 +57,12 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             beatmapset.title.trim().lowercase() == targetTitle &&
             beatmapset.artist.trim().lowercase() == targetArtist
         }
+    }
+
+    suspend fun findMostPlayedBeatmapsetByTitleArtist(title: String, artist: String): BeatmapsetCompact? {
+        return searchBeatmapsetsByTitleArtist(title, artist)
+            .sortedByTotalBeatmapPlayCountDescending()
+            .firstOrNull()
     }
 
     suspend fun getUserMostPlayed(accessToken: String, userId: String): List<BeatmapPlaycount> {
@@ -306,4 +313,3 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         return collapsedSpaces.ifEmpty { null }
     }
 }
-

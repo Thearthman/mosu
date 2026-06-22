@@ -50,6 +50,8 @@ import com.mosu.app.domain.model.modeLabel
 import com.mosu.app.domain.model.getStarRatingColor
 import com.mosu.app.domain.model.getGradientColorsForRange
 import com.mosu.app.domain.model.createGradientStops
+import com.mosu.app.domain.model.sortedByTotalBeatmapPlayCountDescending
+import com.mosu.app.domain.model.totalBeatmapPlayCount
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.IconButton
@@ -156,7 +158,7 @@ fun InfoPopup(
                             )
                         }
                     } else {
-                        val sortedSets = sets.sortedByDescending { it.beatmaps.sumOf { b -> b.playCount } }
+                        val sortedSets = sets.sortedByTotalBeatmapPlayCountDescending()
                         items(sortedSets) { beatmapset ->
                             val setId = beatmapset.id
                             val list = beatmapset.beatmaps
@@ -243,7 +245,7 @@ fun InfoPopup(
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Text(
                                                         text = if (list.isNotEmpty()) {
-                                                            val totalPlaycount = list.sumOf { it.playCount }
+                                                            val totalPlaycount = beatmapset.totalBeatmapPlayCount()
                                                             if (totalPlaycount >= 1_000_000) {
                                                                 "%.1fM".format(totalPlaycount / 1_000_000f)
                                                             } else if (totalPlaycount >= 1_000) {

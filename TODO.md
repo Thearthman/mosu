@@ -181,6 +181,7 @@
 - [x] Fixed recent filter mode not auto-loading on app start.
 - [x] Fixed screen frame buffer ordering issue.
 - [x] [v1.0] Fixed missing mirror downloads by trying earlier alternative beatmapsets with the same title/artist.
+- [x] [v1.0] Download actions now resolve same-title/artist beatmapsets by InfoPopup playcount ranking before starting the mirror download.
 - [x] Fixed Search favorite genre bar and Library genre bar.
 - [x] Deleting a song in Search now updates downloaded state without removing the list item.
 - [x] Fixed Favorite page download corruption/missing file ends and downloaded-state updates.

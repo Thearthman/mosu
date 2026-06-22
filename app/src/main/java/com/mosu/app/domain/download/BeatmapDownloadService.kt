@@ -7,14 +7,14 @@ import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.media.MediaStoreFileService
 import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.services.TrackService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
-import android.widget.Toast
 import com.mosu.app.R
+import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.model.ExtractedTrack
+import com.mosu.app.domain.model.sortedByTotalBeatmapPlayCountDescending
 import kotlinx.coroutines.flow.collect
 
 sealed class UnifiedDownloadState {
@@ -43,36 +43,44 @@ class BeatmapDownloadService(
     ): Flow<UnifiedDownloadState> = flow {
         var downloadSuccessful = false
         var lastErrorMessage = ""
+        var selectedCandidate = DownloadCandidate(
+            id = beatmapSetId,
+            title = title,
+            artist = artist,
+            creator = creator,
+            genreId = genreId,
+            coversListUrl = coversListUrl
+        )
 
         // Helper function to perform a single download attempt
-        suspend fun tryDownload(targetId: Long, targetCoversUrl: String?): Boolean {
+        suspend fun tryDownload(candidate: DownloadCandidate): Boolean {
             var attemptSuccess = false
             try {
-                downloader.downloadBeatmap(targetId, accessToken).collect { state ->
+                downloader.downloadBeatmap(candidate.id, accessToken).collect { state ->
                     when (state) {
                         is DownloadState.Downloading -> {
                             emit(UnifiedDownloadState.Progress(state.progress, state.source))
                         }
                         is DownloadState.Downloaded -> {
                             emit(UnifiedDownloadState.Progress(100, "Extracting..."))
-                            val extractedTracks = extractor.extractBeatmap(state.file, targetId)
+                            val extractedTracks = extractor.extractBeatmap(state.file, candidate.id)
                             val isAlbumSet = extractedTracks.size > 1
-                            
-                            val fallbackCoverPath = if (targetCoversUrl != null && extractedTracks.any { it.coverFile == null || !it.coverFile.exists() }) {
-                                coverDownloadService.downloadFallbackCoverImage(targetId, targetCoversUrl)
+
+                            val fallbackCoverPath = if (candidate.coversListUrl != null && extractedTracks.any { it.coverFile == null || !it.coverFile.exists() }) {
+                                coverDownloadService.downloadFallbackCoverImage(candidate.id, candidate.coversListUrl)
                             } else null
 
                             registerExtractedTracks(
-                                targetId = targetId,
+                                targetId = candidate.id,
                                 tracks = extractedTracks,
-                                title = title,
-                                artist = artist,
-                                creator = creator,
-                                genreId = genreId,
+                                title = candidate.title,
+                                artist = candidate.artist,
+                                creator = candidate.creator,
+                                genreId = candidate.genreId,
                                 isAlbumSet = isAlbumSet,
                                 fallbackCoverPath = fallbackCoverPath
                             )
-                            emit(UnifiedDownloadState.Success(targetId))
+                            emit(UnifiedDownloadState.Success(candidate.id))
                             attemptSuccess = true
                         }
                         is DownloadState.Completed -> {
@@ -81,16 +89,16 @@ class BeatmapDownloadService(
 
                             val isAlbumSet = state.tracks.size > 1
                             registerExtractedTracks(
-                                targetId = targetId,
+                                targetId = candidate.id,
                                 tracks = state.tracks,
-                                title = title,
-                                artist = artist,
-                                creator = creator,
-                                genreId = genreId,
+                                title = candidate.title,
+                                artist = candidate.artist,
+                                creator = candidate.creator,
+                                genreId = candidate.genreId,
                                 isAlbumSet = isAlbumSet,
                                 fallbackCoverPath = null
                             )
-                            emit(UnifiedDownloadState.Success(targetId))
+                            emit(UnifiedDownloadState.Success(candidate.id))
                             attemptSuccess = true
                         }
                         is DownloadState.Error -> {
@@ -104,7 +112,7 @@ class BeatmapDownloadService(
                     }
                 }
             } catch (e: Exception) {
-                Log.e("BeatmapDownloadService", "Error during download attempt $targetId", e)
+                Log.e("BeatmapDownloadService", "Error during download attempt ${candidate.id}", e)
                 val isNoAudio = e.message?.contains("No audio tracks") == true
                 lastErrorMessage = if (isNoAudio) {
                     context.getString(R.string.download_error_no_audio, title)
@@ -117,12 +125,24 @@ class BeatmapDownloadService(
         }
 
         try {
-            // 1. Try initial download
-            downloadSuccessful = tryDownload(beatmapSetId, coversListUrl)
+            val preferredBeatmapset = findPreferredDownloadBeatmapset(title, artist)
+            if (preferredBeatmapset != null) {
+                selectedCandidate = preferredBeatmapset.toDownloadCandidate()
+                if (selectedCandidate.id != beatmapSetId) {
+                    Log.d(
+                        "BeatmapDownloadService",
+                        "Resolved download target $beatmapSetId to most-played matching set ${selectedCandidate.id} for $title - $artist"
+                    )
+                    emit(UnifiedDownloadState.Progress(0, "Selected beatmapset ${selectedCandidate.id}..."))
+                }
+            }
+
+            // 1. Try the most-played exact-title/artist match when metadata is available.
+            downloadSuccessful = tryDownload(selectedCandidate)
 
         // 2. If failed, try alternatives
         if (!downloadSuccessful && title.isNotBlank() && artist.isNotBlank()) {
-            Log.d("BeatmapDownloadService", "Initial download failed for $beatmapSetId, checking alternatives for $title - $artist")
+            Log.d("BeatmapDownloadService", "Initial download failed for ${selectedCandidate.id}, checking alternatives for $title - $artist")
             
             val message = if (lastErrorMessage.isNotBlank() && !lastErrorMessage.startsWith("HTTP") && !lastErrorMessage.startsWith("Extraction") && !lastErrorMessage.startsWith("Registration") && !lastErrorMessage.startsWith("Download attempt")) {
                 lastErrorMessage
@@ -133,8 +153,8 @@ class BeatmapDownloadService(
 
             val alternatives = try {
                 repository.searchBeatmapsetsByTitleArtist(title, artist)
-                    .filter { it.id != beatmapSetId }
-                    .sortedBy { it.id }
+                    .filter { it.id != selectedCandidate.id }
+                    .sortedByTotalBeatmapPlayCountDescending()
             } catch (e: Exception) {
                 Log.e("BeatmapDownloadService", "Error searching for alternatives", e)
                 emptyList()
@@ -144,7 +164,7 @@ class BeatmapDownloadService(
                 for (alt in alternatives) {
                         Log.d("BeatmapDownloadService", "Trying alternative: ${alt.id}")
                         emit(UnifiedDownloadState.Progress(0, "Trying alternative ${alt.id}..."))
-                        if (tryDownload(alt.id, alt.covers.listUrl)) {
+                        if (tryDownload(alt.toDownloadCandidate())) {
                             downloadSuccessful = true
                             break
                         }
@@ -159,6 +179,34 @@ class BeatmapDownloadService(
         if (!downloadSuccessful) {
             emit(UnifiedDownloadState.Error(lastErrorMessage.ifEmpty { "Download failed" }))
         }
+    }
+
+    private suspend fun findPreferredDownloadBeatmapset(
+        title: String,
+        artist: String
+    ): BeatmapsetCompact? {
+        if (!hasSearchableMetadata(title, artist)) return null
+        return runCatching { repository.findMostPlayedBeatmapsetByTitleArtist(title, artist) }
+            .onFailure { Log.e("BeatmapDownloadService", "Error resolving preferred download beatmapset", it) }
+            .getOrNull()
+            ?.takeIf { it.id > 0L }
+    }
+
+    private fun hasSearchableMetadata(title: String, artist: String): Boolean {
+        return title.isNotBlank() &&
+            artist.isNotBlank() &&
+            !title.matches(Regex("""Beatmap \d+"""))
+    }
+
+    private fun BeatmapsetCompact.toDownloadCandidate(): DownloadCandidate {
+        return DownloadCandidate(
+            id = id,
+            title = title,
+            artist = artist,
+            creator = creator,
+            genreId = genreId,
+            coversListUrl = covers.listUrl
+        )
     }
 
     private suspend fun registerExtractedTracks(
@@ -214,3 +262,12 @@ class BeatmapDownloadService(
         MosuBackupService.exportState(context, db)
     }
 }
+
+private data class DownloadCandidate(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val creator: String,
+    val genreId: Int?,
+    val coversListUrl: String?
+)

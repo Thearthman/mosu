@@ -1,5 +1,6 @@
 package com.mosu.app.data.repository
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.mosu.app.data.api.RetrofitClient
@@ -7,6 +8,7 @@ import com.mosu.app.data.api.model.BeatmapPlaycount
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.OsuTokenResponse
 import com.mosu.app.data.api.model.OsuUserCompact
+import com.mosu.app.data.api.model.RecentScore
 import com.mosu.app.data.api.model.SearchResponse
 import com.mosu.app.data.api.model.SayobotSearchResponse
 import com.mosu.app.data.db.SearchCacheDao
@@ -76,28 +78,57 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         userId: String,
         limit: Int = 100
     ): List<RecentPlayEntity> {
-        val allRecentScores = mutableListOf<com.mosu.app.data.api.model.RecentScore>()
-        for (mode in recentPlayModes) { allRecentScores.addAll(RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1, mode)) }
-        val seen = mutableSetOf<Long>()
+        val allRecentScores = mutableListOf<RecentScore>()
+        for (mode in recentPlayModes) {
+            val modeScores =
+                RetrofitClient.api.getUserRecentScores("Bearer $accessToken", userId, limit, includeFails = 1, mode)
+            Log.d("OsuRepository", "fetchRecentPlays mode=$mode returned=${modeScores.size}")
+            allRecentScores.addAll(modeScores)
+        }
         val entities = mutableListOf<RecentPlayEntity>()
         for (score in allRecentScores) {
             val playedAt = score.createdAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() } ?: continue
-            val beatmapset = score.beatmapset ?: continue
-            if (!seen.add(beatmapset.id)) continue
-            entities.add(
-                RecentPlayEntity(
-                    scoreId = score.scoreId,
-                    beatmapSetId = beatmapset.id,
-                    title = beatmapset.title,
-                    artist = beatmapset.artist,
-                    creator = beatmapset.creator,
-                    coverUrl = beatmapset.covers.coverUrl,
-                    genreId = beatmapset.genreId,
-                    playedAt = playedAt.toInstant().toEpochMilli()
-                )
-            )
+            if (score.beatmapset == null) continue
+            entities.add(score.toRecentPlayEntity(playedAt.toInstant().toEpochMilli()))
         }
-        return entities
+        Log.d(
+            "OsuRepository",
+            "fetchRecentPlays mapped=${entities.size}, withRank=${entities.count { it.rank != null }}, " +
+                "withStars=${entities.count { it.starRating != null }}, withPp=${entities.count { it.pp != null }}, " +
+                "withBeatmapId=${entities.count { it.beatmapId != null }}"
+        )
+        return entities.sortedByDescending { it.playedAt }
+    }
+
+    private fun RecentScore.toRecentPlayEntity(playedAtMillis: Long): RecentPlayEntity {
+        val set = beatmapset ?: error("Recent score missing beatmapset")
+        val selectedBeatmap = beatmap
+        val fallbackBeatmap = selectedBeatmap?.id?.let { id -> set.beatmaps.orEmpty().firstOrNull { it.id == id } }
+        return RecentPlayEntity(
+            scoreId = scoreId,
+            beatmapId = selectedBeatmap?.id ?: fallbackBeatmap?.id,
+            beatmapSetId = set.id,
+            title = set.title,
+            artist = set.artist,
+            creator = set.creator,
+            difficultyName = selectedBeatmap?.version ?: fallbackBeatmap?.version,
+            mode = selectedBeatmap?.mode ?: fallbackBeatmap?.mode,
+            coverUrl = set.covers.coverUrl,
+            genreId = set.genreId,
+            rank = rank,
+            pp = pp,
+            accuracy = accuracy,
+            maxCombo = maxCombo,
+            passed = passed,
+            starRating = selectedBeatmap?.difficultyRating ?: fallbackBeatmap?.difficultyRating,
+            lengthSeconds = selectedBeatmap?.totalLength ?: fallbackBeatmap?.totalLength,
+            hitLengthSeconds = selectedBeatmap?.hitLength ?: fallbackBeatmap?.hitLength,
+            bpm = selectedBeatmap?.bpm ?: fallbackBeatmap?.bpm,
+            ar = selectedBeatmap?.ar ?: fallbackBeatmap?.ar,
+            cs = selectedBeatmap?.cs ?: fallbackBeatmap?.cs,
+            drain = selectedBeatmap?.drain ?: fallbackBeatmap?.drain,
+            playedAt = playedAtMillis
+        )
     }
 
     data class PlayedBeatmapsResult(

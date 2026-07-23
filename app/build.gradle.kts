@@ -1,27 +1,32 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
 
-val defaultReleaseStoreFile = providers.provider {
-    rootProject.file("../keystores/mosu.jks")
-        .takeIf { it.isFile }
-        ?.absolutePath
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) {
+        file.inputStream().use { input -> load(input) }
+    }
 }
-val releaseStoreFile = providers.gradleProperty("MOSU_RELEASE_STORE_FILE")
-    .orElse(providers.environmentVariable("MOSU_RELEASE_STORE_FILE"))
-    .orElse(defaultReleaseStoreFile)
-val releaseStorePassword = providers.gradleProperty("MOSU_RELEASE_STORE_PASSWORD")
-    .orElse(providers.environmentVariable("MOSU_RELEASE_STORE_PASSWORD"))
-val releaseKeyAlias = providers.gradleProperty("MOSU_RELEASE_KEY_ALIAS")
-    .orElse(providers.environmentVariable("MOSU_RELEASE_KEY_ALIAS"))
-val releaseKeyPassword = providers.gradleProperty("MOSU_RELEASE_KEY_PASSWORD")
-    .orElse(providers.environmentVariable("MOSU_RELEASE_KEY_PASSWORD"))
-val hasReleaseSigning = releaseStoreFile.isPresent &&
-    releaseStorePassword.isPresent &&
-    releaseKeyAlias.isPresent &&
-    releaseKeyPassword.isPresent
+
+fun signingProperty(vararg names: String): String {
+    return names.firstNotNullOfOrNull { name ->
+        providers.gradleProperty(name).orNull
+            ?: providers.environmentVariable(name).orNull
+            ?: localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+    } ?: error(
+        "Signing property missing. Set one of ${names.joinToString()} in local.properties, Gradle properties, or the environment"
+    )
+}
+
+val mosuStoreFile = file("/home/johnmich/personal/keystores/mosu.jks")
+check(mosuStoreFile.isFile) {
+    "Mosu signing keystore not found at ${mosuStoreFile.absolutePath}"
+}
 
 android {
     namespace = "com.mosu.app"
@@ -42,22 +47,37 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseSigning) {
-            create("release") {
-                storeFile = file(releaseStoreFile.get())
-                storePassword = releaseStorePassword.get()
-                keyAlias = releaseKeyAlias.get()
-                keyPassword = releaseKeyPassword.get()
-            }
+        create("mosu") {
+            storeFile = mosuStoreFile
+            storePassword = signingProperty(
+                "MOSU_RELEASE_STORE_PASSWORD",
+                "MOSU_STORE_PASSWORD",
+                "KEYSTORE_PASSWORD",
+                "STORE_PASSWORD",
+                "storePassword"
+            )
+            keyAlias = signingProperty(
+                "MOSU_RELEASE_KEY_ALIAS",
+                "MOSU_KEY_ALIAS",
+                "KEY_ALIAS",
+                "keyAlias"
+            )
+            keyPassword = signingProperty(
+                "MOSU_RELEASE_KEY_PASSWORD",
+                "MOSU_KEY_PASSWORD",
+                "KEY_PASSWORD",
+                "keyPassword"
+            )
         }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("mosu")
+        }
         release {
             isMinifyEnabled = false
-            if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("mosu")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

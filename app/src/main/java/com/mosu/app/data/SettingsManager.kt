@@ -24,6 +24,7 @@ class SettingsManager(private val context: Context) {
         private val LANGUAGE_KEY = stringPreferencesKey("language") // "en", "zh-CN", "zh-TW"
         private val DEFAULT_SEARCH_VIEW_KEY = stringPreferencesKey("default_search_view") // played/recent/favorite/most_played/all/any
         private val ONLY_LEADERBOARD_KEY = booleanPreferencesKey("only_leaderboard_enabled")
+        private val RECENT_PLAY_HISTORY_KEY = booleanPreferencesKey("recent_play_history_enabled")
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
@@ -131,6 +132,11 @@ class SettingsManager(private val context: Context) {
             preferences[ONLY_LEADERBOARD_KEY] ?: true
         }
 
+    val recentPlayHistoryEnabled: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[RECENT_PLAY_HISTORY_KEY] ?: false
+        }
+
     val infoCoverEnabled: Flow<Boolean> = context.settingsDataStore.data
         .map { preferences ->
             preferences[INFO_COVER_KEY] ?: true
@@ -174,6 +180,12 @@ class SettingsManager(private val context: Context) {
     suspend fun saveOnlyLeaderboardEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[ONLY_LEADERBOARD_KEY] = enabled
+        }
+    }
+
+    suspend fun saveRecentPlayHistoryEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[RECENT_PLAY_HISTORY_KEY] = enabled
         }
     }
 

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +85,7 @@ import com.mosu.app.ui.DeferredActionViewModel
 import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.playlist.PlaylistScreen
 import com.mosu.app.ui.profile.ProfileScreen
+import com.mosu.app.ui.score.ScoreScreen
 import com.mosu.app.ui.search.SearchScreen
 import com.mosu.app.ui.search.SearchViewModel
 import com.mosu.app.ui.search.SearchViewModelFactory
@@ -507,6 +509,13 @@ fun MainScreen(
                             snackbarHostState = snackbarHostState
                         )
                     }
+                    composable("score") {
+                        ScoreScreen(
+                            accessToken = accessToken,
+                            repository = repository,
+                            db = db
+                        )
+                    }
                     composable("profile") {
                         ProfileScreen(
                             accessToken = accessToken,
@@ -623,6 +632,20 @@ fun MainScreen(
                 selected = currentDestination == "playlists",
                 onClick = {
                     navController.navigate("playlists") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+            NavigationBarItem(
+                icon = { Icon(Icons.Default.Star, contentDescription = "Scores") },
+                label = { Text("Scores") },
+                selected = currentDestination == "score",
+                onClick = {
+                    navController.navigate("score") {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }

@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
         SearchHistoryEntity::class,
         DownloadTaskEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -234,6 +234,55 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 17 to 18: Preserve recent plays while adding score/beatmap metrics.
+        private val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                fun addColumnIfMissing(name: String, definition: String) {
+                    val cursor = db.query("PRAGMA table_info(recent_plays)")
+                    var exists = false
+                    cursor.use {
+                        while (it.moveToNext()) {
+                            if (it.getString(it.getColumnIndex("name")) == name) {
+                                exists = true
+                                break
+                            }
+                        }
+                    }
+                    if (!exists) {
+                        db.execSQL("ALTER TABLE recent_plays ADD COLUMN $definition")
+                    }
+                }
+
+                addColumnIfMissing("beatmapId", "beatmapId INTEGER")
+                addColumnIfMissing("difficultyName", "difficultyName TEXT")
+                addColumnIfMissing("mode", "mode TEXT")
+                addColumnIfMissing("rank", "rank TEXT")
+                addColumnIfMissing("pp", "pp REAL")
+                addColumnIfMissing("accuracy", "accuracy REAL")
+                addColumnIfMissing("maxCombo", "maxCombo INTEGER")
+                addColumnIfMissing("passed", "passed INTEGER")
+                addColumnIfMissing("starRating", "starRating REAL")
+                addColumnIfMissing("lengthSeconds", "lengthSeconds INTEGER")
+                addColumnIfMissing("hitLengthSeconds", "hitLengthSeconds INTEGER")
+                addColumnIfMissing("bpm", "bpm REAL")
+                addColumnIfMissing("ar", "ar REAL")
+                addColumnIfMissing("cs", "cs REAL")
+                addColumnIfMissing("drain", "drain REAL")
+
+                db.execSQL("""
+                    DELETE FROM recent_plays
+                    WHERE scoreId IS NOT NULL
+                    AND uid NOT IN (
+                        SELECT MAX(uid)
+                        FROM recent_plays
+                        WHERE scoreId IS NOT NULL
+                        GROUP BY scoreId
+                    )
+                """)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_recent_plays_scoreId ON recent_plays(scoreId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -250,7 +299,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_13_14,
                     MIGRATION_14_15,
                     MIGRATION_15_16,
-                    MIGRATION_16_17
+                    MIGRATION_16_17,
+                    MIGRATION_17_18
                 )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()

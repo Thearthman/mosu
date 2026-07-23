@@ -86,9 +86,10 @@ class SearchViewModel(
         uid: String?,
         onlyLeaderboard: Boolean,
         playedMode: String,
-        searchAny: Boolean
+        searchAny: Boolean,
+        showPlayHistory: Boolean
     ) {
-        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$selectedGenreId"
+        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$selectedGenreId|$showPlayHistory"
         if (lastInitialLoadKey == loadKey) return
         lastInitialLoadKey = loadKey
 
@@ -98,7 +99,7 @@ class SearchViewModel(
                 if (mode == "recent") {
                     // 1. Load local data immediately
                     val (groupedItems, mergeGroupsResult, timestamps) = searchService.loadRecentFiltered(
-                        accessToken, uid, searchQuery, selectedGenreId, forceRefresh = false
+                        accessToken, uid, searchQuery, selectedGenreId, forceRefresh = false, showPlayHistory = showPlayHistory
                     )
                     mergeGroups = mergeGroupsResult
                     recentGroupedResults = groupedItems
@@ -112,7 +113,7 @@ class SearchViewModel(
                         launch {
                             try {
                                 val (freshItems, freshMergeGroups, freshTimestamps) = searchService.loadRecentFiltered(
-                                    accessToken, uid, searchQuery, selectedGenreId, forceRefresh = true
+                                    accessToken, uid, searchQuery, selectedGenreId, forceRefresh = true, showPlayHistory = showPlayHistory
                                 )
                                 mergeGroups = freshMergeGroups
                                 recentGroupedResults = freshItems

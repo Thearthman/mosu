@@ -182,12 +182,27 @@ object MosuBackupService {
     private fun RecentPlayEntity.toBackupRecentPlay(): BackupRecentPlay {
         return BackupRecentPlay(
             scoreId = scoreId,
+            beatmapId = beatmapId,
             beatmapSetId = beatmapSetId,
             title = title,
             artist = artist,
             creator = creator,
+            difficultyName = difficultyName,
+            mode = mode,
             coverUrl = coverUrl,
             genreId = genreId,
+            rank = rank,
+            pp = pp,
+            accuracy = accuracy,
+            maxCombo = maxCombo,
+            passed = passed,
+            starRating = starRating,
+            lengthSeconds = lengthSeconds,
+            hitLengthSeconds = hitLengthSeconds,
+            bpm = bpm,
+            ar = ar,
+            cs = cs,
+            drain = drain,
             playedAt = playedAt
         )
     }
@@ -195,12 +210,27 @@ object MosuBackupService {
     private fun BackupRecentPlay.toRecentPlayEntity(): RecentPlayEntity {
         return RecentPlayEntity(
             scoreId = scoreId,
+            beatmapId = beatmapId,
             beatmapSetId = beatmapSetId,
             title = title,
             artist = artist,
             creator = creator,
+            difficultyName = difficultyName,
+            mode = mode,
             coverUrl = coverUrl,
             genreId = genreId,
+            rank = rank,
+            pp = pp,
+            accuracy = accuracy,
+            maxCombo = maxCombo,
+            passed = passed,
+            starRating = starRating,
+            lengthSeconds = lengthSeconds,
+            hitLengthSeconds = hitLengthSeconds,
+            bpm = bpm,
+            ar = ar,
+            cs = cs,
+            drain = drain,
             playedAt = playedAt
         )
     }
@@ -268,11 +298,26 @@ data class BackupPlaylistTrack(
 
 data class BackupRecentPlay(
     val scoreId: Long? = null,
+    val beatmapId: Long? = null,
     val beatmapSetId: Long,
     val title: String,
     val artist: String,
     val creator: String,
+    val difficultyName: String? = null,
+    val mode: String? = null,
     val coverUrl: String? = null,
     val genreId: Int? = null,
+    val rank: String? = null,
+    val pp: Float? = null,
+    val accuracy: Float? = null,
+    val maxCombo: Int? = null,
+    val passed: Boolean? = null,
+    val starRating: Float? = null,
+    val lengthSeconds: Int? = null,
+    val hitLengthSeconds: Int? = null,
+    val bpm: Float? = null,
+    val ar: Float? = null,
+    val cs: Float? = null,
+    val drain: Float? = null,
     val playedAt: Long
 )

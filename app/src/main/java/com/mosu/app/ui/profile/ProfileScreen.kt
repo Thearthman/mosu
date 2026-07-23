@@ -101,6 +101,7 @@ fun ProfileScreen(
     val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
+    val recentPlayHistoryEnabled by settingsManager.recentPlayHistoryEnabled.collectAsState(initial = false)
     val language by settingsManager.language.collectAsState(initial = "en")
     val detectedRegion by settingsManager.detectedRegion.collectAsState(initial = null)
     val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
@@ -579,6 +580,46 @@ fun ProfileScreen(
                         checked = onlyLeaderboardEnabled,
                         onCheckedChange = { enabled ->
                             scope.launch { settingsManager.saveOnlyLeaderboardEnabled(enabled) }
+                        }
+                    )
+                }
+            }
+
+            // Recent Play History
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(0.7f)
+                    ) {
+                        Text(
+                            text = "Recent Play History",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Show every recorded recent play instead of newest songs only.",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Switch(
+                        checked = recentPlayHistoryEnabled,
+                        onCheckedChange = { enabled ->
+                            scope.launch { settingsManager.saveRecentPlayHistoryEnabled(enabled) }
                         }
                     )
                 }

@@ -117,6 +117,7 @@ fun SearchScreen(
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val playedFilterMode by settingsManager.playedFilterMode.collectAsState(initial = "url")
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
+    val recentPlayHistoryEnabled by settingsManager.recentPlayHistoryEnabled.collectAsState(initial = false)
 
     val currentAccount by accountManager.currentAccount.collectAsState(initial = null)
 
@@ -212,7 +213,8 @@ fun SearchScreen(
                         token,
                         vm.userId,
                         normalizedQuery,
-                        vm.selectedGenreId
+                        vm.selectedGenreId,
+                        showPlayHistory = recentPlayHistoryEnabled
                     )
                     vm.mergeGroups = mergeGroupsResult
                     vm.recentGroupedResults = groupedItems
@@ -510,7 +512,7 @@ fun SearchScreen(
                                     userId = uid
                                 )
                                 vm.db.recentPlayDao().mergeNewPlays(fresh)
-                                val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId)
+                                val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId, showPlayHistory = recentPlayHistoryEnabled)
                                 vm.mergeGroups = mergeGroupsResult
                                 vm.recentGroupedResults = groupedItems
                                 vm.searchResults = emptyList() // Clear regular results for recent mode
@@ -674,7 +676,7 @@ fun SearchScreen(
                                                                     vm.lastSyncedDefaultView = mode
                                                                     vm.currentCursor = null
                                                                     if (mode == "recent") {
-                                                                        val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId)
+                                                                        val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId, showPlayHistory = recentPlayHistoryEnabled)
                                                                         vm.mergeGroups = mergeGroupsResult
                                                                         vm.recentGroupedResults = groupedItems
                                                                         vm.searchResults = emptyList()
@@ -693,7 +695,7 @@ fun SearchScreen(
                                                                         vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
                                                                     }
                                                                     // Update load key so initial LaunchedEffect doesn't duplicate
-                                                                    vm.lastInitialLoadKey = "$accessToken|${vm.filterMode}|${vm.userId}|$onlyLeaderboardEnabled"
+                                                                    vm.lastInitialLoadKey = "$accessToken|${vm.filterMode}|${vm.userId}|$onlyLeaderboardEnabled|$playedFilterMode|${!onlyLeaderboardEnabled}|${vm.selectedGenreId}|$recentPlayHistoryEnabled"
                                                                 }
                                                             }
                                                         )
@@ -801,7 +803,7 @@ fun SearchScreen(
                                                         scope.launch {
                                                             try {
                                                                 if (vm.filterMode == "recent") {
-                                                                    val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId)
+                                                                    val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(accessToken, vm.userId, vm.searchQuery, vm.selectedGenreId, showPlayHistory = recentPlayHistoryEnabled)
                                                                     vm.mergeGroups = mergeGroupsResult
                                                                     vm.recentGroupedResults = groupedItems
                                                                     vm.searchResults = emptyList()
@@ -1145,7 +1147,7 @@ fun SearchScreen(
         }
 
         // Initial Load - Show cached data immediately, then refresh
-        LaunchedEffect(accessToken, vm.filterMode, vm.userId, onlyLeaderboardEnabled, playedFilterMode, vm.selectedGenreId) {
+        LaunchedEffect(accessToken, vm.filterMode, vm.userId, onlyLeaderboardEnabled, playedFilterMode, vm.selectedGenreId, recentPlayHistoryEnabled) {
             if (accessToken != null) {
                 vm.performInitialLoad(
                     accessToken = accessToken,
@@ -1153,7 +1155,8 @@ fun SearchScreen(
                     uid = vm.userId,
                     onlyLeaderboard = onlyLeaderboardEnabled,
                     playedMode = playedFilterMode,
-                    searchAny = !onlyLeaderboardEnabled
+                    searchAny = !onlyLeaderboardEnabled,
+                    showPlayHistory = recentPlayHistoryEnabled
                 )
             }
         }

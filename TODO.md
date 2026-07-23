@@ -16,6 +16,7 @@
 - [ ] [v1.2] Implement Activity Heatmap from recent play data with week, month, and year views.
 - [ ] [v1.1] Implement song recommendations based on tags, genre, and related metadata.
 - [ ] [v1.1] Implement smart playlist generation based on how long the user stays on songs in random play mode.
+- [x] [v1.1] Implement score page.
 
 #### Settings
 - [ ] Add a guidance/help page for getting osu! credentials in the credential setup flow. Display the guidance markdown file from the repo root, or ask for the file if it is missing.
@@ -34,12 +35,21 @@
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
-- [ ] [v1.1] Add a toggle to make the Recent play filter display every recorded entry as Play History, not just newest played songs.
+- [x] [v1.1] Add a Settings toggle to make the Recent play filter display every recorded entry as Play History, not just newest played songs.
 - [ ] [v1.1] Add Top Play filter mode.
 
 #### Library
 - [ ] [v1.1] Add an artist view toggle. In artist view, group songs by normalized artist names, removing special characters and spaces to reduce typo-related misses. Clicking an artist should open a playlist-style song list for that artist.
 - [ ] Make the library genre filter apply to loop/random playlists once current playing playlist logic is in place.
+
+#### score (heavily relying on the "recent" score database)
+- [x] Limit the Recently Passed score panel to the latest 30 passed entries.
+- [x] Make score page panels collapse and expand when clicking their panel titles.
+- [x] [v1.1] Add a page dedicated to scores besides the search/playlist/library/settings pages. It should contain a few panels. The required panels are below.
+- [x] Add a panel about average star number about beatmaps passed in different grades. For example: "A: 5.8 stars, B: 6.3 stars, etc."
+- [x] Add a panel about recently passed beatmaps(following the same data), should include pp, star rate, and length.
+- [x] Add a panel about some achievements: longest map played, fastest(bpm) map played, lowest ar played, highest CS played. PP record(we want a "last pp record held x days" info text as well.).
+- [x] Refactor recent score database, use non-desctructive migration if possible(i.e., can we get info we want from the existing database + osu api. keep in mind that osu's api you can always query beatmap info if you got beatmapsetid and beatmapid, but recent scores only exist for 24h). Make sure recent database would suffice the panels requirement
 
 ## Completed
 

@@ -25,13 +25,27 @@ data class BeatmapPlaycount(
 data class RecentScore(
     @SerializedName("id") val scoreId: Long? = null,
     @SerializedName("created_at") val createdAt: String?,
+    @SerializedName("rank") val rank: String? = null,
+    @SerializedName("pp") val pp: Float? = null,
+    @SerializedName("accuracy") val accuracy: Float? = null,
+    @SerializedName("max_combo") val maxCombo: Int? = null,
+    @SerializedName("passed") val passed: Boolean? = null,
     @SerializedName("beatmap") val beatmap: RecentBeatmap?,
     @SerializedName("beatmapset") val beatmapset: BeatmapsetCompact?  // Primary source: beatmapset at score level
 )
 
 data class RecentBeatmap(
     @SerializedName("id") val id: Long,
-    @SerializedName("beatmapset_id") val beatmapsetId: Long?  // Just the ID, not the full object
+    @SerializedName("beatmapset_id") val beatmapsetId: Long?,
+    @SerializedName("version") val version: String? = null,
+    @SerializedName("mode") val mode: String? = null,
+    @SerializedName("difficulty_rating") val difficultyRating: Float? = null,
+    @SerializedName("total_length") val totalLength: Int? = null,
+    @SerializedName("hit_length") val hitLength: Int? = null,
+    @SerializedName("bpm") val bpm: Float? = null,
+    @SerializedName("ar") val ar: Float? = null,
+    @SerializedName("cs") val cs: Float? = null,
+    @SerializedName("drain") val drain: Float? = null
 )
 
 data class BeatmapsetCompact(
@@ -58,7 +72,13 @@ data class BeatmapDetail(
     @SerializedName("url") val url: String?,
     @SerializedName("beatmapset_id") val beatmapsetId: Long,
     @SerializedName("playcount") val playCount: Int,
-    @SerializedName("status") val status: String
+    @SerializedName("status") val status: String,
+    @SerializedName("total_length") val totalLength: Int? = null,
+    @SerializedName("hit_length") val hitLength: Int? = null,
+    @SerializedName("bpm") val bpm: Float? = null,
+    @SerializedName("ar") val ar: Float? = null,
+    @SerializedName("cs") val cs: Float? = null,
+    @SerializedName("drain") val drain: Float? = null
 )
 
 data class BeatmapsetDetail(

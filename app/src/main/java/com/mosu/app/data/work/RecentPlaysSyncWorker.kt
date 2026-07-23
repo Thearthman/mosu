@@ -10,15 +10,10 @@ import androidx.work.WorkManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.Worker
 import com.mosu.app.data.TokenManager
-import com.mosu.app.data.api.RetrofitClient
 import com.mosu.app.data.db.AppDatabase
-import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.repository.OsuRepository
 import kotlinx.coroutines.flow.firstOrNull
 import java.time.Duration
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
@@ -34,29 +29,7 @@ class RecentPlaysSyncWorker(
         val repository = OsuRepository(db.searchCacheDao())
         return runCatching {
             val user = repository.getMe()
-            val recentScores = RetrofitClient.api.getUserRecentScores(
-                authHeader = "Bearer $token",
-                userId = user.id.toString(),
-                includeFails = 1
-                // TODO: Implement paging through cursor
-            )
-
-            val seen = mutableSetOf<Long>()
-            val entities = recentScores.mapNotNull { score ->
-                val playedAt = score.createdAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() } ?: return@mapNotNull null
-                val beatmapset = score.beatmapset ?: return@mapNotNull null
-                if (!seen.add(beatmapset.id)) return@mapNotNull null
-                RecentPlayEntity(
-                    scoreId = score.scoreId,
-                    beatmapSetId = beatmapset.id,
-                    title = beatmapset.title,
-                    artist = beatmapset.artist,
-                    creator = beatmapset.creator,
-                    coverUrl = beatmapset.covers.coverUrl,
-                    playedAt = playedAt.toInstant().toEpochMilli()
-                )
-            }
-
+            val entities = repository.fetchRecentPlays(token, user.id.toString(), limit = 50)
             db.recentPlayDao().mergeNewPlays(entities)
             Result.success()
         }.getOrElse {
@@ -97,4 +70,3 @@ class RecentPlaysSyncWorker(
         }
     }
 }
-

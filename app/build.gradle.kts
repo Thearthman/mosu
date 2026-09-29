@@ -13,19 +13,57 @@ val localProperties = Properties().apply {
     }
 }
 
-fun signingProperty(vararg names: String): String {
+fun configProperty(vararg names: String): String? {
     return names.firstNotNullOfOrNull { name ->
         providers.gradleProperty(name).orNull
             ?: providers.environmentVariable(name).orNull
             ?: localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
-    } ?: error(
+    }
+}
+
+fun signingProperty(vararg names: String): String {
+    return configProperty(*names) ?: error(
         "Signing property missing. Set one of ${names.joinToString()} in local.properties, Gradle properties, or the environment"
     )
 }
 
-val mosuStoreFile = file("/home/johnmich/personal/keystores/mosu.jks")
-check(mosuStoreFile.isFile) {
-    "Mosu signing keystore not found at ${mosuStoreFile.absolutePath}"
+// Resolve relative paths against the root project so the build keeps working
+// regardless of where the repository is checked out.
+fun projectFile(path: String): File {
+    val candidate = File(path)
+    return if (candidate.isAbsolute) candidate else rootProject.file(path)
+}
+
+// Locations searched, in order, when no store file is configured explicitly.
+// Covers the keystore living next to the repo, inside the repo, or in the
+// user's ~/personal/keystores directory, so moving the project never breaks
+// signing as long as one of these exists.
+val defaultMosuStoreFileCandidates = listOf(
+    rootProject.file("../keystores/mosu.jks"),
+    rootProject.file("keystores/mosu.jks"),
+    projectFile(System.getProperty("user.home") + "/personal/keystores/mosu.jks"),
+)
+
+val configuredMosuStoreFile = configProperty(
+    "MOSU_RELEASE_STORE_FILE",
+    "MOSU_STORE_FILE",
+    "storeFile",
+)
+
+val configuredStore = configuredMosuStoreFile?.let(::projectFile)
+val mosuStoreFile: File? = configuredStore ?: defaultMosuStoreFileCandidates.firstOrNull { it.isFile }
+
+if (configuredStore != null && !configuredStore.isFile) {
+    error("Configured Mosu signing keystore not found at ${configuredStore.absolutePath}")
+}
+
+if (mosuStoreFile == null) {
+    logger.warn(
+        "Mosu signing keystore not found. Debug builds will use the default debug keystore and " +
+            "release builds will be left unsigned. Set MOSU_RELEASE_STORE_FILE (in local.properties, " +
+            "Gradle properties, or the environment) to sign, or place mosu.jks at one of: " +
+            defaultMosuStoreFileCandidates.joinToString { it.absolutePath }
+    )
 }
 
 android {
@@ -47,37 +85,46 @@ android {
     }
 
     signingConfigs {
-        create("mosu") {
-            storeFile = mosuStoreFile
-            storePassword = signingProperty(
-                "MOSU_RELEASE_STORE_PASSWORD",
-                "MOSU_STORE_PASSWORD",
-                "KEYSTORE_PASSWORD",
-                "STORE_PASSWORD",
-                "storePassword"
-            )
-            keyAlias = signingProperty(
-                "MOSU_RELEASE_KEY_ALIAS",
-                "MOSU_KEY_ALIAS",
-                "KEY_ALIAS",
-                "keyAlias"
-            )
-            keyPassword = signingProperty(
-                "MOSU_RELEASE_KEY_PASSWORD",
-                "MOSU_KEY_PASSWORD",
-                "KEY_PASSWORD",
-                "keyPassword"
-            )
+        val store = mosuStoreFile
+        if (store != null) {
+            create("mosu") {
+                storeFile = store
+                storePassword = signingProperty(
+                    "MOSU_RELEASE_STORE_PASSWORD",
+                    "MOSU_STORE_PASSWORD",
+                    "KEYSTORE_PASSWORD",
+                    "STORE_PASSWORD",
+                    "storePassword"
+                )
+                keyAlias = signingProperty(
+                    "MOSU_RELEASE_KEY_ALIAS",
+                    "MOSU_KEY_ALIAS",
+                    "KEY_ALIAS",
+                    "keyAlias"
+                )
+                keyPassword = signingProperty(
+                    "MOSU_RELEASE_KEY_PASSWORD",
+                    "MOSU_KEY_PASSWORD",
+                    "KEY_PASSWORD",
+                    "keyPassword"
+                )
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("mosu")
+            // Falls back to the default debug keystore when no Mosu keystore is configured.
+            if (mosuStoreFile != null) {
+                signingConfig = signingConfigs.getByName("mosu")
+            }
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("mosu")
+            // Left unsigned when no Mosu keystore is configured.
+            if (mosuStoreFile != null) {
+                signingConfig = signingConfigs.getByName("mosu")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -113,7 +160,8 @@ dependencies {
     // Compose
     implementation("androidx.compose.ui:ui:1.5.0")
     implementation("androidx.compose.ui:ui-graphics:1.5.0")
-    implementation("androidx.graphics:graphics-path:1.0.1") // Fix for 16KB alignment warning
+    // Ships libandroidx.graphics.path.so (also pulled in transitively by Compose); pinned explicitly.
+    implementation("androidx.graphics:graphics-path:1.0.1")
     implementation("androidx.compose.ui:ui-tooling-preview:1.5.0")
     implementation("androidx.compose.material:material:1.5.0")
     implementation("androidx.compose.material3:material3:1.3.1")

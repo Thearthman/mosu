@@ -14,6 +14,8 @@ data class BeatmapEntity(
     val beatmapSetId: Long,
     val title: String,
     val artist: String,
+    val titleUnicode: String? = null, // Native-script title from .osu TitleUnicode
+    val artistUnicode: String? = null, // Native-script artist from .osu ArtistUnicode
     val creator: String,
     val difficultyName: String,
     val audioPath: String,

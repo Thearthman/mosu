@@ -16,6 +16,33 @@ interface BeatmapDao {
     @Query("SELECT * FROM beatmaps WHERE beatmapSetId = :setId")
     suspend fun getTracksForSet(setId: Long): List<BeatmapEntity>
 
+    @Query("SELECT DISTINCT beatmapSetId FROM beatmaps")
+    suspend fun getDistinctSetIds(): List<Long>
+
+    // Overwrite the set-level, API-authoritative metadata for every difficulty in
+    // a set. Track-level fields (difficultyName, audio/cover paths) are left alone.
+    @Query(
+        """
+        UPDATE beatmaps
+        SET title = :title,
+            artist = :artist,
+            titleUnicode = :titleUnicode,
+            artistUnicode = :artistUnicode,
+            creator = :creator,
+            genreId = :genreId
+        WHERE beatmapSetId = :setId
+        """
+    )
+    suspend fun updateMetadataForSet(
+        setId: Long,
+        title: String,
+        artist: String,
+        titleUnicode: String?,
+        artistUnicode: String?,
+        creator: String,
+        genreId: Int?
+    )
+
     @Query("SELECT * FROM beatmaps WHERE LOWER(TRIM(title)) = LOWER(TRIM(:title)) AND LOWER(TRIM(artist)) = LOWER(TRIM(:artist))")
     suspend fun getTracksByTitleArtist(title: String, artist: String): List<BeatmapEntity>
 

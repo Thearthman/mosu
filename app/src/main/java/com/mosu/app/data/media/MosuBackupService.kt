@@ -39,6 +39,7 @@ object MosuBackupService {
         accountManager: AccountManager? = null
     ): String = withContext(Dispatchers.IO) {
         val beatmaps = db.beatmapDao().getAllBeatmaps().first()
+        val preservedSetIds = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().first()
         val playlists = db.playlistDao().getPlaylists().first()
         val playlistTracks = db.playlistDao().getAllPlaylistTracks().first()
         val recentPlays = db.recentPlayDao().getRecentPlays()
@@ -47,6 +48,7 @@ object MosuBackupService {
             exportedAt = System.currentTimeMillis(),
             accountCredentials = accountManager?.getCredentialBackups().orEmpty(),
             tracks = beatmaps.map { it.toBackupTrack() },
+            preservedBeatmapSetIds = preservedSetIds.map { it.beatmapSetId },
             playlists = playlists.map { it.toBackupPlaylist() },
             playlistTracks = playlistTracks.map { it.toBackupPlaylistTrack() },
             recentPlays = recentPlays.map { it.toBackupRecentPlay() }
@@ -61,7 +63,7 @@ object MosuBackupService {
 
         val mediaStore = MediaStoreFileService(context)
         val json = mediaStore.readManifest() ?: return@withContext 0
-        restoreFromJson(context, db, json, requireEmptyLibrary = false)
+        restoreFromJson(context, db, json, requireEmptyLibrary = false).restoredTracks
     }
 
     suspend fun restoreFromJson(
@@ -70,15 +72,15 @@ object MosuBackupService {
         json: String,
         requireEmptyLibrary: Boolean,
         accountManager: AccountManager? = null
-    ): Int = withContext(Dispatchers.IO) {
+    ): RestoreSummary = withContext(Dispatchers.IO) {
         if (requireEmptyLibrary && db.beatmapDao().getAllBeatmaps().first().isNotEmpty()) {
-            return@withContext 0
+            return@withContext RestoreSummary()
         }
 
         val manifest = runCatching { gson.fromJson(json, MosuManifest::class.java) }
             .onFailure { Log.w(TAG, "Unable to parse MediaStore manifest", it) }
             .getOrNull()
-            ?: return@withContext 0
+            ?: return@withContext RestoreSummary()
 
         val tracks = manifest.tracks.orEmpty()
         val playlists = manifest.playlists.orEmpty()
@@ -106,10 +108,33 @@ object MosuBackupService {
                 isAlbum = backup.isAlbum
             )
             db.beatmapDao().insertBeatmap(entity)
-            db.preservedBeatmapSetIdDao().insertPreservedSetId(
-                PreservedBeatmapSetIdEntity(beatmapSetId = backup.beatmapSetId)
-            )
             restoredKeys += backup.trackKey()
+        }
+
+        // Restore the preserved set id list independently of whether the audio
+        // files are readable locally. This is what powers "Restore Downloads" so
+        // users can re-download songs they had before a reinstall/new device.
+        val preservedSetIds = (
+            manifest.preservedBeatmapSetIds.orEmpty() +
+                tracks.map { it.beatmapSetId }
+            ).distinct()
+        preservedSetIds.forEach { setId ->
+            db.preservedBeatmapSetIdDao().insertPreservedSetId(
+                PreservedBeatmapSetIdEntity(beatmapSetId = setId)
+            )
+        }
+        if (preservedSetIds.isNotEmpty()) {
+            // Keep the SharedPreferences mirror in sync so the profile startup
+            // sync does not try to (re)initialize the list from the library.
+            val prefs = context.getSharedPreferences("preserved_beatmaps", Context.MODE_PRIVATE)
+            val existingPrefs = prefs.getStringSet("preserved_set_ids", emptySet()).orEmpty()
+            prefs.edit()
+                .putStringSet(
+                    "preserved_set_ids",
+                    existingPrefs + preservedSetIds.map { it.toString() }
+                )
+                .putBoolean("preserved_list_initialized", true)
+                .apply()
         }
 
         playlists
@@ -140,8 +165,16 @@ object MosuBackupService {
 
         restoreRecentPlays(db, manifest.recentPlays.orEmpty())
 
-        Log.i(TAG, "Restored ${restoredKeys.size} tracks and ${playlists.size} playlists from MediaStore manifest")
-        restoredKeys.size
+        Log.i(
+            TAG,
+            "Restored ${restoredKeys.size} tracks, ${preservedSetIds.size} preserved set ids, " +
+                "and ${playlists.size} playlists from MediaStore manifest"
+        )
+        RestoreSummary(
+            restoredTracks = restoredKeys.size,
+            preservedSetIds = preservedSetIds.size,
+            restoredPlaylists = playlists.size
+        )
     }
 
     private fun BeatmapEntity.toBackupTrack(): BackupTrack {
@@ -262,9 +295,16 @@ data class MosuManifest(
     val exportedAt: Long = System.currentTimeMillis(),
     val accountCredentials: List<AccountCredentialBackup>? = emptyList(),
     val tracks: List<BackupTrack>? = emptyList(),
+    val preservedBeatmapSetIds: List<Long>? = emptyList(),
     val playlists: List<BackupPlaylist>? = emptyList(),
     val playlistTracks: List<BackupPlaylistTrack>? = emptyList(),
     val recentPlays: List<BackupRecentPlay>? = emptyList()
+)
+
+data class RestoreSummary(
+    val restoredTracks: Int = 0,
+    val preservedSetIds: Int = 0,
+    val restoredPlaylists: Int = 0
 )
 
 data class BackupTrack(

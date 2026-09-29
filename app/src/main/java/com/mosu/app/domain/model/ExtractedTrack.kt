@@ -7,6 +7,8 @@ data class ExtractedTrack(
     val coverFile: File?,
     val title: String,
     val artist: String,
-    val difficultyName: String
+    val difficultyName: String,
+    val titleUnicode: String? = null,
+    val artistUnicode: String? = null,
+    val creator: String? = null
 )
-

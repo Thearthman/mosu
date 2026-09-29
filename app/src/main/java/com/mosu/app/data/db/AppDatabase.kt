@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
         SearchHistoryEntity::class,
         DownloadTaskEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -283,6 +283,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 18 to 19: Add native-script (unicode) title/artist to beatmaps.
+        // Non-destructive: existing rows keep their romaji title/artist, unicode stays null.
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                fun addColumnIfMissing(name: String, definition: String) {
+                    val cursor = db.query("PRAGMA table_info(beatmaps)")
+                    var exists = false
+                    cursor.use {
+                        while (it.moveToNext()) {
+                            if (it.getString(it.getColumnIndex("name")) == name) {
+                                exists = true
+                                break
+                            }
+                        }
+                    }
+                    if (!exists) {
+                        db.execSQL("ALTER TABLE beatmaps ADD COLUMN $definition")
+                    }
+                }
+
+                addColumnIfMissing("titleUnicode", "titleUnicode TEXT")
+                addColumnIfMissing("artistUnicode", "artistUnicode TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -300,7 +325,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_14_15,
                     MIGRATION_15_16,
                     MIGRATION_16_17,
-                    MIGRATION_17_18
+                    MIGRATION_17_18,
+                    MIGRATION_18_19
                 )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()

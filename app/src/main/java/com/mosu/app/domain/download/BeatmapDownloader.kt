@@ -148,7 +148,8 @@ class BeatmapDownloader(
                             coverFile = if (coverFile?.exists() == true) coverFile else null,
                             title = detailData.title,
                             artist = detailData.artist,
-                            difficultyName = bid.version
+                            difficultyName = bid.version,
+                            creator = detailData.creator
                         ))
                     }
                 }

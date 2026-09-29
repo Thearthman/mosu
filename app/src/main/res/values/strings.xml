@@ -119,16 +119,22 @@
     <string name="profile_restore_skipped">Skipped already downloaded beatmap %1$d</string>
     <string name="profile_restore_downloading">Downloading beatmap %1$d...</string>
     <string name="profile_restore_extracting">Extracting beatmap %1$d...</string>
-    <string name="profile_restore_completed_toast">Restore completed! Restored %1$d beatmaps</string>
-    <string name="profile_restore_completed_progress">Restore completed! Restored %1$d/%2$d beatmaps</string>
+    <string name="profile_restore_completed_toast">Initiated downloading %1$d songs</string>
+    <string name="profile_restore_completed_progress">Initiated downloading %1$d/%2$d songs</string>
+    <string name="profile_restore_nothing_new">All %1$d songs are already downloaded</string>
     <string name="profile_restore_failed_progress">Restore failed: %1$s</string>
     <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
+    <string name="profile_debug_menu">Debug</string>
+    <string name="profile_debug_fix_metadata">Fix beatmap metadata</string>
+    <string name="profile_debug_repair_none">No beatmaps to repair</string>
+    <string name="profile_debug_repair_clean">Repaired %1$d of %2$d beatmapsets</string>
+    <string name="profile_debug_repair_result">Repaired %1$d of %2$d beatmapsets, skipped %3$d (%4$s)</string>
     <string name="profile_config_backup_title">Config Backup</string>
     <string name="profile_config_backup_desc">Export or import library, playlists, played history, and account credentials.</string>
     <string name="profile_config_export">Export</string>
     <string name="profile_config_import">Import</string>
     <string name="profile_config_exported">Config exported</string>
-    <string name="profile_config_imported">Imported %1$d tracks from config</string>
+    <string name="profile_config_imported">Imported %1$d tracks (%2$d queued for restore)</string>
     <string name="profile_config_failed">Config backup failed: %1$s</string>
 
     <!-- Info Popup -->

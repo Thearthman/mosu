@@ -150,7 +150,10 @@ class ZipExtractor(private val context: Context) {
                                     coverFile = extractedCover,
                                     title = metadata.title,
                                     artist = metadata.artist,
-                                    difficultyName = metadata.version
+                                    difficultyName = metadata.version,
+                                    titleUnicode = metadata.titleUnicode,
+                                    artistUnicode = metadata.artistUnicode,
+                                    creator = metadata.creator
                                 ))
                             }
                         }
@@ -180,25 +183,37 @@ class ZipExtractor(private val context: Context) {
         val backgroundFilename: String?,
         val title: String,
         val artist: String,
-        val version: String
+        val version: String,
+        val titleUnicode: String?,
+        val artistUnicode: String?,
+        val creator: String?
     )
 
     private fun parseOsuFile(file: File): OsuMetadata? {
         var audioFilename = ""
         var bgFilename: String? = null
         var title = ""
+        var titleUnicode = ""
         var artist = ""
+        var artistUnicode = ""
         var version = ""
+        var creator = ""
         
         try {
             file.forEachLine { line ->
                 val trimmed = line.trim()
                 if (trimmed.startsWith("AudioFilename:")) {
                     audioFilename = trimmed.substringAfter(":").trim()
+                } else if (trimmed.startsWith("TitleUnicode:")) {
+                    titleUnicode = trimmed.substringAfter(":").trim()
+                } else if (trimmed.startsWith("ArtistUnicode:")) {
+                    artistUnicode = trimmed.substringAfter(":").trim()
                 } else if (trimmed.startsWith("Title:")) {
                     title = trimmed.substringAfter(":").trim()
                 } else if (trimmed.startsWith("Artist:")) {
                     artist = trimmed.substringAfter(":").trim()
+                } else if (trimmed.startsWith("Creator:")) {
+                    creator = trimmed.substringAfter(":").trim()
                 } else if (trimmed.startsWith("Version:")) {
                     version = trimmed.substringAfter(":").trim()
                 } else if (trimmed.startsWith("0,0,") && (trimmed.endsWith(".jpg") || trimmed.endsWith(".png") || trimmed.endsWith(".jpeg"))) {
@@ -219,6 +234,17 @@ class ZipExtractor(private val context: Context) {
         }
         
         if (audioFilename.isEmpty()) return null
-        return OsuMetadata(audioFilename, bgFilename, title, artist, version)
+        // .osu TitleUnicode/ArtistUnicode may be absent or empty on older maps;
+        // treat those as "no native-script value" rather than storing a blank.
+        return OsuMetadata(
+            audioFilename = audioFilename,
+            backgroundFilename = bgFilename,
+            title = title,
+            artist = artist,
+            version = version,
+            titleUnicode = titleUnicode.ifBlank { null },
+            artistUnicode = artistUnicode.ifBlank { null },
+            creator = creator.ifBlank { null }
+        )
     }
 }

@@ -43,6 +43,9 @@ class BeatmapDownloadService(
     ): Flow<UnifiedDownloadState> = flow {
         var downloadSuccessful = false
         var lastErrorMessage = ""
+        // Restore-download callers only know the set id, so title may be blank.
+        // Use a readable label in progress/error messages without persisting it.
+        val displayTitle = title.ifBlank { "#$beatmapSetId" }
         var selectedCandidate = DownloadCandidate(
             id = beatmapSetId,
             title = title,
@@ -73,8 +76,6 @@ class BeatmapDownloadService(
                             registerExtractedTracks(
                                 targetId = candidate.id,
                                 tracks = extractedTracks,
-                                title = candidate.title,
-                                artist = candidate.artist,
                                 creator = candidate.creator,
                                 genreId = candidate.genreId,
                                 isAlbumSet = isAlbumSet,
@@ -91,8 +92,6 @@ class BeatmapDownloadService(
                             registerExtractedTracks(
                                 targetId = candidate.id,
                                 tracks = state.tracks,
-                                title = candidate.title,
-                                artist = candidate.artist,
                                 creator = candidate.creator,
                                 genreId = candidate.genreId,
                                 isAlbumSet = isAlbumSet,
@@ -103,7 +102,7 @@ class BeatmapDownloadService(
                         }
                         is DownloadState.Error -> {
                             lastErrorMessage = if (state.message == "No audio tracks found") {
-                                context.getString(R.string.download_error_no_audio, title)
+                                context.getString(R.string.download_error_no_audio, displayTitle)
                             } else {
                                 state.message
                             }
@@ -115,7 +114,7 @@ class BeatmapDownloadService(
                 Log.e("BeatmapDownloadService", "Error during download attempt ${candidate.id}", e)
                 val isNoAudio = e.message?.contains("No audio tracks") == true
                 lastErrorMessage = if (isNoAudio) {
-                    context.getString(R.string.download_error_no_audio, title)
+                    context.getString(R.string.download_error_no_audio, displayTitle)
                 } else {
                     e.message ?: "Download attempt failed"
                 }
@@ -194,8 +193,7 @@ class BeatmapDownloadService(
 
     private fun hasSearchableMetadata(title: String, artist: String): Boolean {
         return title.isNotBlank() &&
-            artist.isNotBlank() &&
-            !title.matches(Regex("""Beatmap \d+"""))
+            artist.isNotBlank()
     }
 
     private fun BeatmapsetCompact.toDownloadCandidate(): DownloadCandidate {
@@ -212,20 +210,30 @@ class BeatmapDownloadService(
     private suspend fun registerExtractedTracks(
         targetId: Long,
         tracks: List<ExtractedTrack>,
-        title: String,
-        artist: String,
         creator: String,
         genreId: Int?,
         isAlbumSet: Boolean,
         fallbackCoverPath: String?
     ) {
         val mediaStore = MediaStoreFileService(context)
+        // Genre is beatmapset-level metadata that the .osu file format does not
+        // carry, so when the caller has no hint (e.g. Restore Downloads, which
+        // only knows the set id) resolve it from the API. A failed lookup is
+        // non-fatal: the track is still registered, just without a genre.
+        val resolvedGenreId = resolveGenreId(targetId, genreId)
 
         tracks.forEach { track ->
-            // For album sets, use individual track titles from .osu files.
-            // For single sets, use the global search title/artist for state consistency.
-            val finalTitle = if (isAlbumSet) track.title else title
-            val finalArtist = if (isAlbumSet) track.artist else artist
+            // Track-level metadata (title/artist/difficulty, incl. native-script
+            // variants) is authoritative from the downloaded .osu file, and so is
+            // the set creator (see below). Genre is the only set-level field the
+            // .osu format lacks, so that one comes from the API.
+            val finalTitle = track.title
+            val finalArtist = track.artist
+            // Set-level creator. Empirically the .osu "Creator" field holds the
+            // beatmapset host (verified: guest difficulties like "zoli's Expert"
+            // still carry the set creator), so the downloaded file is authoritative
+            // here too; fall back to the caller hint only if it is absent.
+            val finalCreator = track.creator?.takeIf { it.isNotBlank() } ?: creator
             val audioUri = mediaStore.copyAudioToMediaStore(
                 source = track.audioFile,
                 beatmapSetId = targetId,
@@ -248,11 +256,13 @@ class BeatmapDownloadService(
                 beatmapSetId = targetId,
                 title = finalTitle,
                 artist = finalArtist,
-                creator = creator,
+                titleUnicode = track.titleUnicode,
+                artistUnicode = track.artistUnicode,
+                creator = finalCreator,
                 difficultyName = track.difficultyName,
                 audioPath = audioUri,
                 coverPath = coverUri,
-                genreId = genreId,
+                genreId = resolvedGenreId,
                 isAlbum = isAlbumSet
             )
             TrackService.addTrack(entity, db, context)
@@ -260,6 +270,13 @@ class BeatmapDownloadService(
 
         TrackService.updateTrackDownloadStatus(targetId, true, db)
         MosuBackupService.exportState(context, db)
+    }
+
+    private suspend fun resolveGenreId(setId: Long, hint: Int?): Int? {
+        if (hint != null) return hint
+        return runCatching { repository.getBeatmapsetDetail(setId).genreId }
+            .onFailure { Log.w("BeatmapDownloadService", "Genre lookup failed for set $setId", it) }
+            .getOrNull()
     }
 }
 

@@ -9,6 +9,10 @@
 - [x] When deleting an account in account manager, snap the slider back, show a warning confirmation dialog, then remove the account from UI and storage only after confirmation.
 - [x] [v1.0] Preferred Mirror doesn't work most of the time. should have used a more durable and persistent way to determine user's geolocation.
 
+### UIUX
+- [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
+- [ ] Downloaded song in the download list should move to the bottom of the list. 
+
 ### Features
 
 #### Core
@@ -19,6 +23,7 @@
 - [x] [v1.1] Implement score page.
 
 #### Settings
+- [ ] [v1.4] Add a display toggle for native-language (Unicode) beatmap titles/artists. Both are already stored in the DB (`titleUnicode`/`artistUnicode`); romaji is shown for now as the osu! standard. (Stage 5 of the beatmap-metadata source-of-truth rework.)
 - [ ] Add a guidance/help page for getting osu! credentials in the credential setup flow. Display the guidance markdown file from the repo root, or ask for the file if it is missing.
 
 #### Player
@@ -36,10 +41,10 @@
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
 - [x] [v1.1] Add a Settings toggle to make the Recent play filter display every recorded entry as Play History, not just newest played songs.
-- [ ] [v1.1] Add Top Play filter mode.
+- [ ] [v1.1] Add Top Play(top 200) filter mode.
 
 #### Library
-- [ ] [v1.1] Add an artist view toggle. In artist view, group songs by normalized artist names, removing special characters and spaces to reduce typo-related misses. Clicking an artist should open a playlist-style song list for that artist.
+- [ ] [v1.3] Add an artist view toggle. In artist view, group songs by normalized artist names, removing special characters and spaces to reduce typo-related misses. Clicking an artist should open a playlist-style song list for that artist.
 - [ ] Make the library genre filter apply to loop/random playlists once current playing playlist logic is in place.
 
 #### score (heavily relying on the "recent" score database)
@@ -202,6 +207,7 @@
 - [x] Music and Search previews pause when another app starts media playback.
 - [x] Beatmap swipe actions now require distance threshold instead of velocity-only dismissal.
 - [x] Beatmap swipe actions now reject diagonal/vertical gestures and allow reversing direction within the same swipe.
+- [x] [v1.0] Included the downloaded-song restore list (`preserved_beatmap_set_ids`) in the Mosu export/import manifest so imports populate "Restore Downloads" even when local audio files are gone.
 
 ### Codebase Maintenance
 - [x] Refactored song list components into specialized UI components.
@@ -213,3 +219,5 @@
 - [x] Consolidated selection dialogs into `SelectableBeatmapList` and `SelectableBeatmapData`.
 - [x] [v1.0] Aligned architecture boundaries by removing direct low-level download-service dependencies from UI screens and moving restore orchestration into a domain service.
 - [x] [v1.0] Reworked downloads into a centralized WorkManager-backed manager with persisted Room task state so queued and active downloads can resume after process death.
+- [x] Made signing resilient to project moves: keystore path is configurable via `MOSU_RELEASE_STORE_FILE` (auto-detected from `../keystores`, `./keystores`, `~/personal/keystores`), the build no longer hard-fails when the keystore is absent (debug uses the default debug keystore, release is left unsigned with a warning), and a fresh keystore was generated at `~/work/Personal/keystores/mosu.jks`.
+- [x] Fixed 16 KB page-size alignment for uncompressed native libraries (`lib/*/libandroidx.graphics.path.so`) by upgrading the Android Gradle Plugin 8.1.1 -> 8.5.1; debug and release APKs now pass `zipalign -c -P 16`.

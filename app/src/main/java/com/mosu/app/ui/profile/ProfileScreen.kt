@@ -52,6 +52,7 @@ import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.repository.OsuRepository
+import com.mosu.app.domain.repair.BeatmapMetadataRepairService
 import com.mosu.app.domain.restore.RestoreDownloadsService
 import com.mosu.app.utils.RegionUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -117,6 +118,10 @@ fun ProfileScreen(
     var showTokenDialog by remember { mutableStateOf(false) }
     var currentToken by remember { mutableStateOf<String?>(null) }
 
+    // Debug tools state
+    var debugMenuExpanded by remember { mutableStateOf(false) }
+    var isRepairingMetadata by remember { mutableStateOf(false) }
+
     // Account management state
     var showAddAccountDialog by remember { mutableStateOf(false) }
     var showAccountSwitcher by remember { mutableStateOf(false) }
@@ -166,7 +171,7 @@ fun ProfileScreen(
                         context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                             ?: error("Unable to open import file")
                     }
-                    val restored = MosuBackupService.restoreFromJson(
+                    val summary = MosuBackupService.restoreFromJson(
                         context = context,
                         db = db,
                         json = json,
@@ -174,7 +179,15 @@ fun ProfileScreen(
                         accountManager = accountManager
                     )
                     MosuBackupService.exportState(context, db)
-                    android.widget.Toast.makeText(context, context.getString(R.string.profile_config_imported, restored), android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.profile_config_imported,
+                            summary.restoredTracks,
+                            summary.preservedSetIds
+                        ),
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
                 } catch (e: Exception) {
                     android.widget.Toast.makeText(context, context.getString(R.string.profile_config_failed, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                 }
@@ -702,10 +715,13 @@ fun ProfileScreen(
                                                 restoreProgress = progress
                                                 restoreMessage = message
                                             }
-                                            val toastMessage = if (result.total == 0) {
-                                                context.getString(R.string.profile_restore_no_beatmaps)
-                                            } else {
-                                                context.getString(R.string.profile_restore_completed_toast, result.completed)
+                                            val toastMessage = when {
+                                                result.total == 0 ->
+                                                    context.getString(R.string.profile_restore_no_beatmaps)
+                                                result.enqueued == 0 ->
+                                                    context.getString(R.string.profile_restore_nothing_new, result.total)
+                                                else ->
+                                                    context.getString(R.string.profile_restore_completed_toast, result.enqueued)
                                             }
                                             android.widget.Toast.makeText(context, toastMessage, android.widget.Toast.LENGTH_LONG).show()
                                         } catch (e: Exception) {
@@ -820,7 +836,99 @@ fun ProfileScreen(
                 }
             }
 
-        
+            // Debug tools (bottom of settings) — hidden-ish maintenance actions.
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.profile_debug_menu),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Box {
+                        OutlinedButton(
+                            onClick = { debugMenuExpanded = true },
+                            enabled = !isRepairingMetadata
+                        ) {
+                            if (isRepairingMetadata) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(stringResource(R.string.profile_debug_menu))
+                        }
+                        DropdownMenu(
+                            expanded = debugMenuExpanded,
+                            onDismissRequest = { debugMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.profile_debug_fix_metadata)) },
+                                onClick = {
+                                    debugMenuExpanded = false
+                                    if (!isRepairingMetadata) {
+                                        isRepairingMetadata = true
+                                        scope.launch {
+                                            try {
+                                                val result = BeatmapMetadataRepairService(
+                                                    context = context,
+                                                    db = db,
+                                                    repository = repository
+                                                ).repairAll()
+                                                val message = when {
+                                                    result.total == 0 ->
+                                                        context.getString(R.string.profile_debug_repair_none)
+                                                    result.skipped == 0 ->
+                                                        context.getString(
+                                                            R.string.profile_debug_repair_clean,
+                                                            result.repaired,
+                                                            result.total
+                                                        )
+                                                    else -> {
+                                                        val reasons = result.failureReasons.entries
+                                                            .joinToString(", ") { "${it.key} ×${it.value}" }
+                                                        context.getString(
+                                                            R.string.profile_debug_repair_result,
+                                                            result.repaired,
+                                                            result.total,
+                                                            result.skipped,
+                                                            reasons
+                                                        )
+                                                    }
+                                                }
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    message,
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    e.message ?: "Repair failed",
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            } finally {
+                                                isRepairingMetadata = false
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
     }
 
     // Credentials management dialog

@@ -84,8 +84,11 @@ data class BeatmapDetail(
 data class BeatmapsetDetail(
     @SerializedName("id") val id: Long,
     @SerializedName("title") val title: String,
+    @SerializedName("title_unicode") val titleUnicode: String? = null,
     @SerializedName("artist") val artist: String,
+    @SerializedName("artist_unicode") val artistUnicode: String? = null,
     @SerializedName("creator") val creator: String,
+    @SerializedName("genre_id") val genreId: Int? = null,
     @SerializedName("covers") val covers: Covers,
     @SerializedName("beatmaps") val beatmaps: List<BeatmapDetail> = emptyList(),
     @SerializedName("status") val status: String

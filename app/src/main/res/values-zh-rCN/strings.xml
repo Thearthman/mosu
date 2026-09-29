@@ -119,16 +119,22 @@
     <string name="profile_restore_skipped">跳过已下载的谱面 %1$d</string>
     <string name="profile_restore_downloading">正在下载谱面 %1$d...</string>
     <string name="profile_restore_extracting">正在解压谱面 %1$d...</string>
-    <string name="profile_restore_completed_toast">恢复完成！已恢复 %1$d 首谱面</string>
-    <string name="profile_restore_completed_progress">恢复完成！已恢复 %1$d/%2$d 首谱面</string>
+    <string name="profile_restore_completed_toast">已开始下载 %1$d 首歌曲</string>
+    <string name="profile_restore_completed_progress">已开始下载 %1$d/%2$d 首歌曲</string>
+    <string name="profile_restore_nothing_new">全部 %1$d 首歌曲均已下载</string>
     <string name="profile_restore_failed_progress">恢复失败: %1$s</string>
     <string name="profile_restore_failed_toast">恢复失败: %1$s</string>
+    <string name="profile_debug_menu">调试</string>
+    <string name="profile_debug_fix_metadata">修复谱面元数据</string>
+    <string name="profile_debug_repair_none">没有可修复的谱面</string>
+    <string name="profile_debug_repair_clean">已修复 %1$d/%2$d 个谱面集</string>
+    <string name="profile_debug_repair_result">已修复 %1$d/%2$d 个谱面集，跳过 %3$d (%4$s)</string>
     <string name="profile_config_backup_title">配置备份</string>
     <string name="profile_config_backup_desc">导出或导入曲库、歌单、播放历史和账号凭证。</string>
     <string name="profile_config_export">导出</string>
     <string name="profile_config_import">导入</string>
     <string name="profile_config_exported">配置已导出</string>
-    <string name="profile_config_imported">已从配置导入 %1$d 首歌曲</string>
+    <string name="profile_config_imported">已从配置导入 %1$d 首歌曲（%2$d 首待恢复）</string>
     <string name="profile_config_failed">配置备份失败: %1$s</string>
 
     <!-- 信息弹窗 -->

@@ -65,6 +65,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -164,6 +166,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Applies postSplashScreenTheme (Theme.Mosu) and, below API 31, sets up
+        // the compat splash. We deliberately do NOT keep the splash on screen:
+        // on Android 12+ the status bar drawn over the system splash cannot be
+        // hidden by the app, so holding it only prolongs a bar-visible frame.
+        installSplashScreen()
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         applyImmersiveMode()
@@ -206,11 +214,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        // Re-hide the system bars whenever the window regains focus (e.g. after
-        // the transient swipe-to-reveal bars auto-dismiss or the app is resumed).
-        if (hasFocus) {
+        // Re-hide the system bars when the window regains focus (e.g. transient
+        // swipe-to-reveal bars, or returning from another app). Guarded so we do
+        // not re-issue a hide transition while the bars are already hidden, which
+        // would re-trigger the inset animation on cold start.
+        if (hasFocus && areSystemBarsVisible()) {
             hideSystemBars()
         }
+    }
+
+    private fun areSystemBarsVisible(): Boolean {
+        val insets = ViewCompat.getRootWindowInsets(window.decorView) ?: return true
+        return insets.isVisible(WindowInsetsCompat.Type.systemBars())
     }
 
     /**
@@ -455,6 +470,11 @@ fun MainScreen(
         Scaffold(
             // snackbarHost removed from here
             // No bottomBar here
+            // Immersive app: the system bars start hidden, so treat the system
+            // bar insets as always zero. Reading the live insets here would
+            // relayout the whole UI the moment the bars hide on launch, which is
+            // the launch jitter we are avoiding.
+            contentWindowInsets = WindowInsets(0),
         ) { innerPadding ->
                 NavHost(
                     navController = navController,

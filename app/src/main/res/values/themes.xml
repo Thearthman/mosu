@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Mosu" parent="android:Theme.Material.Light.NoActionBar" />
-</resources>
+    <style name="Theme.Mosu" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Hide the status bar from the moment the app window is created, so
+             the window is already immersive on its very first frame. Without
+             this the bar is visible for the first frames and then hides, which
+             relayouts the main UI (the launch jitter). -->
+        <item name="android:windowFullscreen">true</item>
+    </style>
 
+    <!-- Launch theme for the starting/splash window shown before the app process
+         renders its first frame. Note: on Android 12+ this splash is a system
+         "starting window" that always draws the status bar - the platform builds
+         it and ignores android:windowFullscreen, so the bar cannot be hidden
+         here by the app. We only brand the splash; the app window takes over
+         immersive (Theme.Mosu) as soon as it draws. -->
+    <style name="Theme.Mosu.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Mosu</item>
+    </style>
+</resources>

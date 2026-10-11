@@ -216,10 +216,8 @@ class ZipExtractor(private val context: Context) {
                     creator = trimmed.substringAfter(":").trim()
                 } else if (trimmed.startsWith("Version:")) {
                     version = trimmed.substringAfter(":").trim()
-                } else if (trimmed.startsWith("0,0,") && (trimmed.endsWith(".jpg") || trimmed.endsWith(".png") || trimmed.endsWith(".jpeg"))) {
-                    // Events section background line usually looks like: 0,0,"bg.jpg",0,0
-                    // But regex is safer. Or simple string split.
-                    // Background events start with 0,0 (Background), then filename in quotes
+                } else if (!trimmed.contains("sb") && trimmed.startsWith("0,0,") && (trimmed.contains(".jpg") || trimmed.contains(".png") || trimmed.contains(".jpeg"))) {
+                    // Fixed: use .contains() instead of .endsWith()
                     val parts = trimmed.split(",")
                     if (parts.size >= 3) {
                         val potentialBg = parts[2].replace("\"", "")

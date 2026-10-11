@@ -78,6 +78,22 @@ import com.mosu.app.player.PlaybackMod
 import com.mosu.app.ui.components.Track
 import java.util.Locale
 
+// -- Responsive layout ---------------------------------------------------------
+// The full player was designed against a 1216 x 2640 px panel (~2.874 density,
+// i.e. ~423 x 918 dp). Instead of hard-coding dp sizes tied to that one panel, the
+// vertical regions below are weighted so they scale with whatever height the device
+// actually provides. All weights are relative to the cover art's weight of 1.
+private const val COVER_WEIGHT = 1f          // cover art slot (grows with the screen)
+private const val CONTROLS_WEIGHT = 0.19f    // controls row (≈90 dp on the reference panel)
+private const val BOTTOM_GAP_WEIGHT = 0.11f  // bottom breathing room (≈55 dp on the reference panel)
+// Buttons are sized as a fraction of the control row's height so they scale with it.
+private const val SIDE_BUTTON_HEIGHT_FRACTION = 0.52f // ≈48 dp on the reference panel
+private const val PLAY_BUTTON_HEIGHT_FRACTION = 0.78f // ≈72 dp on the reference panel
+private const val PLAY_ICON_FRACTION = 0.66f          // ≈48 dp glyph inside the play button
+// Keeps the (centered) content column phone-sized on wider displays instead of
+// stretching edge to edge.
+private val MaxContentWidth = 480.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullPlayer(
@@ -98,7 +114,8 @@ fun FullPlayer(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.TopCenter
         ) {
             // Blurred Background (Simulated with zoomed image and overlay)
             AsyncImage(
@@ -130,8 +147,9 @@ fun FullPlayer(
 
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical=10.dp, horizontal=24.dp),
+                    .fillMaxHeight()
+                    .widthIn(max = MaxContentWidth)
+                    .padding(vertical = 10.dp, horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Spacer(modifier = Modifier.height(35.dp))
@@ -148,16 +166,24 @@ fun FullPlayer(
 
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // Square Cover Art
-                AsyncImage(
-                    model = nowPlaying?.artworkUri,
-                    contentDescription = "Cover Art",
+                // Square Cover Art. It lives inside a weighted, full-height slot so it
+                // scales with the leftover vertical space; the square itself is centered
+                // in that slot (a square can't fill a slot taller than it is wide).
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                        .weight(COVER_WEIGHT)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = nowPlaying?.artworkUri,
+                        contentDescription = "Cover Art",
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(50.dp))
 
@@ -192,11 +218,11 @@ fun FullPlayer(
 
                 Spacer(modifier = Modifier.height(30.dp))
 
-                // Controls Row
+                // Controls Row — weighted so the row's height scales with the screen.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 20.dp),
+                        .weight(CONTROLS_WEIGHT),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Left cluster: Mod + Previous
@@ -261,7 +287,9 @@ fun FullPlayer(
                         }
                         IconButton(
                             onClick = { musicController.skipToPrevious() },
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier
+                                .fillMaxHeight(SIDE_BUTTON_HEIGHT_FRACTION)
+                                .aspectRatio(1f)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SkipPrevious,
@@ -276,15 +304,15 @@ fun FullPlayer(
                     IconButton(
                         onClick = { musicController.togglePlayPause() },
                         modifier = Modifier
-                            .size(72.dp)
+                            .fillMaxHeight(PLAY_BUTTON_HEIGHT_FRACTION)
+                            .aspectRatio(1f)
                             .background(MaterialTheme.colorScheme.primary, CircleShape)
-                            .padding(12.dp)
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(PLAY_ICON_FRACTION)
                         )
                     }
 
@@ -296,7 +324,9 @@ fun FullPlayer(
                     ) {
                         IconButton(
                             onClick = { musicController.skipToNext() },
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier
+                                .fillMaxHeight(SIDE_BUTTON_HEIGHT_FRACTION)
+                                .aspectRatio(1f)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SkipNext,
@@ -305,25 +335,30 @@ fun FullPlayer(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
-                        IconButton(onClick = {
-                            when {
-                                shuffleModeEnabled -> {
-                                    // Random -> Single
-                                    musicController.setShuffleMode(false)
-                                    musicController.setRepeatMode(Player.REPEAT_MODE_ONE)
+                        IconButton(
+                            onClick = {
+                                when {
+                                    shuffleModeEnabled -> {
+                                        // Random -> Single
+                                        musicController.setShuffleMode(false)
+                                        musicController.setRepeatMode(Player.REPEAT_MODE_ONE)
+                                    }
+                                    repeatMode == Player.REPEAT_MODE_ONE -> {
+                                        // Single -> Sequence (repeat all, shuffle off)
+                                        musicController.setShuffleMode(false)
+                                        musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
+                                    }
+                                    else -> {
+                                        // Sequence -> Random (shuffle on, repeat all)
+                                        musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
+                                        musicController.setShuffleMode(true)
+                                    }
                                 }
-                                repeatMode == Player.REPEAT_MODE_ONE -> {
-                                    // Single -> Sequence (repeat all, shuffle off)
-                                    musicController.setShuffleMode(false)
-                                    musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
-                                }
-                                else -> {
-                                    // Sequence -> Random (shuffle on, repeat all)
-                                    musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
-                                    musicController.setShuffleMode(true)
-                                }
-                            }
-                        }) {
+                            },
+                            modifier = Modifier
+                                .fillMaxHeight(SIDE_BUTTON_HEIGHT_FRACTION)
+                                .aspectRatio(1f)
+                        ) {
                             val icon = when {
                                 shuffleModeEnabled -> Icons.Default.Shuffle
                                 repeatMode == Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
@@ -342,7 +377,7 @@ fun FullPlayer(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(55.dp))
+                Spacer(Modifier.weight(BOTTOM_GAP_WEIGHT))
             }
         }
     }

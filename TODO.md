@@ -32,6 +32,7 @@
 
 #### Player
 - [ ] Add HT/Half Time, similar to DT but without pitch changes.
+- [ ] [v2.0] Add a dedicated landscape layout for the full player screen (the current layout is portrait-oriented).
 - [ ] [v2.0] Replace the existing music controller with Rubber Band to reduce double-time metallic distortion.
 - [ ] [v1.2] Implement sound balancing based on loudness normalization algorithms.
 - [ ] [v1.2] Implement lyrics service with LRCLIB.

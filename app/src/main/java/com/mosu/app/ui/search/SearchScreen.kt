@@ -119,11 +119,11 @@ fun SearchScreen(
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     val recentPlayHistoryEnabled by settingsManager.recentPlayHistoryEnabled.collectAsState(initial = false)
 
-    val currentAccount by accountManager.currentAccount.collectAsState(initial = null)
+    val currentUserInfo by accountManager.currentUserInfo.collectAsState(initial = null)
 
-    // Update user info from current account
-    LaunchedEffect(currentAccount) {
-        val user = currentAccount?.userInfo
+    // Update user info from the signed-in account
+    LaunchedEffect(currentUserInfo) {
+        val user = currentUserInfo
         if (user != null) {
             vm.userId = user.id.toString()
             vm.isSupporter = user.isSupporter

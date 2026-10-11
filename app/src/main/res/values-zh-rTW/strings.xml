@@ -63,24 +63,16 @@
     <string name="profile_statistics_title">統計資料</string>
     <string name="profile_downloaded_songs_label">已下載歌曲: %1$d</string>
 
-    <!-- 帳戶管理 -->
-    <string name="profile_account_switch_title">切換帳戶</string>
-    <string name="profile_account_no_accounts">未配置帳戶</string>
-    <string name="profile_account_select_account">選擇一個帳戶繼續</string>
-    <string name="profile_account_access_description">添加帳戶以訪問 osu! 功能</string>
-    <string name="profile_account_manage_credentials_title">管理帳戶憑證</string>
-    <string name="profile_account_update_credentials">更新憑證</string>
-    <string name="profile_account_add_new_title">添加新帳戶</string>
-    <string name="profile_account_add_new_description">設置額外的 osu! 帳戶</string>
-    <string name="profile_account_add_button">添加帳戶</string>
-    <string name="profile_account_logged_in">已登錄</string>
-    <string name="profile_account_not_logged_in">未登錄</string>
-    <string name="profile_account_needs_login">需要登錄 - 點擊登錄</string>
-    <string name="profile_account_expired_login">已過期 - 點擊登錄</string>
-    <string name="profile_account_delete_title">刪除帳戶？</string>
-    <string name="profile_account_delete_message">從此裝置移除 %1$s？</string>
-    <string name="profile_account_delete_confirm">刪除</string>
-    <string name="profile_account_delete_cancel">取消</string>
+    <!-- 帳戶 -->
+    <string name="profile_login_title">未登錄</string>
+    <string name="profile_login_description">點擊以登錄 osu!</string>
+    <string name="profile_login_configure">請在設定中添加 OAuth 憑證以登錄</string>
+    <string name="profile_sign_out">登出</string>
+    <string name="profile_account_help_content_desc">帳戶操作說明</string>
+    <string name="profile_account_help_title">帳戶操作</string>
+    <string name="profile_account_help_short_press">短按：登錄（未登錄時）或開啟除錯權杖檢視（已登錄時）。</string>
+    <string name="profile_account_help_long_press">長按：編輯您的 OAuth 用戶端 ID 和用戶端密鑰。</string>
+    <string name="profile_account_help_debug">除錯權杖檢視：顯示目前工作階段的原始存取權杖，並允許您複製它。</string>
 
     <!-- OAuth 憑證 -->
     <string name="profile_oauth_dialog_title">OAuth 憑證</string>
@@ -130,7 +122,7 @@
     <string name="profile_debug_repair_clean">已修復 %1$d/%2$d 個譜面集</string>
     <string name="profile_debug_repair_result">已修復 %1$d/%2$d 個譜面集，跳過 %3$d (%4$s)</string>
     <string name="profile_config_backup_title">設定備份</string>
-    <string name="profile_config_backup_desc">匯出或匯入曲庫、歌單、播放記錄和帳號憑證。</string>
+    <string name="profile_config_backup_desc">匯出或匯入曲庫、歌單和播放記錄。</string>
     <string name="profile_config_export">匯出</string>
     <string name="profile_config_import">匯入</string>
     <string name="profile_config_exported">設定已匯出</string>

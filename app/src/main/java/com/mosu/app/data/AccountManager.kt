@@ -6,262 +6,67 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.mosu.app.data.api.RetrofitClient
-import com.mosu.app.data.api.model.OsuUserCompact
-import com.mosu.app.data.model.Account
 import com.google.gson.Gson
+import com.mosu.app.data.api.model.OsuUserCompact
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.accountDataStore: DataStore<Preferences> by preferencesDataStore(name = "accounts")
 
-class AccountManager(
-    private val context: Context,
-    private val tokenManager: TokenManager
-) {
+/**
+ * Caches the osu! profile of the single signed-in account.
+ *
+ * Mosu supports exactly one account; the OAuth session itself lives in
+ * [TokenManager], while this only mirrors the last fetched [OsuUserCompact] so
+ * the UI can render immediately on launch.
+ */
+class AccountManager(private val context: Context) {
     private val gson = Gson()
 
     companion object {
-        private fun userInfoKey(accountId: String) = stringPreferencesKey("user_info_$accountId")
+        private val USER_INFO_KEY = stringPreferencesKey("user_info")
+        private const val LEGACY_USER_INFO_PREFIX = "user_info_"
     }
 
-    // Get all logged-in accounts (with user info)
-    val accounts: Flow<List<Account>> = context.accountDataStore.data
-        .map { preferences ->
-            val loggedInAccountIds = preferences.asMap().keys
-                .filter { it.name.startsWith("user_info_") }
-                .map { it.name.removePrefix("user_info_") }
+    val currentUserInfo: Flow<OsuUserCompact?> = context.accountDataStore.data
+        .map { preferences -> preferences[USER_INFO_KEY]?.let { decode(it) } }
 
-            loggedInAccountIds.mapNotNull { accountId ->
-                val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
-                if (clientId != null && clientSecret != null) {
-                    val userInfoJson = preferences[userInfoKey(accountId)]
-                    val userInfo = userInfoJson?.let { gson.fromJson(it, OsuUserCompact::class.java) }
-
-                    Account(
-                        id = accountId,
-                        clientId = clientId,
-                        clientSecret = clientSecret,
-                        accessToken = tokenManager.getCurrentAccessToken(),
-                        refreshToken = null, // Don't expose refresh tokens
-                        tokenExpiry = null,   // Don't expose expiry
-                        userInfo = userInfo
-                    )
-                } else null
-            }
-        }
-
-    // Get current account
-    val currentAccount: Flow<Account?> = tokenManager.currentAccountId
-        .map { accountId ->
-            accountId?.let { getAccount(it).first() }
-        }
-
-    // Get specific account
-    fun getAccount(accountId: String): Flow<Account?> = context.accountDataStore.data
-        .map { preferences ->
-            val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
-            if (clientId != null && clientSecret != null) {
-                val userInfoJson = preferences[userInfoKey(accountId)]
-                val userInfo = userInfoJson?.let { gson.fromJson(it, OsuUserCompact::class.java) }
-
-                Account(
-                    id = accountId,
-                    clientId = clientId,
-                    clientSecret = clientSecret,
-                    accessToken = null, // Don't expose tokens
-                    refreshToken = null,
-                    tokenExpiry = null,
-                    userInfo = userInfo
-                )
-            } else null
-        }
-
-    // Create new account
-    suspend fun createAccount(accountId: String, clientId: String, clientSecret: String) {
-        tokenManager.saveAccountCredentials(accountId, clientId, clientSecret)
-    }
-
-    // Switch to account
-    suspend fun switchToAccount(accountId: String) {
-        tokenManager.setCurrentAccount(accountId)
-    }
-
-    // Save user info for account
-    suspend fun saveUserInfo(accountId: String, userInfo: OsuUserCompact) {
-        val userInfoJson = gson.toJson(userInfo)
+    suspend fun saveUserInfo(userInfo: OsuUserCompact) {
         context.accountDataStore.edit { preferences ->
-            preferences[userInfoKey(accountId)] = userInfoJson
+            preferences[USER_INFO_KEY] = gson.toJson(userInfo)
         }
     }
-    
-    // Get cached user info for account
-    suspend fun getCachedUserInfo(accountId: String): OsuUserCompact? {
+
+    suspend fun getCachedUserInfo(): OsuUserCompact? {
         val preferences = context.accountDataStore.data.first()
-        val userInfoJson = preferences[userInfoKey(accountId)]
-        return userInfoJson?.let { gson.fromJson(it, OsuUserCompact::class.java) }
+        return preferences[USER_INFO_KEY]?.let { decode(it) }
     }
 
-    suspend fun getCredentialBackups(): List<AccountCredentialBackup> {
-        val accountIds = tokenManager.getAccountCredentialIds()
-        val preferences = context.accountDataStore.data.first()
-        return accountIds.mapNotNull { accountId ->
-            val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
-            if (clientId.isNullOrBlank() || clientSecret.isNullOrBlank()) {
-                null
-            } else {
-                AccountCredentialBackup(
-                    accountId = accountId,
-                    clientId = clientId,
-                    clientSecret = clientSecret,
-                    userInfoJson = preferences[userInfoKey(accountId)]
-                )
-            }
-        }
-    }
-
-    suspend fun restoreCredentialBackups(accounts: List<AccountCredentialBackup>) {
-        accounts.forEach { account ->
-            if (account.accountId.isBlank() ||
-                account.clientId.isBlank() ||
-                account.clientSecret.isBlank()
-            ) {
-                return@forEach
-            }
-
-            tokenManager.saveAccountCredentials(
-                accountId = account.accountId,
-                clientId = account.clientId,
-                clientSecret = account.clientSecret
-            )
-            account.userInfoJson
-                ?.takeIf { it.isNotBlank() }
-                ?.let { userInfoJson ->
-                    context.accountDataStore.edit { preferences ->
-                        preferences[userInfoKey(account.accountId)] = userInfoJson
-                    }
-                }
-        }
-
-        val currentAccountId = tokenManager.getCurrentAccountId()
-        val firstRestoredAccount = accounts.firstOrNull {
-            it.accountId.isNotBlank() &&
-                it.clientId.isNotBlank() &&
-                it.clientSecret.isNotBlank()
-        }?.accountId
-        if (currentAccountId == null && firstRestoredAccount != null) {
-            tokenManager.setCurrentAccount(firstRestoredAccount)
-        }
-    }
-
-    // Delete account
-    suspend fun deleteAccount(accountId: String) {
+    suspend fun clearUserInfo() {
         context.accountDataStore.edit { preferences ->
-            preferences.remove(userInfoKey(accountId))
-        }
-        tokenManager.deleteAccount(accountId)
-    }
-
-    // Login to account (OAuth flow)
-    suspend fun loginToAccount(accountId: String, authCode: String, redirectUri: String): Boolean {
-        return try {
-            tokenManager.setCurrentAccount(accountId)
-            val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
-
-            if (clientId == null || clientSecret == null) {
-                return false
-            }
-
-            val tokenResponse = RetrofitClient.api.getToken(
-                clientId = clientId,
-                clientSecret = clientSecret,
-                code = authCode,
-                grantType = "authorization_code",
-                redirectUri = redirectUri
-            )
-
-            tokenManager.saveTokens(
-                tokenResponse.accessToken,
-                tokenResponse.refreshToken ?: "",
-                tokenResponse.expiresIn
-            )
-
-            // Fetch and save user info
-            val userInfo = RetrofitClient.api.getMe("")
-            saveUserInfo(accountId, userInfo)
-
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    // Logout from current account
-    suspend fun logoutFromCurrentAccount() {
-        tokenManager.clearCurrentAccountToken()
-        val currentAccountId = tokenManager.getCurrentAccountId()
-        if (currentAccountId != null) {
-            context.accountDataStore.edit { preferences ->
-                preferences.remove(userInfoKey(currentAccountId))
-            }
+            preferences.clear()
         }
     }
 
     /**
-     * Refreshes supporter status for all logged-in accounts.
-     * Only performs checks for accounts with valid tokens.
+     * Copies a cached multi-account profile into the single-account key and
+     * drops the legacy per-account entries. Safe to call repeatedly.
      */
-    suspend fun refreshSupporterStatusForAllAccounts() {
-        val accountIds = context.accountDataStore.data.first().asMap().keys
-            .filter { it.name.startsWith("user_info_") }
-            .map { it.name.removePrefix("user_info_") }
+    suspend fun migrateLegacyUserInfo() {
+        val snapshot = context.accountDataStore.data.first()
+        val legacyEntry = snapshot.asMap().entries
+            .firstOrNull { it.key.name.startsWith(LEGACY_USER_INFO_PREFIX) && it.value is String }
+        val hasLegacyKeys = snapshot.asMap().keys.any { it.name.startsWith(LEGACY_USER_INFO_PREFIX) }
+        if (!hasLegacyKeys) return
 
-        accountIds.forEach { accountId ->
-            try {
-                // Get token for this account
-                var token = tokenManager.getAccessToken(accountId)
-                if (token != null) {
-                    // Check if token is expired and refresh if needed
-                    if (tokenManager.doesAccountNeedLogin(accountId)) {
-                        val (clientId, clientSecret) = tokenManager.getAccountCredentials(accountId)
-                        if (clientId != null && clientSecret != null) {
-                            val refreshed = tokenManager.refreshAccessTokenForAccount(accountId, clientId, clientSecret)
-                            if (refreshed) {
-                                token = tokenManager.getAccessToken(accountId)
-                            } else {
-                                token = null
-                            }
-                        } else {
-                            token = null
-                        }
-                    }
-
-                    if (token != null) {
-                        // Fetch fresh user info with this token using base client to avoid AuthInterceptor interference
-                        val baseClient = RetrofitClient.getBaseClient()
-                        val tempApi = retrofit2.Retrofit.Builder()
-                            .baseUrl("https://osu.ppy.sh/")
-                            .client(baseClient)
-                            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
-                            .build()
-                            .create(com.mosu.app.data.api.OsuApi::class.java)
-                        
-                        val userInfo = tempApi.getMe("Bearer $token")
-                        saveUserInfo(accountId, userInfo)
-                        android.util.Log.d("AccountManager", "Refreshed supporter status for $accountId: ${userInfo.isSupporter}")
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AccountManager", "Failed to refresh supporter status for $accountId", e)
-            }
+        val chosen = snapshot[USER_INFO_KEY] ?: (legacyEntry?.value as? String)
+        context.accountDataStore.edit { preferences ->
+            preferences.clear()
+            if (!chosen.isNullOrEmpty()) preferences[USER_INFO_KEY] = chosen
         }
     }
-}
 
-data class AccountCredentialBackup(
-    val accountId: String,
-    val clientId: String,
-    val clientSecret: String,
-    val userInfoJson: String? = null
-)
+    private fun decode(json: String): OsuUserCompact? =
+        runCatching { gson.fromJson(json, OsuUserCompact::class.java) }.getOrNull()
+}

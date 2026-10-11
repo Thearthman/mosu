@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.media3.common.Player
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -18,8 +19,11 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 class SettingsManager(private val context: Context) {
     
     companion object {
-        private val CLIENT_ID_KEY = stringPreferencesKey("osu_client_id")
-        private val CLIENT_SECRET_KEY = stringPreferencesKey("osu_client_secret")
+        // Legacy OAuth credential keys. Credentials are now owned by
+        // [TokenManager]; these are read once by [drainLegacyCredentials] to
+        // re-home any existing values and can be deleted afterwards.
+        private val LEGACY_CLIENT_ID_KEY = stringPreferencesKey("osu_client_id")
+        private val LEGACY_CLIENT_SECRET_KEY = stringPreferencesKey("osu_client_secret")
         private val PLAYED_FILTER_MODE_KEY = stringPreferencesKey("played_filter_mode") // "url" or "most_played"
         private val LANGUAGE_KEY = stringPreferencesKey("language") // "en", "zh-CN", "zh-TW"
         private val DEFAULT_SEARCH_VIEW_KEY = stringPreferencesKey("default_search_view") // played/recent/favorite/most_played/all/any
@@ -102,16 +106,6 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    val clientId: Flow<String> = context.settingsDataStore.data
-        .map { preferences ->
-            preferences[CLIENT_ID_KEY] ?: ""
-        }
-    
-    val clientSecret: Flow<String> = context.settingsDataStore.data
-        .map { preferences ->
-            preferences[CLIENT_SECRET_KEY] ?: ""
-        }
-    
     val playedFilterMode: Flow<String> = context.settingsDataStore.data
         .map { preferences ->
             preferences[PLAYED_FILTER_MODE_KEY] ?: "url" // Default to URL-based filtering
@@ -152,13 +146,6 @@ class SettingsManager(private val context: Context) {
             preferences[REPEAT_MODE_KEY] ?: Player.REPEAT_MODE_OFF
         }
 
-    suspend fun saveCredentials(clientId: String, clientSecret: String) {
-        context.settingsDataStore.edit { preferences ->
-            preferences[CLIENT_ID_KEY] = clientId
-            preferences[CLIENT_SECRET_KEY] = clientSecret
-        }
-    }
-    
     suspend fun savePlayedFilterMode(mode: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[PLAYED_FILTER_MODE_KEY] = mode
@@ -207,10 +194,26 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    suspend fun clearCredentials() {
+    /**
+     * One-time migration helper: returns the OAuth credentials that used to be
+     * stored in Settings and removes them, so they can be re-homed in
+     * [TokenManager]. Returns null when there is nothing stored.
+     */
+    suspend fun drainLegacyCredentials(): Pair<String, String>? {
+        val snapshot = context.settingsDataStore.data.first()
+        val clientId = snapshot[LEGACY_CLIENT_ID_KEY]
+        val clientSecret = snapshot[LEGACY_CLIENT_SECRET_KEY]
+        if (clientId.isNullOrBlank() && clientSecret.isNullOrBlank()) return null
+
         context.settingsDataStore.edit { preferences ->
-            preferences.remove(CLIENT_ID_KEY)
-            preferences.remove(CLIENT_SECRET_KEY)
+            preferences.remove(LEGACY_CLIENT_ID_KEY)
+            preferences.remove(LEGACY_CLIENT_SECRET_KEY)
+        }
+
+        return if (!clientId.isNullOrBlank() && !clientSecret.isNullOrBlank()) {
+            clientId to clientSecret
+        } else {
+            null
         }
     }
 }

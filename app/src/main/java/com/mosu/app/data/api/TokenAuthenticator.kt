@@ -1,7 +1,6 @@
 package com.mosu.app.data.api
 
 import android.content.Context
-import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -16,8 +15,7 @@ import org.json.JSONObject
  */
 class TokenAuthenticator(
     private val context: Context,
-    private val tokenManager: TokenManager,
-    private val settingsManager: SettingsManager
+    private val tokenManager: TokenManager
 ) : Authenticator {
 
     override fun authenticate(route: Route?, response: Response): Request? {
@@ -31,25 +29,24 @@ class TokenAuthenticator(
                 // Get stored refresh token synchronously
                 val refreshToken = tokenManager.refreshToken.first()
                 // Also get current access token for retry
-                val currentToken = tokenManager.getCurrentAccessToken()
+                val currentToken = tokenManager.getAccessToken()
                 if (refreshToken.isNullOrEmpty()) {
                     return@runBlocking null
                 }
 
                 // Get client credentials
-                val clientId = settingsManager.clientId.first()
-                val clientSecret = settingsManager.clientSecret.first()
+                val credentials = tokenManager.getCredentials()
 
-                if (clientId.isNullOrEmpty() || clientSecret.isNullOrEmpty()) {
+                if (!credentials.isConfigured) {
                     return@runBlocking null
                 }
 
                 // Try to refresh the token
-                val refreshSuccess = tokenManager.refreshAccessToken(clientId, clientSecret)
+                val refreshSuccess = tokenManager.refreshAccessToken(credentials.clientId, credentials.clientSecret)
 
                 if (refreshSuccess) {
                     // Retry with new token
-                    val newToken = tokenManager.getCurrentAccessToken()
+                    val newToken = tokenManager.getAccessToken()
                     if (!newToken.isNullOrEmpty()) {
                         return@runBlocking response.request.newBuilder()
                             .header("Authorization", "Bearer $newToken")

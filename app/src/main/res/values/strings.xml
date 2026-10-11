@@ -63,24 +63,16 @@
     <string name="profile_statistics_title">Statistics</string>
     <string name="profile_downloaded_songs_label">Downloaded Songs: %1$d</string>
 
-    <!-- Account Management -->
-    <string name="profile_account_switch_title">Switch Account</string>
-    <string name="profile_account_no_accounts">No accounts configured</string>
-    <string name="profile_account_select_account">Select an account to continue</string>
-    <string name="profile_account_access_description">Add an account to access osu! features</string>
-    <string name="profile_account_manage_credentials_title">Manage Account Credentials</string>
-    <string name="profile_account_update_credentials">Update Credentials</string>
-    <string name="profile_account_add_new_title">Add New Account</string>
-    <string name="profile_account_add_new_description">Set up additional osu! account</string>
-    <string name="profile_account_add_button">Add Account</string>
-    <string name="profile_account_logged_in">Logged in</string>
-    <string name="profile_account_not_logged_in">Not logged in</string>
-    <string name="profile_account_needs_login">Needs login - tap to login</string>
-    <string name="profile_account_expired_login">Expired - click to login</string>
-    <string name="profile_account_delete_title">Delete Account?</string>
-    <string name="profile_account_delete_message">Remove %1$s from this device?</string>
-    <string name="profile_account_delete_confirm">Delete</string>
-    <string name="profile_account_delete_cancel">Cancel</string>
+    <!-- Account -->
+    <string name="profile_login_title">Not signed in</string>
+    <string name="profile_login_description">Tap to sign in with osu!</string>
+    <string name="profile_login_configure">Add OAuth credentials in Settings to sign in</string>
+    <string name="profile_sign_out">Sign out</string>
+    <string name="profile_account_help_content_desc">Account actions help</string>
+    <string name="profile_account_help_title">Account actions</string>
+    <string name="profile_account_help_short_press">Short press: sign in (signed out) or open the debug token view (signed in).</string>
+    <string name="profile_account_help_long_press">Long press: edit your OAuth client ID and client secret.</string>
+    <string name="profile_account_help_debug">Debug token view: shows the raw access token for the current session and lets you copy it.</string>
 
     <!-- OAuth Credentials -->
     <string name="profile_oauth_dialog_title">OAuth Credentials</string>
@@ -130,7 +122,7 @@
     <string name="profile_debug_repair_clean">Repaired %1$d of %2$d beatmapsets</string>
     <string name="profile_debug_repair_result">Repaired %1$d of %2$d beatmapsets, skipped %3$d (%4$s)</string>
     <string name="profile_config_backup_title">Config Backup</string>
-    <string name="profile_config_backup_desc">Export or import library, playlists, played history, and account credentials.</string>
+    <string name="profile_config_backup_desc">Export or import the library, playlists, and played history.</string>
     <string name="profile_config_export">Export</string>
     <string name="profile_config_import">Import</string>
     <string name="profile_config_exported">Config exported</string>

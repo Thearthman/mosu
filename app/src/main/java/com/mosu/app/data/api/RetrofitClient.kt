@@ -1,6 +1,5 @@
 package com.mosu.app.data.api
 
-import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -46,10 +45,9 @@ object RetrofitClient {
 
     fun configureAuthentication(
         authenticator: okhttp3.Authenticator,
-        tokenManager: TokenManager,
-        settingsManager: SettingsManager
+        tokenManager: TokenManager
     ) {
-        val authInterceptor = AuthInterceptor(tokenManager, settingsManager)
+        val authInterceptor = AuthInterceptor(tokenManager)
 
         authenticatedClient = baseClient.newBuilder()
             .addInterceptor(authInterceptor)
@@ -57,4 +55,3 @@ object RetrofitClient {
             .build()
     }
 }
-

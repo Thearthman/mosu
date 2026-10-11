@@ -13,17 +13,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.DismissDirection
-import androidx.compose.material.DismissValue
-import androidx.compose.material.SwipeToDismiss
-import androidx.compose.material.rememberDismissState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FractionalThreshold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,7 +62,6 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ProfileScreen(
     accessToken: String?,
-    currentAccountId: String?,
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
@@ -98,8 +93,8 @@ fun ProfileScreen(
 
     // Settings State
     var showSettingsDialog by remember { mutableStateOf(false) }
-    val clientId by settingsManager.clientId.collectAsState(initial = "")
-    val clientSecret by settingsManager.clientSecret.collectAsState(initial = "")
+    val clientId by tokenManager.clientId.collectAsState(initial = "")
+    val clientSecret by tokenManager.clientSecret.collectAsState(initial = "")
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
     val onlyLeaderboardEnabled by settingsManager.onlyLeaderboardEnabled.collectAsState(initial = true)
     val recentPlayHistoryEnabled by settingsManager.recentPlayHistoryEnabled.collectAsState(initial = false)
@@ -118,23 +113,13 @@ fun ProfileScreen(
     var showTokenDialog by remember { mutableStateOf(false) }
     var currentToken by remember { mutableStateOf<String?>(null) }
 
+    // Account actions help popup state
+    var showActionHelpDialog by remember { mutableStateOf(false) }
+
     // Debug tools state
     var debugMenuExpanded by remember { mutableStateOf(false) }
     var isRepairingMetadata by remember { mutableStateOf(false) }
 
-    // Account management state
-    var showAddAccountDialog by remember { mutableStateOf(false) }
-    var showAccountSwitcher by remember { mutableStateOf(false) }
-    var showCredentialsDialog by remember { mutableStateOf(false) }
-    var pendingDeleteAccountId by remember { mutableStateOf<String?>(null) }
-    var pendingDeleteAccountName by remember { mutableStateOf("") }
-    var selectedAccountForCredentials by remember { mutableStateOf<String?>(null) }
-    var newClientId by remember { mutableStateOf("") }
-    var newClientSecret by remember { mutableStateOf("") }
-
-    // Available accounts
-    val availableAccounts by accountManager.accounts.collectAsState(initial = emptyList())
-    
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -175,8 +160,7 @@ fun ProfileScreen(
                         context = context,
                         db = db,
                         json = json,
-                        requireEmptyLibrary = false,
-                        accountManager = accountManager
+                        requireEmptyLibrary = false
                     )
                     MosuBackupService.exportState(context, db)
                     android.widget.Toast.makeText(
@@ -196,10 +180,10 @@ fun ProfileScreen(
     }
 
     // Load cached user info immediately, update in background
-    LaunchedEffect(currentAccountId) {
-        if (accessToken != null && currentAccountId != null) {
+    LaunchedEffect(accessToken) {
+        if (accessToken != null) {
             // First, try to get cached user info immediately
-            val cachedInfo = accountManager.getCachedUserInfo(currentAccountId)
+            val cachedInfo = accountManager.getCachedUserInfo()
             if (cachedInfo != null) {
                 userInfo = cachedInfo
                 // Update in background
@@ -209,7 +193,7 @@ fun ProfileScreen(
                         // Only update UI if data actually changed
                         if (freshInfo.username != cachedInfo.username ||
                             freshInfo.avatarUrl != cachedInfo.avatarUrl) {
-                            accountManager.saveUserInfo(currentAccountId, freshInfo)
+                            accountManager.saveUserInfo(freshInfo)
                             // Update UI on main thread
                             withContext(Dispatchers.Main) {
                                 userInfo = freshInfo
@@ -224,7 +208,7 @@ fun ProfileScreen(
                 isLoading = true
                 try {
                     val freshInfo = repository.getMe()
-                    accountManager.saveUserInfo(currentAccountId, freshInfo)
+                    accountManager.saveUserInfo(freshInfo)
                     userInfo = freshInfo
                 } catch (e: Exception) {
                     android.util.Log.e("ProfileScreen", "Failed to fetch user info", e)
@@ -310,71 +294,126 @@ fun ProfileScreen(
         )
 
         // Account Info Card - Dynamic based on login state
-        if (currentAccountId != null && userInfo != null) {
+        if (accessToken != null && userInfo != null) {
             // User is logged in - Show user info
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
-                    .clickable {
-                        scope.launch {
-                            currentToken = tokenManager.getCurrentAccessToken()
-                            showTokenDialog = true
+                    .combinedClickable(
+                        onClick = {
+                            scope.launch {
+                                currentToken = tokenManager.getAccessToken()
+                                showTokenDialog = true
+                            }
+                        },
+                        onLongClick = {
+                            showSettingsDialog = true
                         }
-                    }
+                    )
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Box {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         AsyncImage(
                             model = userInfo?.avatarUrl,
                             contentDescription = "Avatar",
                             modifier = Modifier
                                 .size(64.dp)
-                                .clip(CircleShape)
-                                .clickable {
-                                    if (availableAccounts.isNotEmpty()) {
-                                        showAccountSwitcher = true
-                                    }
-                                },
+                                .clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
-                    Column(modifier = Modifier.padding(start = 16.dp)) {
-                        Text(text = userInfo?.username ?: "", style = MaterialTheme.typography.titleLarge)
-                        Text(text = stringResource(R.string.profile_id_prefix, userInfo?.id?.toString() ?: "0"), style = MaterialTheme.typography.bodyMedium)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 16.dp)
+                        ) {
+                            Text(text = userInfo?.username ?: "", style = MaterialTheme.typography.titleLarge)
+                            Text(text = stringResource(R.string.profile_id_prefix, userInfo?.id?.toString() ?: "0"), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        IconButton(
+                            onClick = onLogout,
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = stringResource(R.string.profile_sign_out),
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 4.dp, end = 4.dp)
+                            .size(24.dp)
+                            .clickable { showActionHelpDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = stringResource(R.string.profile_account_help_content_desc),
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
         } else {
-            // No account selected or logged out - Show account status
+            // Logged out - Show sign-in prompt
+            val hasCredentials = clientId.isNotBlank() && clientSecret.isNotBlank()
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
-                    .clickable {
-                        showAccountSwitcher = true
-                    }
+                    .combinedClickable(
+                        onClick = {
+                            if (hasCredentials) {
+                                onLoginClick()
+                            } else {
+                                showSettingsDialog = true
+                            }
+                        },
+                        onLongClick = {
+                            showSettingsDialog = true
+                        }
+                    )
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = if (availableAccounts.isEmpty()) {
-                            stringResource(R.string.profile_account_no_accounts)
-                        } else {
-                            stringResource(R.string.profile_account_select_account)
-                        },
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (availableAccounts.isEmpty()) {
-                            stringResource(R.string.profile_account_access_description)
-                        } else {
-                            "${availableAccounts.size} account${if (availableAccounts.size > 1) "s" else ""} available"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
+                Box {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(R.string.profile_login_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (hasCredentials) {
+                                stringResource(R.string.profile_login_description)
+                            } else {
+                                stringResource(R.string.profile_login_configure)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 4.dp, end = 4.dp)
+                            .size(24.dp)
+                            .clickable { showActionHelpDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = stringResource(R.string.profile_account_help_content_desc),
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -473,90 +512,7 @@ fun ProfileScreen(
             InfoCoverToggleCard(infoCoverEnabled = infoCoverEnabled) { checked ->
                 scope.launch { settingsManager.saveInfoCoverEnabled(checked) }
             }
-            
-            // Default Search View - Fixed layout with consistent max width for text
-            /*
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(0.7f)
-                    ) {
-                        Text(
-                            stringResource(R.string.profile_default_search_view_title),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            stringResource(R.string.profile_default_search_view_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
 
-                    val isSupporter = userInfo?.isSupporter ?: false
-                    val options = if (isSupporter) {
-                        listOf("played", "recent", "favorite", "most_played", "all")
-                    } else {
-                        listOf("recent", "favorite", "most_played", "all")
-                    }
-                    var menuExpanded by remember { mutableStateOf(false) }
-                    val label = when (defaultSearchView) {
-                        "played" -> stringResource(R.string.search_filter_played)
-                        "recent" -> stringResource(R.string.search_filter_recent)
-                        "favorite" -> stringResource(R.string.search_filter_favorite)
-                        "most_played" -> stringResource(R.string.search_filter_most_played)
-                        else -> stringResource(R.string.search_filter_all)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        OutlinedButton(
-                            onClick = { menuExpanded = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(label, maxLines = 1, modifier = Modifier.weight(1f))
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Select default")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
-                        ) {
-                            options.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(
-                                        when (option) {
-                                            "played" -> stringResource(R.string.search_filter_played)
-                                            "recent" -> stringResource(R.string.search_filter_recent)
-                                            "favorite" -> stringResource(R.string.search_filter_favorite)
-                                            "most_played" -> stringResource(R.string.search_filter_most_played)
-                                            else -> stringResource(R.string.search_filter_all)
-                                        }
-                                    ) },
-                                    onClick = {
-                                        menuExpanded = false
-                                        scope.launch { settingsManager.saveDefaultSearchView(option) }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            */
 
             // Include Unranked/Loved/Any Status - Fixed layout with consistent max width for text
             Card(
@@ -811,8 +767,7 @@ fun ProfileScreen(
                                 scope.launch {
                                     try {
                                         pendingExportJson = MosuBackupService.createManifestJson(
-                                            db = db,
-                                            accountManager = accountManager
+                                            db = db
                                         )
                                         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                             addCategory(Intent.CATEGORY_OPENABLE)
@@ -931,89 +886,10 @@ fun ProfileScreen(
 
     }
 
-    // Credentials management dialog
-    if (showCredentialsDialog && selectedAccountForCredentials != null) {
-        var editClientId by remember { mutableStateOf("") }
-        var editClientSecret by remember { mutableStateOf("") }
-
-        // Load current credentials when dialog opens
-        LaunchedEffect(selectedAccountForCredentials) {
-            val (currentId, currentSecret) = tokenManager.getAccountCredentials(selectedAccountForCredentials!!)
-            editClientId = currentId ?: ""
-            editClientSecret = currentSecret ?: ""
-        }
-
-        AlertDialog(
-            onDismissRequest = {
-                showCredentialsDialog = false
-                selectedAccountForCredentials = null
-            },
-            title = { Text(stringResource(R.string.profile_account_manage_credentials_title)) },
-            text = {
-                Column {
-                    Text(
-                        "Update credentials for account: ${selectedAccountForCredentials}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    OutlinedTextField(
-                        value = editClientId,
-                        onValueChange = { editClientId = it },
-                        label = { Text("Client ID") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = editClientSecret,
-                        onValueChange = { editClientSecret = it },
-                        label = { Text("Client Secret") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Warning: Changing credentials will require re-authentication",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (editClientId.isNotBlank() && editClientSecret.isNotBlank()) {
-                            scope.launch {
-                                tokenManager.saveAccountCredentials(
-                                    selectedAccountForCredentials!!,
-                                    editClientId,
-                                    editClientSecret
-                                )
-                                // Clear any existing tokens for this account to force re-auth
-                                tokenManager.clearCurrentAccountToken()
-                                showCredentialsDialog = false
-                                selectedAccountForCredentials = null
-                            }
-                        }
-                    },
-                    enabled = editClientId.isNotBlank() && editClientSecret.isNotBlank()
-                ) {
-                    Text(stringResource(R.string.profile_account_update_credentials))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showCredentialsDialog = false
-                    selectedAccountForCredentials = null
-                }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     // Settings Dialog
     if (showSettingsDialog) {
-        var inputClientId by remember { mutableStateOf(clientId) }
-        var inputClientSecret by remember { mutableStateOf(clientSecret) }
+        var inputClientId by remember(showSettingsDialog) { mutableStateOf(clientId) }
+        var inputClientSecret by remember(showSettingsDialog) { mutableStateOf(clientSecret) }
         
         AlertDialog(
             onDismissRequest = { showSettingsDialog = false },
@@ -1043,7 +919,7 @@ fun ProfileScreen(
                 Button(
                     onClick = {
                         scope.launch {
-                            settingsManager.saveCredentials(inputClientId, inputClientSecret)
+                            tokenManager.saveCredentials(inputClientId, inputClientSecret)
                             showSettingsDialog = false
                         }
                     }
@@ -1058,7 +934,38 @@ fun ProfileScreen(
             }
         )
     }
-    
+
+    // Account Actions Help Dialog
+    if (showActionHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showActionHelpDialog = false },
+            title = { Text(stringResource(R.string.profile_account_help_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.profile_account_help_short_press),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.profile_account_help_long_press),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.profile_account_help_debug),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showActionHelpDialog = false }) {
+                    Text(stringResource(R.string.profile_token_dialog_close))
+                }
+            }
+        )
+    }
+
     // Token Debug Dialog
     if (showTokenDialog) {
         AlertDialog(
@@ -1122,322 +1029,6 @@ fun ProfileScreen(
         )
     }
 
-    if (pendingDeleteAccountId != null) {
-        val accountIdToDelete = pendingDeleteAccountId!!
-        AlertDialog(
-            onDismissRequest = {
-                pendingDeleteAccountId = null
-                pendingDeleteAccountName = ""
-            },
-            title = { Text(stringResource(R.string.profile_account_delete_title)) },
-            text = {
-                Text(stringResource(R.string.profile_account_delete_message, pendingDeleteAccountName))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val wasCurrentAccount = accountIdToDelete == currentAccountId
-                            accountManager.deleteAccount(accountIdToDelete)
-
-                            if (wasCurrentAccount) {
-                                val remainingAccounts = availableAccounts.filter { it.id != accountIdToDelete }
-                                if (remainingAccounts.isNotEmpty()) {
-                                    accountManager.switchToAccount(remainingAccounts.first().id)
-                                } else {
-                                    tokenManager.setCurrentAccount("")
-                                }
-                            }
-
-                            pendingDeleteAccountId = null
-                            pendingDeleteAccountName = ""
-                        }
-                    }
-                ) {
-                    Text(
-                        text = stringResource(R.string.profile_account_delete_confirm),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        pendingDeleteAccountId = null
-                        pendingDeleteAccountName = ""
-                    }
-                ) {
-                    Text(stringResource(R.string.profile_account_delete_cancel))
-                }
-            }
-        )
-    }
-
-    // Account switcher bottom sheet
-    if (showAccountSwitcher) {
-        val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(
-            onDismissRequest = { showAccountSwitcher = false },
-            sheetState = sheetState
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    stringResource(R.string.profile_account_switch_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                Column{
-                    availableAccounts.forEach { account ->
-                        var needsLogin by remember { mutableStateOf(false) }
-
-                        // Check if account needs login
-                        LaunchedEffect(account.id) {
-                            needsLogin = tokenManager.doesAccountNeedLogin(account.id)
-                        }
-
-                        val dismissState = rememberDismissState(
-                            confirmStateChange = { dismissValue ->
-                                if (dismissValue == DismissValue.DismissedToStart) {
-                                    pendingDeleteAccountId = account.id
-                                    pendingDeleteAccountName = account.userInfo?.username ?: account.id
-                                    false
-                                } else {
-                                    false
-                                }
-                            }
-                        )
-
-                        SwipeToDismiss(
-                            state = dismissState,
-                            directions = setOf(DismissDirection.EndToStart),
-                            dismissThresholds = { FractionalThreshold(0.25f) },
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            background = {
-                                val color = when (dismissState.dismissDirection) {
-                                    DismissDirection.EndToStart -> MaterialTheme.colorScheme.error
-                                    else -> Color.Transparent
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    // Transparent area on the left (20%)
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(0.2f)
-                                            .fillMaxHeight()
-                                            .background(Color.Transparent)
-                                    )
-                                    // Red area on the right (80%)
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(0.8f)
-                                            .fillMaxHeight()
-                                            .background(color)
-                                            .padding(end=20.dp),
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Icon(
-                                            Icons.Default.ExitToApp,
-                                            contentDescription = "Delete",
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        ) {
-                            Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = {
-                                        scope.launch {
-                                            if (needsLogin) {
-                                                // Account needs login - trigger login instead of switching
-                                                tokenManager.setCurrentAccount(account.id)
-                                                showAccountSwitcher = false
-                                                onLoginClick()
-                                            } else {
-                                                // Token valid - switch account normally
-                                                accountManager.switchToAccount(account.id)
-                                                showAccountSwitcher = false
-                                            }
-                                        }
-                                    },
-                                    onLongClick = {
-                                        selectedAccountForCredentials = account.id
-                                        showCredentialsDialog = true
-                                    }
-                                ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (account.id == currentAccountId)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (account.userInfo != null) {
-                                    AsyncImage(
-                                        model = account.userInfo.avatarUrl,
-                                        contentDescription = "Avatar",
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(CircleShape),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    Column(modifier = Modifier.padding(start = 12.dp)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = account.userInfo.username,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            if (needsLogin) {
-                                                Text(
-                                                    text = stringResource(R.string.profile_account_expired_login),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.padding(start = 8.dp)
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = "Account: ${account.userInfo.id}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                } else {
-                                    val statusText = when {
-                                        needsLogin -> stringResource(R.string.profile_account_needs_login)
-                                        account.accessToken != null -> stringResource(R.string.profile_account_logged_in)
-                                        else -> stringResource(R.string.profile_account_not_logged_in)
-                                    }
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = "Account: ${account.id}",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Text(
-                                            text = statusText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (needsLogin) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                    // Add Account option
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable {
-                                showAccountSwitcher = false
-                                showAddAccountDialog = true
-                            },
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ExitToApp, // Using the same icon as logout for now
-                                contentDescription = "Add Account",
-                                modifier = Modifier.size(32.dp),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Column(modifier = Modifier.padding(start = 12.dp)) {
-                                Text(
-                                    text = stringResource(R.string.profile_account_add_new_title),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                                Text(
-                                    text = stringResource(R.string.profile_account_add_new_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Add new account dialog
-    if (showAddAccountDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddAccountDialog = false },
-            title = { Text(stringResource(R.string.profile_account_add_new_title)) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = newClientId,
-                        onValueChange = { newClientId = it },
-                        label = { Text("Client ID") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newClientSecret,
-                        onValueChange = { newClientSecret = it },
-                        label = { Text("Client Secret") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newClientId.isNotBlank() && newClientSecret.isNotBlank()) {
-                            scope.launch {
-                                // Auto-generate account ID
-                                val accountId = "account${availableAccounts.size + 1}"
-                                accountManager.createAccount(accountId, newClientId, newClientSecret)
-                                // Switch to the new account
-                                accountManager.switchToAccount(accountId)
-                                // Close dialog (keep form values for next time)
-                                showAddAccountDialog = false
-                                // Trigger login flow for the new account
-                                onLoginClick()
-                            }
-                        }
-                    },
-                    enabled = newClientId.isNotBlank() && newClientSecret.isNotBlank()
-                ) {
-                    Text(stringResource(R.string.profile_account_add_button))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddAccountDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 }
 
 @Composable

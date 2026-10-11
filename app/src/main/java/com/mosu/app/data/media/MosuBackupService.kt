@@ -2,9 +2,6 @@ package com.mosu.app.data.media
 
 import android.content.Context
 import android.util.Log
-import com.mosu.app.data.AccountCredentialBackup
-import com.mosu.app.data.AccountManager
-import com.mosu.app.data.TokenManager
 import com.google.gson.Gson
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.BeatmapEntity
@@ -24,10 +21,7 @@ object MosuBackupService {
     suspend fun exportState(context: Context, db: AppDatabase) = withContext(Dispatchers.IO) {
         runCatching {
             MediaStoreFileService(context).writeManifest(
-                createManifestJson(
-                    db = db,
-                    accountManager = AccountManager(context, TokenManager(context))
-                )
+                createManifestJson(db = db)
             )
         }.onFailure { error ->
             Log.w(TAG, "Unable to export MediaStore manifest", error)
@@ -35,8 +29,7 @@ object MosuBackupService {
     }
 
     suspend fun createManifestJson(
-        db: AppDatabase,
-        accountManager: AccountManager? = null
+        db: AppDatabase
     ): String = withContext(Dispatchers.IO) {
         val beatmaps = db.beatmapDao().getAllBeatmaps().first()
         val preservedSetIds = db.preservedBeatmapSetIdDao().getAllPreservedSetIds().first()
@@ -46,7 +39,6 @@ object MosuBackupService {
 
         val manifest = MosuManifest(
             exportedAt = System.currentTimeMillis(),
-            accountCredentials = accountManager?.getCredentialBackups().orEmpty(),
             tracks = beatmaps.map { it.toBackupTrack() },
             preservedBeatmapSetIds = preservedSetIds.map { it.beatmapSetId },
             playlists = playlists.map { it.toBackupPlaylist() },
@@ -70,8 +62,7 @@ object MosuBackupService {
         context: Context,
         db: AppDatabase,
         json: String,
-        requireEmptyLibrary: Boolean,
-        accountManager: AccountManager? = null
+        requireEmptyLibrary: Boolean
     ): RestoreSummary = withContext(Dispatchers.IO) {
         if (requireEmptyLibrary && db.beatmapDao().getAllBeatmaps().first().isNotEmpty()) {
             return@withContext RestoreSummary()
@@ -85,9 +76,6 @@ object MosuBackupService {
         val tracks = manifest.tracks.orEmpty()
         val playlists = manifest.playlists.orEmpty()
         val playlistTracks = manifest.playlistTracks.orEmpty()
-
-        val effectiveAccountManager = accountManager ?: AccountManager(context, TokenManager(context))
-        effectiveAccountManager.restoreCredentialBackups(manifest.accountCredentials.orEmpty())
 
         val mediaStore = MediaStoreFileService(context)
         val restoredKeys = mutableSetOf<String>()
@@ -293,7 +281,6 @@ object MosuBackupService {
 data class MosuManifest(
     val version: Int = 1,
     val exportedAt: Long = System.currentTimeMillis(),
-    val accountCredentials: List<AccountCredentialBackup>? = emptyList(),
     val tracks: List<BackupTrack>? = emptyList(),
     val preservedBeatmapSetIds: List<Long>? = emptyList(),
     val playlists: List<BackupPlaylist>? = emptyList(),

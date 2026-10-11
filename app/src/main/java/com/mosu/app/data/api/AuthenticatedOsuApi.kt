@@ -1,6 +1,5 @@
 package com.mosu.app.data.api
 
-import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.BeatmapPlaycount
 import com.mosu.app.data.api.model.OsuUserCompact
@@ -15,11 +14,10 @@ import okhttp3.Response
  */
 class AuthenticatedOsuApi(
     private val osuApi: OsuApi,
-    private val tokenManager: TokenManager,
-    private val settingsManager: SettingsManager
+    private val tokenManager: TokenManager
 ) {
 
-    private val authInterceptor = AuthInterceptor(tokenManager, settingsManager)
+    private val authInterceptor = AuthInterceptor(tokenManager)
 
     // Wrap all API calls with authentication
     suspend fun getMe(): OsuUserCompact {
@@ -85,15 +83,14 @@ class AuthenticatedOsuApi(
  * Interceptor for adding Authorization headers to requests
  */
 class AuthInterceptor(
-    private val tokenManager: TokenManager,
-    private val settingsManager: SettingsManager
+    private val tokenManager: TokenManager
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
         // Get current token synchronously
-        val token = runBlocking { tokenManager.getCurrentAccessToken() }
+        val token = runBlocking { tokenManager.getAccessToken() }
         android.util.Log.d("AuthInterceptor", "Token from DataStore: ${token?.take(10)}...")
         if (token.isNullOrEmpty()) {
             // Log when token is missing for debugging
@@ -107,12 +104,11 @@ class AuthInterceptor(
             android.util.Log.d("AuthInterceptor", "Token expired check: $isExpired")
 
             if (isExpired) {
-                val clientId = settingsManager.clientId.first()
-                val clientSecret = settingsManager.clientSecret.first()
-                android.util.Log.d("AuthInterceptor", "Client credentials available for refresh: ${clientId.isNotEmpty() && clientSecret.isNotEmpty()}")
+                val credentials = tokenManager.getCredentials()
+                android.util.Log.d("AuthInterceptor", "Client credentials available for refresh: ${credentials.isConfigured}")
 
-                if (clientId.isNotEmpty() && clientSecret.isNotEmpty()) {
-                    val refreshSuccess = tokenManager.refreshTokenIfNeeded(clientId, clientSecret)
+                if (credentials.isConfigured) {
+                    val refreshSuccess = tokenManager.refreshTokenIfNeeded(credentials.clientId, credentials.clientSecret)
                     android.util.Log.d("AuthInterceptor", "Token refresh result: $refreshSuccess")
                     refreshSuccess
                 } else {
@@ -125,7 +121,7 @@ class AuthInterceptor(
 
         // Get the potentially refreshed token
         val currentToken = if (refreshNeeded) {
-            runBlocking { tokenManager.getCurrentAccessToken() }
+            runBlocking { tokenManager.getAccessToken() }
         } else {
             // Token refresh failed or wasn't attempted, use original token
             token

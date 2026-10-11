@@ -26,6 +26,9 @@
 - [ ] [v1.4] Add a display toggle for native-language (Unicode) beatmap titles/artists. Both are already stored in the DB (`titleUnicode`/`artistUnicode`); romaji is shown for now as the osu! standard. (Stage 5 of the beatmap-metadata source-of-truth rework.)
 - [ ] Add a guidance/help page for getting osu! credentials in the credential setup flow. Display the guidance markdown file from the repo root, or ask for the file if it is missing.
 
+#### Security
+- [ ] Re-add account credential (OAuth client id/secret) export/import to the config backup, but encrypt the credentials before writing them. The manifest currently omits credentials entirely; storing them would require an encryption method (e.g. AES-GCM with a user-supplied passphrase) so the exported JSON never contains them in plaintext.
+
 #### Player
 - [ ] Add HT/Half Time, similar to DT but without pitch changes.
 - [ ] [v2.0] Replace the existing music controller with Rubber Band to reduce double-time metallic distortion.

@@ -37,7 +37,7 @@ class RestoreDownloadsService(
             )
         }
 
-        val accessToken = tokenManager.getCurrentAccessToken()
+        val accessToken = tokenManager.getAccessToken()
         var completed = 0
         var enqueued = 0
         var skipped = 0

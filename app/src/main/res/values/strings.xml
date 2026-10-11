@@ -63,6 +63,44 @@
     <string name="profile_statistics_title">Statistics</string>
     <string name="profile_downloaded_songs_label">Downloaded Songs: %1$d</string>
 
+    <!-- Score Screen -->
+    <string name="score_title">Scores</string>
+    <plurals name="score_recent_cached">
+        <item quantity="one">%1$d recent score cached</item>
+        <item quantity="other">%1$d recent scores cached</item>
+    </plurals>
+    <string name="score_cd_refresh">Refresh scores</string>
+    <string name="score_load_error">Unable to load scores</string>
+    <string name="score_empty_title">No score data</string>
+    <string name="score_empty_logged_out">Log in from Profile to sync recent osu! scores.</string>
+    <string name="score_empty_logged_in">Refresh after playing osu! to cache recent scores.</string>
+    <string name="score_average_stars_title">Average Stars by Grade</string>
+    <string name="score_average_stars_empty">No ranked passed scores with star ratings yet.</string>
+    <string name="score_stars_value">%1$.1f stars</string>
+    <string name="score_recent_passed_title">Recently Passed</string>
+    <string name="score_recent_passed_empty">No passed scores are cached yet.</string>
+    <string name="score_achievements_title">Achievements</string>
+    <string name="score_achievements_empty">More recent-score metrics are needed for achievements.</string>
+    <string name="score_achievement_longest">Longest map played</string>
+    <string name="score_achievement_fastest">Fastest map played</string>
+    <string name="score_achievement_lowest_ar">Lowest AR played</string>
+    <string name="score_achievement_highest_cs">Highest CS played</string>
+    <string name="score_achievement_pp_record">PP record</string>
+    <string name="score_achievement_subtitle">%1$s - %2$s</string>
+    <string name="score_bpm_value">%1$.0f BPM</string>
+    <string name="score_ar_value">AR %1$.1f</string>
+    <string name="score_cs_value">CS %1$.1f</string>
+    <string name="score_pp_value">%1$.0fpp</string>
+    <string name="score_pp_none">--pp</string>
+    <plurals name="score_pp_record_held">
+        <item quantity="one">Record has stood for %1$d day since %2$s</item>
+        <item quantity="other">Record has stood for %1$d days since %2$s</item>
+    </plurals>
+    <string name="score_length_prefix">/%1$s</string>
+    <string name="score_cd_star_rating">Star rating</string>
+    <string name="score_cd_collapse">Collapse %1$s</string>
+    <string name="score_cd_expand">Expand %1$s</string>
+
     <!-- Account -->
     <string name="profile_login_title">Not signed in</string>
     <string name="profile_login_description">Tap to sign in with osu!</string>

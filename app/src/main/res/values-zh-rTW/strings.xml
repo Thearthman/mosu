@@ -63,6 +63,42 @@
     <string name="profile_statistics_title">統計資料</string>
     <string name="profile_downloaded_songs_label">已下載歌曲: %1$d</string>
 
+    <!-- 成績介面 -->
+    <string name="score_title">成績</string>
+    <plurals name="score_recent_cached">
+        <item quantity="other">已快取 %1$d 筆近期成績</item>
+    </plurals>
+    <string name="score_cd_refresh">重新整理成績</string>
+    <string name="score_load_error">無法載入成績</string>
+    <string name="score_empty_title">暫無成績資料</string>
+    <string name="score_empty_logged_out">請在「個人」頁登入以同步近期的 osu! 成績。</string>
+    <string name="score_empty_logged_in">遊玩 osu! 後重新整理即可快取近期成績。</string>
+    <string name="score_average_stars_title">各等級平均星數</string>
+    <string name="score_average_stars_empty">尚無已通過且有星級評分的上榜成績。</string>
+    <string name="score_stars_value">%1$.1f 星</string>
+    <string name="score_recent_passed_title">最近通過</string>
+    <string name="score_recent_passed_empty">尚無已快取的通過成績。</string>
+    <string name="score_achievements_title">成就</string>
+    <string name="score_achievements_empty">需要更多近期成績資料才能產生成就。</string>
+    <string name="score_achievement_longest">遊玩過的最長譜面</string>
+    <string name="score_achievement_fastest">遊玩過的最快譜面</string>
+    <string name="score_achievement_lowest_ar">遊玩過的最低 AR</string>
+    <string name="score_achievement_highest_cs">遊玩過的最高 CS</string>
+    <string name="score_achievement_pp_record">PP 紀錄</string>
+    <string name="score_achievement_subtitle">%1$s - %2$s</string>
+    <string name="score_bpm_value">%1$.0f BPM</string>
+    <string name="score_ar_value">AR %1$.1f</string>
+    <string name="score_cs_value">CS %1$.1f</string>
+    <string name="score_pp_value">%1$.0fpp</string>
+    <string name="score_pp_none">--pp</string>
+    <plurals name="score_pp_record_held">
+        <item quantity="other">紀錄已保持 %1$d 天，自 %2$s</item>
+    </plurals>
+    <string name="score_length_prefix">/%1$s</string>
+    <string name="score_cd_star_rating">星級評分</string>
+    <string name="score_cd_collapse">收合 %1$s</string>
+    <string name="score_cd_expand">展開 %1$s</string>
+
     <!-- 帳戶 -->
     <string name="profile_login_title">未登錄</string>
     <string name="profile_login_description">點擊以登錄 osu!</string>

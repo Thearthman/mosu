@@ -1,5 +1,6 @@
 package com.mosu.app.ui.score
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -49,10 +50,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mosu.app.R
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.repository.OsuRepository
@@ -81,6 +86,8 @@ fun ScoreScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshRequest by remember { mutableStateOf(0) }
+
+    val context = LocalContext.current
 
     LaunchedEffect(accessToken, refreshRequest) {
         isLoading = true
@@ -116,7 +123,7 @@ fun ScoreScreen(
             }
         } catch (error: Exception) {
             Log.e(SCORE_SCREEN_TAG, "Failed to load scores", error)
-            errorMessage = error.message ?: "Unable to load scores"
+            errorMessage = error.message ?: context.getString(R.string.score_load_error)
             scores = withContext(Dispatchers.IO) { db.recentPlayDao().getRecentPlays() }
         } finally {
             isLoading = false
@@ -135,9 +142,17 @@ fun ScoreScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Scores", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        "${scores.size} recent score${if (scores.size == 1) "" else "s"} cached",
+                        stringResource(R.string.score_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        pluralStringResource(
+                            R.plurals.score_recent_cached,
+                            scores.size,
+                            scores.size
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -151,7 +166,10 @@ fun ScoreScreen(
                         },
                         enabled = accessToken != null
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh scores")
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.score_cd_refresh)
+                        )
                     }
                 }
             }
@@ -178,12 +196,12 @@ fun ScoreScreen(
 
 @Composable
 private fun EmptyScoreState(accessToken: String?) {
-    ScorePanel(title = "No score data", icon = Icons.Default.Star) {
+    ScorePanel(title = stringResource(R.string.score_empty_title), icon = Icons.Default.Star) {
         Text(
             if (accessToken == null) {
-                "Log in from Profile to sync recent osu! scores."
+                stringResource(R.string.score_empty_logged_out)
             } else {
-                "Refresh after playing osu! to cache recent scores."
+                stringResource(R.string.score_empty_logged_in)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -202,9 +220,9 @@ private fun AverageStarsPanel(scores: List<RecentPlayEntity>) {
             .sortedBy { (grade, _) -> gradeSortIndex(grade) }
     }
 
-    ScorePanel(title = "Average Stars by Grade", icon = Icons.Default.Star) {
+    ScorePanel(title = stringResource(R.string.score_average_stars_title), icon = Icons.Default.Star) {
         if (averages.isEmpty()) {
-            MissingMetricsText("No ranked passed scores with star ratings yet.")
+            MissingMetricsText(stringResource(R.string.score_average_stars_empty))
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 averages.forEach { (grade, averageStars) ->
@@ -219,7 +237,7 @@ private fun AverageStarsPanel(scores: List<RecentPlayEntity>) {
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            "%.1f stars".format(Locale.US, averageStars),
+                            stringResource(R.string.score_stars_value, averageStars),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -283,9 +301,9 @@ private fun RecentPassedPanel(scores: List<RecentPlayEntity>) {
             .take(30)
     }
 
-    ScorePanel(title = "Recently Passed", icon = Icons.Default.Star) {
+    ScorePanel(title = stringResource(R.string.score_recent_passed_title), icon = Icons.Default.Star) {
         if (recentPassed.isEmpty()) {
-            MissingMetricsText("No passed scores are cached yet.")
+            MissingMetricsText(stringResource(R.string.score_recent_passed_empty))
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 recentPassed.forEach { score ->
@@ -299,11 +317,12 @@ private fun RecentPassedPanel(scores: List<RecentPlayEntity>) {
 @Composable
 private fun AchievementsPanel(scores: List<RecentPlayEntity>) {
     val passed = remember(scores) { scores.passedScores() }
-    val achievements = remember(passed) { buildAchievements(passed) }
+    val context = LocalContext.current
+    val achievements = remember(passed, context) { buildAchievements(passed, context) }
 
-    ScorePanel(title = "Achievements", icon = Icons.Default.EmojiEvents) {
+    ScorePanel(title = stringResource(R.string.score_achievements_title), icon = Icons.Default.EmojiEvents) {
         if (achievements.isEmpty()) {
-            MissingMetricsText("More recent-score metrics are needed for achievements.")
+            MissingMetricsText(stringResource(R.string.score_achievements_empty))
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 achievements.forEach { achievement ->
@@ -358,7 +377,8 @@ private fun RecentScoreRow(score: RecentPlayEntity) {
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                score.pp?.let { "%.0fpp".format(Locale.US, it) } ?: "--pp",
+                score.pp?.let { stringResource(R.string.score_pp_value, it) }
+                    ?: stringResource(R.string.score_pp_none),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -368,7 +388,7 @@ private fun RecentScoreRow(score: RecentPlayEntity) {
             ) {
                 StarRatingBadge(score.starRating)
                 Text(
-                    "/ ${formatLength(score.lengthSeconds)}",
+                    stringResource(R.string.score_length_prefix, formatLength(score.lengthSeconds)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -405,7 +425,7 @@ private fun StarRatingBadge(stars: Float?) {
             )
             Icon(
                 imageVector = Icons.Default.Star,
-                contentDescription = "Star rating",
+                contentDescription = stringResource(R.string.score_cd_star_rating),
                 modifier = Modifier.size(10.dp)
             )
         }
@@ -480,7 +500,11 @@ private fun ScorePanel(
                 )
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
-                    contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                    contentDescription = if (expanded) {
+                        stringResource(R.string.score_cd_collapse, title)
+                    } else {
+                        stringResource(R.string.score_cd_expand, title)
+                    },
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -524,46 +548,56 @@ private data class ScoreAchievement(
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
 
-private fun buildAchievements(scores: List<RecentPlayEntity>): List<ScoreAchievement> {
+private fun buildAchievements(scores: List<RecentPlayEntity>, context: Context): List<ScoreAchievement> {
     val achievements = mutableListOf<ScoreAchievement>()
+    fun subtitle(track: RecentPlayEntity): String = context.getString(
+        R.string.score_achievement_subtitle,
+        track.title,
+        track.difficultyName ?: track.artist
+    )
     scores.maxByOrNull { it.lengthSeconds ?: -1 }?.takeIf { it.lengthSeconds != null }?.let {
         achievements += ScoreAchievement(
-            label = "Longest map played",
+            label = context.getString(R.string.score_achievement_longest),
             value = formatLength(it.lengthSeconds),
-            subtitle = "${it.title} - ${it.difficultyName ?: it.artist}",
+            subtitle = subtitle(it),
             icon = Icons.Default.Timeline
         )
     }
     scores.maxByOrNull { it.bpm ?: -1f }?.takeIf { it.bpm != null }?.let {
         achievements += ScoreAchievement(
-            label = "Fastest map played",
-            value = "%.0f BPM".format(Locale.US, it.bpm),
-            subtitle = "${it.title} - ${it.difficultyName ?: it.artist}",
+            label = context.getString(R.string.score_achievement_fastest),
+            value = context.getString(R.string.score_bpm_value, it.bpm),
+            subtitle = subtitle(it),
             icon = Icons.Default.Speed
         )
     }
     scores.minByOrNull { it.ar ?: Float.MAX_VALUE }?.takeIf { it.ar != null }?.let {
         achievements += ScoreAchievement(
-            label = "Lowest AR played",
-            value = "AR %.1f".format(Locale.US, it.ar),
-            subtitle = "${it.title} - ${it.difficultyName ?: it.artist}",
+            label = context.getString(R.string.score_achievement_lowest_ar),
+            value = context.getString(R.string.score_ar_value, it.ar),
+            subtitle = subtitle(it),
             icon = Icons.Default.VisibilityOff
         )
     }
     scores.maxByOrNull { it.cs ?: -1f }?.takeIf { it.cs != null }?.let {
         achievements += ScoreAchievement(
-            label = "Highest CS played",
-            value = "CS %.1f".format(Locale.US, it.cs),
-            subtitle = "${it.title} - ${it.difficultyName ?: it.artist}",
+            label = context.getString(R.string.score_achievement_highest_cs),
+            value = context.getString(R.string.score_cs_value, it.cs),
+            subtitle = subtitle(it),
             icon = Icons.Default.CenterFocusStrong
         )
     }
     scores.maxByOrNull { it.pp ?: -1f }?.takeIf { it.pp != null }?.let {
         val heldDays = daysSince(it.playedAt)
         achievements += ScoreAchievement(
-            label = "PP record",
-            value = "%.0fpp".format(Locale.US, it.pp),
-            subtitle = "Record has stood for $heldDays day${if (heldDays == 1L) "" else "s"} since ${formatPlayedAtTimestamp(it.playedAt)}",
+            label = context.getString(R.string.score_achievement_pp_record),
+            value = context.getString(R.string.score_pp_value, it.pp),
+            subtitle = context.resources.getQuantityString(
+                R.plurals.score_pp_record_held,
+                heldDays.toInt(),
+                heldDays,
+                formatPlayedAtTimestamp(it.playedAt)
+            ),
             icon = Icons.Default.EmojiEvents
         )
     }

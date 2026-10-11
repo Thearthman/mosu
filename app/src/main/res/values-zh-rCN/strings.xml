@@ -63,6 +63,42 @@
     <string name="profile_statistics_title">统计数据</string>
     <string name="profile_downloaded_songs_label">已下载歌曲: %1$d</string>
 
+    <!-- 成绩界面 -->
+    <string name="score_title">成绩</string>
+    <plurals name="score_recent_cached">
+        <item quantity="other">已缓存 %1$d 条近期成绩</item>
+    </plurals>
+    <string name="score_cd_refresh">刷新成绩</string>
+    <string name="score_load_error">无法加载成绩</string>
+    <string name="score_empty_title">暂无成绩数据</string>
+    <string name="score_empty_logged_out">请在“个人”页登录以同步近期的 osu! 成绩。</string>
+    <string name="score_empty_logged_in">游玩 osu! 后刷新即可缓存近期成绩。</string>
+    <string name="score_average_stars_title">各等级平均星数</string>
+    <string name="score_average_stars_empty">暂无已通过且有星级评分的上榜成绩。</string>
+    <string name="score_stars_value">%1$.1f 星</string>
+    <string name="score_recent_passed_title">最近通过</string>
+    <string name="score_recent_passed_empty">暂无已缓存的通过成绩。</string>
+    <string name="score_achievements_title">成就</string>
+    <string name="score_achievements_empty">需要更多近期成绩数据才能生成成就。</string>
+    <string name="score_achievement_longest">游玩过的最长谱面</string>
+    <string name="score_achievement_fastest">游玩过的最快谱面</string>
+    <string name="score_achievement_lowest_ar">游玩过的最低 AR</string>
+    <string name="score_achievement_highest_cs">游玩过的最高 CS</string>
+    <string name="score_achievement_pp_record">PP 纪录</string>
+    <string name="score_achievement_subtitle">%1$s - %2$s</string>
+    <string name="score_bpm_value">%1$.0f BPM</string>
+    <string name="score_ar_value">AR %1$.1f</string>
+    <string name="score_cs_value">CS %1$.1f</string>
+    <string name="score_pp_value">%1$.0fpp</string>
+    <string name="score_pp_none">--pp</string>
+    <plurals name="score_pp_record_held">
+        <item quantity="other">纪录已保持 %1$d 天，自 %2$s</item>
+    </plurals>
+    <string name="score_length_prefix">/%1$s</string>
+    <string name="score_cd_star_rating">星级评分</string>
+    <string name="score_cd_collapse">收起 %1$s</string>
+    <string name="score_cd_expand">展开 %1$s</string>
+
     <!-- 账户 -->
     <string name="profile_login_title">未登录</string>
     <string name="profile_login_description">点击以登录 osu!</string>

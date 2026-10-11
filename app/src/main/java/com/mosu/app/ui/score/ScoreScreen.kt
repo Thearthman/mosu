@@ -3,6 +3,7 @@ package com.mosu.app.ui.score
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -38,9 +41,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,8 +54,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.R
+import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.repository.OsuRepository
@@ -67,6 +75,7 @@ import com.mosu.app.domain.model.getGradientColorsForRange
 import com.mosu.app.domain.model.getStarRatingColor
 import com.mosu.app.domain.model.modeLabel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
@@ -76,11 +85,15 @@ import java.util.Locale
 
 private const val SCORE_SCREEN_TAG = "ScoreScreen"
 
+/** Diameter of a mode-filter icon (and the height of the score-count text it sits next to). */
+private val ScoreModeIconSize = 36.dp
+
 @Composable
 fun ScoreScreen(
     accessToken: String?,
     repository: OsuRepository,
-    db: AppDatabase
+    db: AppDatabase,
+    settingsManager: SettingsManager
 ) {
     var scores by remember { mutableStateOf<List<RecentPlayEntity>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -88,6 +101,14 @@ fun ScoreScreen(
     var refreshRequest by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val scoreModeFilter by settingsManager.scoreModeFilter.collectAsState(initial = "osu")
+
+    // Universal entry point: every consumer of score data reads from this filtered
+    // list, so the mode filter is applied before any panel-level filtering/calculation.
+    val filteredScores = remember(scores, scoreModeFilter) {
+        scores.filterByMode(scoreModeFilter)
+    }
 
     LaunchedEffect(accessToken, refreshRequest) {
         isLoading = true
@@ -137,75 +158,165 @@ fun ScoreScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         stringResource(R.string.score_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.displayMedium
                     )
-                    Text(
-                        pluralStringResource(
-                            R.plurals.score_recent_cached,
-                            scores.size,
-                            scores.size
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    IconButton(
-                        onClick = {
-                            refreshRequest++
-                        },
-                        enabled = accessToken != null
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.score_cd_refresh)
-                        )
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(
+                            onClick = {
+                                refreshRequest++
+                            },
+                            enabled = accessToken != null
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.score_cd_refresh)
+                            )
+                        }
                     }
                 }
-            }
-            if (errorMessage != null) {
-                Text(
-                    errorMessage ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(ScoreModeIconSize),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            pluralStringResource(
+                                R.plurals.score_recent_cached,
+                                filteredScores.size,
+                                filteredScores.size
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    ScoreModeFilterIcons(
+                        selectedMode = scoreModeFilter,
+                        onModeSelected = { mode ->
+                            scope.launch { settingsManager.saveScoreModeFilter(mode) }
+                        }
+                    )
+                }
+                if (errorMessage != null) {
+                    Text(
+                        errorMessage ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
 
-        if (scores.isEmpty()) {
+        if (filteredScores.isEmpty()) {
             item {
-                EmptyScoreState(accessToken = accessToken)
+                EmptyScoreState(
+                    accessToken = accessToken,
+                    filterHidesAll = scores.isNotEmpty() && scoreModeFilter != "all"
+                )
             }
         } else {
-            item { AverageStarsPanel(scores) }
-            item { RecentPassedPanel(scores) }
-            item { AchievementsPanel(scores) }
+            item { AverageStarsPanel(filteredScores) }
+            item { RecentPassedPanel(filteredScores) }
+            item { AchievementsPanel(filteredScores) }
         }
     }
 }
 
 @Composable
-private fun EmptyScoreState(accessToken: String?) {
+private fun EmptyScoreState(
+    accessToken: String?,
+    filterHidesAll: Boolean = false
+) {
     ScorePanel(title = stringResource(R.string.score_empty_title), icon = Icons.Default.Star) {
         Text(
-            if (accessToken == null) {
-                stringResource(R.string.score_empty_logged_out)
-            } else {
-                stringResource(R.string.score_empty_logged_in)
+            when {
+                filterHidesAll -> stringResource(R.string.score_empty_mode)
+                accessToken == null -> stringResource(R.string.score_empty_logged_out)
+                else -> stringResource(R.string.score_empty_logged_in)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+private data class ScoreModeOption(
+    val value: String,
+    val labelRes: Int,
+    val iconRes: Int? = null,
+    val imageVector: ImageVector? = null
+)
+
+private val scoreModeOptions = listOf(
+    ScoreModeOption("osu", R.string.score_mode_osu, iconRes = R.drawable.std_icon),
+    ScoreModeOption("taiko", R.string.score_mode_taiko, iconRes = R.drawable.taiko_icon),
+    ScoreModeOption("fruits", R.string.score_mode_catch, iconRes = R.drawable.cth_icon),
+    ScoreModeOption("mania", R.string.score_mode_mania, iconRes = R.drawable.mania_icon),
+    ScoreModeOption("all", R.string.score_mode_all, imageVector = Icons.Default.Apps)
+)
+
+@Composable
+private fun ScoreModeFilterIcons(
+    selectedMode: String,
+    onModeSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        scoreModeOptions.forEach { option ->
+            val selected = option.value == selectedMode
+            val tint = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Box(
+                modifier = Modifier
+                    .size(ScoreModeIconSize)
+                    .clip(CircleShape)
+                    .background(
+                        if (selected) {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                        } else {
+                            Color.Transparent
+                        }
+                    )
+                    .clickable { onModeSelected(option.value) },
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    option.iconRes != null -> Icon(
+                        painter = painterResource(option.iconRes),
+                        contentDescription = stringResource(option.labelRes),
+                        tint = tint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    option.imageVector != null -> Icon(
+                        imageVector = option.imageVector,
+                        contentDescription = stringResource(option.labelRes),
+                        tint = tint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -606,6 +717,20 @@ private fun buildAchievements(scores: List<RecentPlayEntity>, context: Context):
 
 private fun List<RecentPlayEntity>.passedScores(): List<RecentPlayEntity> {
     return filter { it.passed == true || (it.rank != null && !it.rank.equals("F", ignoreCase = true)) }
+}
+
+private fun List<RecentPlayEntity>.filterByMode(modeFilter: String): List<RecentPlayEntity> {
+    if (modeFilter == "all") return this
+    return filter { entity ->
+        when (modeFilter) {
+            "osu" -> entity.mode?.equals("osu", ignoreCase = true) == true
+            "taiko" -> entity.mode?.equals("taiko", ignoreCase = true) == true
+            "fruits" -> entity.mode?.equals("fruits", ignoreCase = true) == true ||
+                entity.mode?.equals("catch", ignoreCase = true) == true
+            "mania" -> entity.mode?.equals("mania", ignoreCase = true) == true
+            else -> true
+        }
+    }
 }
 
 private fun RecentPlayEntity.hasScoreMetrics(): Boolean {

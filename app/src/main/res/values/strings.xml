@@ -71,7 +71,13 @@
     </plurals>
     <string name="score_cd_refresh">Refresh scores</string>
     <string name="score_load_error">Unable to load scores</string>
+    <string name="score_mode_osu">std</string>
+    <string name="score_mode_taiko">taiko</string>
+    <string name="score_mode_catch">catch</string>
+    <string name="score_mode_mania">mania</string>
+    <string name="score_mode_all">All</string>
     <string name="score_empty_title">No score data</string>
+    <string name="score_empty_mode">No scores for this mode yet.</string>
     <string name="score_empty_logged_out">Log in from Profile to sync recent osu! scores.</string>
     <string name="score_empty_logged_in">Refresh after playing osu! to cache recent scores.</string>
     <string name="score_average_stars_title">Average Stars by Grade</string>

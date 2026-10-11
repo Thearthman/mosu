@@ -70,7 +70,13 @@
     </plurals>
     <string name="score_cd_refresh">刷新成绩</string>
     <string name="score_load_error">无法加载成绩</string>
+    <string name="score_mode_osu">std</string>
+    <string name="score_mode_taiko">taiko</string>
+    <string name="score_mode_catch">catch</string>
+    <string name="score_mode_mania">mania</string>
+    <string name="score_mode_all">全部</string>
     <string name="score_empty_title">暂无成绩数据</string>
+    <string name="score_empty_mode">暂无该模式的成绩。</string>
     <string name="score_empty_logged_out">请在“个人”页登录以同步近期的 osu! 成绩。</string>
     <string name="score_empty_logged_in">游玩 osu! 后刷新即可缓存近期成绩。</string>
     <string name="score_average_stars_title">各等级平均星数</string>

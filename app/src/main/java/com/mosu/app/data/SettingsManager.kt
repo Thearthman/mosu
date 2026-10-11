@@ -32,6 +32,7 @@ class SettingsManager(private val context: Context) {
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
+        private val SCORE_MODE_FILTER_KEY = stringPreferencesKey("score_mode_filter") // "osu", "taiko", "fruits", "mania", "all"
         private val PREFERRED_MIRROR_KEY = stringPreferencesKey("preferred_mirror") // "nerinyan" or "sayobot"
         private val API_SOURCE_KEY_OLD = stringPreferencesKey("api_source") // Deprecated
         private val REGION_CHECKED_KEY = booleanPreferencesKey("region_checked")
@@ -146,6 +147,11 @@ class SettingsManager(private val context: Context) {
             preferences[REPEAT_MODE_KEY] ?: Player.REPEAT_MODE_OFF
         }
 
+    val scoreModeFilter: Flow<String> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[SCORE_MODE_FILTER_KEY] ?: "osu"
+        }
+
     suspend fun savePlayedFilterMode(mode: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[PLAYED_FILTER_MODE_KEY] = mode
@@ -191,6 +197,12 @@ class SettingsManager(private val context: Context) {
     suspend fun saveRepeatMode(mode: Int) {
         context.settingsDataStore.edit { preferences ->
             preferences[REPEAT_MODE_KEY] = mode
+        }
+    }
+
+    suspend fun saveScoreModeFilter(mode: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[SCORE_MODE_FILTER_KEY] = mode
         }
     }
 

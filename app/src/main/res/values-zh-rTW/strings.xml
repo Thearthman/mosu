@@ -70,7 +70,13 @@
     </plurals>
     <string name="score_cd_refresh">重新整理成績</string>
     <string name="score_load_error">無法載入成績</string>
+    <string name="score_mode_osu">std</string>
+    <string name="score_mode_taiko">taiko</string>
+    <string name="score_mode_catch">catch</string>
+    <string name="score_mode_mania">mania</string>
+    <string name="score_mode_all">全部</string>
     <string name="score_empty_title">暫無成績資料</string>
+    <string name="score_empty_mode">暫無此模式的成績。</string>
     <string name="score_empty_logged_out">請在「個人」頁登入以同步近期的 osu! 成績。</string>
     <string name="score_empty_logged_in">遊玩 osu! 後重新整理即可快取近期成績。</string>
     <string name="score_average_stars_title">各等級平均星數</string>

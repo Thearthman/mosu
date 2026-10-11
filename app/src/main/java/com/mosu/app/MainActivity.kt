@@ -517,7 +517,8 @@ fun MainScreen(
                         ScoreScreen(
                             accessToken = accessToken,
                             repository = repository,
-                            db = db
+                            db = db,
+                            settingsManager = settingsManager
                         )
                     }
                     composable("profile") {

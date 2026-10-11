@@ -65,6 +65,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -163,6 +166,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        applyImmersiveMode()
 
         // Handle Deep Link
         val data: Uri? = intent?.data
@@ -198,6 +202,32 @@ class MainActivity : ComponentActivity() {
 
         // Schedule periodic cache cleanup
         scheduleCacheCleanup()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Re-hide the system bars whenever the window regains focus (e.g. after
+        // the transient swipe-to-reveal bars auto-dismiss or the app is resumed).
+        if (hasFocus) {
+            hideSystemBars()
+        }
+    }
+
+    /**
+     * Default the app to an immersive, edge-to-edge view: the status and
+     * navigation bars start hidden and content fills the whole screen. A swipe
+     * from the edge reveals them transiently, after which they hide again.
+     */
+    private fun applyImmersiveMode() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView)
+            .hide(WindowInsetsCompat.Type.systemBars())
     }
 
     override fun onRequestPermissionsResult(

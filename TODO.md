@@ -10,6 +10,7 @@
 - [x] [v1.0] Preferred Mirror doesn't work most of the time. should have used a more durable and persistent way to determine user's geolocation.
 
 ### UIUX
+- [ ] Fix the UI scaling issue.
 - [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
 - [ ] Downloaded song in the download list should move to the bottom of the list. 
 

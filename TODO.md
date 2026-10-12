@@ -4,15 +4,10 @@
 
 ### Bugs
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
-- [x] Quick swipe can still delete a song when the swipe distance is very small. Measure absolute distance instead of only velocity.
-- [x] Swipe-to-dismiss should only trigger for gestures with a tight horizontal angle, not diagonal/vertical motion.
-- [x] When deleting an account in account manager, snap the slider back, show a warning confirmation dialog, then remove the account from UI and storage only after confirmation.
-- [x] [v1.0] Preferred Mirror doesn't work most of the time. should have used a more durable and persistent way to determine user's geolocation.
 
 ### UIUX
 - [ ] Fix the UI scaling issue.
 - [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
-- [ ] Downloaded song in the download list should move to the bottom of the list. 
 
 ### Features
 
@@ -21,7 +16,7 @@
 - [ ] [v1.2] Implement Activity Heatmap from recent play data with week, month, and year views.
 - [ ] [v1.1] Implement song recommendations based on tags, genre, and related metadata.
 - [ ] [v1.1] Implement smart playlist generation based on how long the user stays on songs in random play mode.
-- [x] [v1.1] Implement score page.
+- [ ] [v1.2] Implement DJ mixing for smooth transition
 
 #### Settings
 - [ ] [v1.4] Add a display toggle for native-language (Unicode) beatmap titles/artists. Both are already stored in the DB (`titleUnicode`/`artistUnicode`); romaji is shown for now as the osu! standard. (Stage 5 of the beatmap-metadata source-of-truth rework.)
@@ -32,7 +27,7 @@
 
 #### Player
 - [ ] Add HT/Half Time, similar to DT but without pitch changes.
-- [ ] [v2.0] Add a dedicated landscape layout for the full player screen (the current layout is portrait-oriented).
+- [ ] [v2.0] Entire-interface landscape layout (all screens, not just the player).
 - [ ] [v2.0] Replace the existing music controller with Rubber Band to reduce double-time metallic distortion.
 - [ ] [v1.2] Implement sound balancing based on loudness normalization algorithms.
 - [ ] [v1.2] Implement lyrics service with LRCLIB.
@@ -45,21 +40,15 @@
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
-- [x] [v1.1] Add a Settings toggle to make the Recent play filter display every recorded entry as Play History, not just newest played songs.
 - [ ] [v1.1] Add Top Play(top 200) filter mode.
 
 #### Library
 - [ ] [v1.3] Add an artist view toggle. In artist view, group songs by normalized artist names, removing special characters and spaces to reduce typo-related misses. Clicking an artist should open a playlist-style song list for that artist.
 - [ ] Make the library genre filter apply to loop/random playlists once current playing playlist logic is in place.
 
-#### score (heavily relying on the "recent" score database)
-- [x] Limit the Recently Passed score panel to the latest 30 passed entries.
-- [x] Make score page panels collapse and expand when clicking their panel titles.
-- [x] [v1.1] Add a page dedicated to scores besides the search/playlist/library/settings pages. It should contain a few panels. The required panels are below.
-- [x] Add a panel about average star number about beatmaps passed in different grades. For example: "A: 5.8 stars, B: 6.3 stars, etc."
-- [x] Add a panel about recently passed beatmaps(following the same data), should include pp, star rate, and length.
-- [x] Add a panel about some achievements: longest map played, fastest(bpm) map played, lowest ar played, highest CS played. PP record(we want a "last pp record held x days" info text as well.).
-- [x] Refactor recent score database, use non-desctructive migration if possible(i.e., can we get info we want from the existing database + osu api. keep in mind that osu's api you can always query beatmap info if you got beatmapsetid and beatmapid, but recent scores only exist for 24h). Make sure recent database would suffice the panels requirement
+#### Score
+- [ ] [v1.1] Add Top Play(top 200) with detailed stats (different from the search/download focused view in search top play filter mode)
+- [ ] [v1.1] Add long press 
 
 ## Completed
 
@@ -81,6 +70,8 @@
 - [x] Added expanded full player view with animated cover transition, hidden nav bar, draggable progress bar, play controls, play mode button, and mod button.
 - [x] Added DT and NC sound-effect mods in the player view.
 - [x] Changed shuffle button cycling to `1 -> 2 -> 3 -> 1`.
+- [x] [v1.1] Added a landscape horizontal player layout (up to a 3:2 ratio): square cover art top-left, title/artist + transport controls top-right, and a full-width progress bar along the bottom.
+- [x] [v1.1] Added a wide horizontal player layout (ratio > 3:2, e.g. 16:9): the progress bar sits at the bottom of the text/controls column and the cover band takes the full height.
 
 #### Playlist
 - [x] Implemented `single`/`loop`/`random` playback behavior across the active library/playlist scope.
@@ -88,6 +79,7 @@
 - [x] Added playlist song swipe actions: right swipe removes from playlist with confirmation, left swipe deletes from library.
 - [x] Added playlist rename dialog from the long-press edit action.
 - [x] Added Playlist page with playlist creation, album grid, playlist detail view, song adding, and playlist play behavior.
+- [x] [v1.1] Implemented playlist import/export with a list of beatmapset ids.
 
 #### Search
 - [x] When a downloaded song is clicked in Search, it plays.
@@ -105,12 +97,22 @@
 - [x] Added ability to download a specific beatmapset from InfoPopup.
 - [x] Recent play supports all modes.
 - [x] [v1.0] Added persistent Search history.
+- [x] [v1.1] Added a Settings toggle to make the Recent play filter display every recorded entry as Play History, not just newest played songs.
 
 #### Library
 - [x] Implemented library genre filter matching Search genre filter.
 - [x] Implemented find-current-song button in Library with scroll/highlight behavior.
 - [x] Added right swipe to add/remove songs from playlists.
 - [x] Added Search page style search bar to Library.
+
+#### Score
+- [x] [v1.1] Added a dedicated score page (besides search/playlist/library/settings) with the panels below.
+- [x] Limited the Recently Passed score panel to the latest 30 passed entries.
+- [x] Made score page panels collapse/expand when their panel titles are clicked.
+- [x] Added an average star-number panel for beatmaps passed in different grades (e.g. "A: 5.8 stars, B: 6.3 stars").
+- [x] Added a recently passed beatmaps panel including pp, star rate, and length.
+- [x] Added an achievements panel: longest map played, fastest (BPM) map played, lowest AR played, highest CS played, and PP record with a "last PP record held x days" info text.
+- [x] Refactored the recent score database with a non-destructive migration so it suffices the panels' data requirements.
 
 ### UI/UX Improvements
 - [x] Blended the top/status bar color into the app UI.
@@ -151,6 +153,8 @@
 - [x] Aligned InfoPopup row contents vertically.
 - [x] Added snackbar feedback and undo/redo behavior for beatmapset actions.
 - [x] Made Library song list consistent with Search list, including a scrolling genre bar.
+- [x] Moved finished downloads to the bottom of the download task list.
+- [x] Account deletion in the account manager now snaps the slider back and shows a warning confirmation before removing the account from the UI and storage.
 
 ### Bug Fixes
 - [x] Fixed delete swipe red background persisting after removing a non-bottom item.
@@ -213,6 +217,7 @@
 - [x] Beatmap swipe actions now require distance threshold instead of velocity-only dismissal.
 - [x] Beatmap swipe actions now reject diagonal/vertical gestures and allow reversing direction within the same swipe.
 - [x] [v1.0] Included the downloaded-song restore list (`preserved_beatmap_set_ids`) in the Mosu export/import manifest so imports populate "Restore Downloads" even when local audio files are gone.
+- [x] [v1.0] Fixed Preferred Mirror reliability by using a more durable, persistent geolocation check.
 
 ### Codebase Maintenance
 - [x] Refactored song list components into specialized UI components.

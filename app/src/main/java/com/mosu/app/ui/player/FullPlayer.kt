@@ -1,10 +1,10 @@
 package com.mosu.app.ui.player
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,15 +19,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -41,12 +38,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.SliderPositions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,18 +53,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PointMode
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
@@ -84,15 +75,36 @@ import java.util.Locale
 // vertical regions below are weighted so they scale with whatever height the device
 // actually provides. All weights are relative to the cover art's weight of 1.
 private const val COVER_WEIGHT = 1f          // cover art slot (grows with the screen)
-private const val CONTROLS_WEIGHT = 0.19f    // controls row (≈90 dp on the reference panel)
+private const val CONTROLS_WEIGHT = 0.25f    // controls row (≈90 dp on the reference panel)
+
+private const val CONTROL_WIDTH = 0.9f
 private const val BOTTOM_GAP_WEIGHT = 0.11f  // bottom breathing room (≈55 dp on the reference panel)
 // Buttons are sized as a fraction of the control row's height so they scale with it.
 private const val SIDE_BUTTON_HEIGHT_FRACTION = 0.52f // ≈48 dp on the reference panel
 private const val PLAY_BUTTON_HEIGHT_FRACTION = 0.78f // ≈72 dp on the reference panel
 private const val PLAY_ICON_FRACTION = 0.66f          // ≈48 dp glyph inside the play button
+// The Mod/shuffle keys render small content; their boxes hug that ink so SpaceEvenly
+// spreads the visible controls evenly rather than the larger empty boxes.
+private val ModeIconSize = 24.dp
 // Keeps the (centered) content column phone-sized on wider displays instead of
 // stretching edge to edge.
 private val MaxContentWidth = 480.dp
+// Horizontal/landscape layout: top band vs. bottom progress band shares of the height,
+// the info column's internal split, and a generous cap so tablets don't stretch edge to edge.
+private const val TOP_BAND_WEIGHT = 0.85f      // cover + info share of the height
+private const val PROGRESS_BAND_WEIGHT = 0.15f  // progress bar share of the height
+// Equal flexible spacers above and below the horizontal content keep the block vertically
+// centered while the column keeps taking up the full size.
+private const val H_CENTER_SPACER_WEIGHT = 0.05f
+private const val H_INFO_TOP_WEIGHT = 1f      // space above the title in the info column
+private val HorizontalMaxContentWidth = 960.dp
+// Above a 3:2 aspect ratio the progress bar moves into the info column so the (now
+// full-height) cover band can grow instead of bleeding height into an empty progress band.
+private const val WIDE_HORIZONTAL_RATIO = 1.5f
+// Horizontal modes size the transport buttons from the info column's width (the space left
+// of the cover art) rather than the row height, which balloons them on short/wide screens.
+private const val H_SIDE_BUTTON_WIDTH_FRACTION = 0.18f
+private const val H_PLAY_BUTTON_WIDTH_FRACTION = 0.20f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,19 +116,19 @@ fun FullPlayer(
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val isPlaying by musicController.isPlaying.collectAsState()
     val duration by musicController.duration.collectAsState()
-    val repeatMode by musicController.repeatMode.collectAsState()
-    val shuffleModeEnabled by musicController.shuffleModeEnabled.collectAsState()
     val playbackMod by musicController.playbackMod.collectAsState()
 
-    var modMenuExpanded by remember { mutableStateOf(false) }
-
     if (nowPlaying != null) {
-        Box(
+        BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.TopCenter
         ) {
+            val isHorizontal = maxWidth.value > (maxHeight.value * 1.2f)
+            val isWideHorizontal =
+                isHorizontal && maxWidth.value > maxHeight.value * WIDE_HORIZONTAL_RATIO
+
             // Blurred Background (Simulated with zoomed image and overlay)
             AsyncImage(
                 model = nowPlaying?.artworkUri,
@@ -145,241 +157,603 @@ fun FullPlayer(
                     )
             )
 
+            val artworkUri = nowPlaying?.artworkUri
+            val title = nowPlaying?.title?.toString() ?: "Unknown Title"
+            val artist = nowPlaying?.artist?.toString() ?: "Unknown Artist"
+            if (isHorizontal) {
+                HorizontalPlayerLayout(
+                    musicController = musicController,
+                    isPlaying = isPlaying,
+                    playbackMod = playbackMod,
+                    duration = duration,
+                    artworkUri = artworkUri,
+                    title = title,
+                    artist = artist,
+                    onCollapse = onCollapse,
+                    wideMode = isWideHorizontal,
+                    modifier = Modifier
+                )
+            } else {
+                VerticalPlayerLayout(
+                    musicController = musicController,
+                    isPlaying = isPlaying,
+                    playbackMod = playbackMod,
+                    duration = duration,
+                    artworkUri = artworkUri,
+                    title = title,
+                    artist = artist,
+                    onCollapse = onCollapse,
+                    modifier = Modifier
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Portrait layout: a single centered column (cover, title/artist, progress, controls) whose
+ * regions are weighted so they scale with the display height. Kept at phone width by
+ * [MaxContentWidth] so it doesn't stretch on wide displays.
+ */
+@Composable
+private fun VerticalPlayerLayout(
+    musicController: MusicController,
+    isPlaying: Boolean,
+    playbackMod: PlaybackMod,
+    duration: Long,
+    artworkUri: Any?,
+    title: String,
+    artist: String,
+    onCollapse: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .fillMaxWidth(CONTROL_WIDTH)
+            .widthIn(max = MaxContentWidth)
+            .padding(vertical = 10.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Collapse Handle / Arrow
+        IconButton(onClick = onCollapse) {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = "Collapse",
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(5.dp))
+
+        // Square cover art inside a weighted, full-height slot so it scales with the
+        // leftover vertical space; the square itself is centered in that slot (a square
+        // can't fill a slot that is taller than it is wide).
+        Box(
+            modifier = Modifier
+                .weight(COVER_WEIGHT)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            CoverArt(artworkUri = artworkUri)
+        }
+
+        Spacer(modifier = Modifier.height(50.dp))
+
+        TrackInfo(title = title, artist = artist)
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Isolated Progress Bar and Time Labels
+        PlayerProgressBar(
+            musicController = musicController,
+            duration = duration
+        )
+
+        Spacer(modifier = Modifier.height(30.dp))
+
+        // Controls Row — weighted so the row's height scales with the screen.
+        PlayerControls(
+            musicController = musicController,
+            isPlaying = isPlaying,
+            playbackMod = playbackMod,
+            sizeByWidth = false,
+            modifier = Modifier.weight(CONTROLS_WEIGHT)
+        )
+
+        Spacer(Modifier.weight(BOTTOM_GAP_WEIGHT))
+    }
+}
+
+/**
+ * Landscape/horizontal layout: square cover art top-left, title/artist + controls top-right
+ * (the info column takes whatever width the square cover leaves). The square cover is
+ * height-bound so it stays square (see the design note in the layout constants).
+ *
+ * Two variants, chosen by [wideMode]:
+ *  - narrow (up to 3:2): the top band holds ~65% of the height and the progress bar spans a
+ *    full-width band below it.
+ *  - wide (over 3:2, e.g. 16:9): the top band takes the full height and the progress bar
+ *    moves to the bottom of the info column, so the cover can grow instead of bleeding
+ *    height into a mostly-empty progress band.
+ */
+@Composable
+private fun HorizontalPlayerLayout(
+    musicController: MusicController,
+    isPlaying: Boolean,
+    playbackMod: PlaybackMod,
+    duration: Long,
+    artworkUri: Any?,
+    title: String,
+    artist: String,
+    onCollapse: () -> Unit,
+    wideMode: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = Modifier
+            // Cap the width *before* filling so the filled column is centered by the
+            // parent (TopCenter) instead of bleeding edge-to-edge on wide displays.
+            .widthIn(max = HorizontalMaxContentWidth)
+            .fillMaxSize()
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Equal spacers above and below center the whole block vertically instead of
+        // letting the cover band hug the top of the screen.
+        Spacer(Modifier.weight(H_CENTER_SPACER_WEIGHT))
+
+        // Top band: cover on the left, info + controls on the right. In wide mode the
+        // band takes the full height and also hosts the progress bar (there is no
+        // separate bottom band), leaving the cover room to grow.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(if (wideMode) 1f else TOP_BAND_WEIGHT),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Collapse handle in the top-right corner so it doesn't consume info-column space.
+
+
+            CoverArt(
+                artworkUri = artworkUri,
+                modifier = Modifier
+                    .fillMaxHeight()
+            )
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .widthIn(max = MaxContentWidth)
-                    .padding(vertical = 10.dp, horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .weight(1f)
+                    .padding(start = 24.dp),
+                horizontalAlignment = Alignment.Start
             ) {
-                // Spacer(modifier = Modifier.height(35.dp))
+                IconButton(
+                    onClick = onCollapse,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
 
-                // Collapse Handle / Arrow
-                IconButton(onClick = onCollapse) {
+
+                ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
                         contentDescription = "Collapse",
                         tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
-
-                Spacer(modifier = Modifier.height(5.dp))
-
-                // Square Cover Art. It lives inside a weighted, full-height slot so it
-                // scales with the leftover vertical space; the square itself is centered
-                // in that slot (a square can't fill a slot taller than it is wide).
-                Box(
-                    modifier = Modifier
-                        .weight(COVER_WEIGHT)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsyncImage(
-                        model = nowPlaying?.artworkUri,
-                        contentDescription = "Cover Art",
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
+                if (wideMode) {
+                    // Wide mode: the info block sits toward the bottom of the column with
+                    // the progress bar pinned to the very bottom (aligned with the cover).
+                    Spacer(Modifier.weight(1f))
+                    TrackInfo(title = title, artist = artist, titleMaxLines = 2)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    PlayerControls(
+                        musicController = musicController,
+                        isPlaying = isPlaying,
+                        playbackMod = playbackMod,
+                        sizeByWidth = true
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    PlayerProgressBar(
+                        musicController = musicController,
+                        duration = duration
+                    )
+                } else {
+                    Spacer(Modifier.weight(H_INFO_TOP_WEIGHT))
+                    TrackInfo(title = title, artist = artist, titleMaxLines = 2)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    PlayerControls(
+                        musicController = musicController,
+                        isPlaying = isPlaying,
+                        playbackMod = playbackMod,
+                        sizeByWidth = true
                     )
                 }
+            }
+        }
 
-                Spacer(modifier = Modifier.height(50.dp))
-
-                // Title and Artist
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Text(
-                        text = nowPlaying?.title?.toString() ?: "Unknown Title",
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = nowPlaying?.artist?.toString() ?: "Unknown Artist",
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Isolated Progress Bar and Time Labels
+        if (!wideMode) {
+            // Bottom band: the progress bar spans the width and is pinned to the bottom of
+            // its band so the band's spare height all sits above the bar instead of being
+            // split into a phantom gap above and below it.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(PROGRESS_BAND_WEIGHT),
+                contentAlignment = Alignment.BottomCenter
+            ) {
                 PlayerProgressBar(
                     musicController = musicController,
                     duration = duration
                 )
-
-                Spacer(modifier = Modifier.height(30.dp))
-
-                // Controls Row — weighted so the row's height scales with the screen.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(CONTROLS_WEIGHT),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left cluster: Mod + Previous
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        val modTint = if (playbackMod == PlaybackMod.NIGHT_CORE) {
-                            MaterialTheme.colorScheme.primary
-                        } else if (playbackMod == PlaybackMod.DOUBLE_TIME) {
-                            Color(0xFFFFD059)
-                        } else {
-                            MaterialTheme.colorScheme.onBackground
-                        }
-                        Box {
-                            Column(
-                                modifier = Modifier
-                                    .widthIn(min = 46.dp)
-                                    .clickable { modMenuExpanded = true }
-                            ) {
-                                Text(
-                                    text = "Mod",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    text = modLabel(playbackMod),
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = modTint
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = modMenuExpanded,
-                                onDismissRequest = { modMenuExpanded = false },
-                            ) {
-                                PlaybackMod.entries.forEach { mod ->
-                                    DropdownMenuItem(
-                                        modifier = Modifier.alpha(0.9f).fillMaxSize(),
-                                        text = { Text(
-                                            text = modMenuLabel(mod),
-                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                            color = when (mod) {
-                                                PlaybackMod.NIGHT_CORE -> {
-                                                    MaterialTheme.colorScheme.primary
-                                                }
-                                                PlaybackMod.DOUBLE_TIME -> {
-                                                    Color(0xFFFFD059)
-                                                }
-                                                else -> {
-                                                    MaterialTheme.colorScheme.onBackground
-                                                }
-                                            },
-                                        ) },
-                                        onClick = {
-                                            musicController.setPlaybackMod(mod)
-                                            modMenuExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(
-                            onClick = { musicController.skipToPrevious() },
-                            modifier = Modifier
-                                .fillMaxHeight(SIDE_BUTTON_HEIGHT_FRACTION)
-                                .aspectRatio(1f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SkipPrevious,
-                                contentDescription = "Previous",
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-
-                    // Play/Pause centered
-                    IconButton(
-                        onClick = { musicController.togglePlayPause() },
-                        modifier = Modifier
-                            .fillMaxHeight(PLAY_BUTTON_HEIGHT_FRACTION)
-                            .aspectRatio(1f)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.fillMaxSize(PLAY_ICON_FRACTION)
-                        )
-                    }
-
-                    // Right cluster: Next + Mode
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        IconButton(
-                            onClick = { musicController.skipToNext() },
-                            modifier = Modifier
-                                .fillMaxHeight(SIDE_BUTTON_HEIGHT_FRACTION)
-                                .aspectRatio(1f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SkipNext,
-                                contentDescription = "Next",
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                when {
-                                    shuffleModeEnabled -> {
-                                        // Random -> Single
-                                        musicController.setShuffleMode(false)
-                                        musicController.setRepeatMode(Player.REPEAT_MODE_ONE)
-                                    }
-                                    repeatMode == Player.REPEAT_MODE_ONE -> {
-                                        // Single -> Sequence (repeat all, shuffle off)
-                                        musicController.setShuffleMode(false)
-                                        musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
-                                    }
-                                    else -> {
-                                        // Sequence -> Random (shuffle on, repeat all)
-                                        musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
-                                        musicController.setShuffleMode(true)
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxHeight(SIDE_BUTTON_HEIGHT_FRACTION)
-                                .aspectRatio(1f)
-                        ) {
-                            val icon = when {
-                                shuffleModeEnabled -> Icons.Default.Shuffle
-                                repeatMode == Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
-                                else -> Icons.Default.Repeat // Sequence
-                            }
-                            val tint = if (shuffleModeEnabled || repeatMode == Player.REPEAT_MODE_ONE) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.onBackground
-                                
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = "Mode",
-                                tint = tint
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.weight(BOTTOM_GAP_WEIGHT))
             }
         }
+
+        Spacer(Modifier.weight(H_CENTER_SPACER_WEIGHT))
+    }
+
+}
+
+@Composable
+private fun CoverArt(
+    artworkUri: Any?,
+    modifier: Modifier = Modifier
+) {
+    AsyncImage(
+        model = artworkUri,
+        contentDescription = "Cover Art",
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp)),
+        contentScale = ContentScale.Crop
+    )
+}
+
+@Composable
+private fun TrackInfo(
+    title: String,
+    artist: String,
+    modifier: Modifier = Modifier,
+    titleMaxLines: Int = 1
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            maxLines = titleMaxLines,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            text = artist,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayerControls(
+    musicController: MusicController,
+    isPlaying: Boolean,
+    playbackMod: PlaybackMod,
+    sizeByWidth: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val repeatMode by musicController.repeatMode.collectAsState()
+    val shuffleModeEnabled by musicController.shuffleModeEnabled.collectAsState()
+    var modMenuExpanded by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        // Vertical mode sizes buttons off the row height; horizontal modes size them off the
+        // info column's width (the space left of the cover art) so they stay proportional
+        // even when the row is short and wide.
+        val sideButtonSize = if (sizeByWidth) {
+            maxWidth * H_SIDE_BUTTON_WIDTH_FRACTION
+        } else {
+            maxHeight * SIDE_BUTTON_HEIGHT_FRACTION
+        }
+        val playButtonSize = if (sizeByWidth) {
+            maxWidth * H_PLAY_BUTTON_WIDTH_FRACTION
+        } else {
+            maxHeight * PLAY_BUTTON_HEIGHT_FRACTION
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // The five controls sit at their natural rendered size and SpaceEvenly spreads
+            // the gaps equally. Centering them in equal-width slots instead added empty
+            // padding around the small Mod/Mode keys, pushing them away from the
+            // transport keys.
+            ModControl(
+                playbackMod = playbackMod,
+                expanded = modMenuExpanded,
+                onExpandedChange = { modMenuExpanded = it },
+                onSelect = { musicController.setPlaybackMod(it) }
+            )
+            TransportButton(
+                imageVector = Icons.Default.SkipPrevious,
+                contentDescription = "Previous",
+                tint = MaterialTheme.colorScheme.onBackground,
+                size = sideButtonSize,
+                onClick = { musicController.skipToPrevious() }
+            )
+            PlayPauseButton(
+                size = playButtonSize,
+                isPlaying = isPlaying,
+                onClick = { musicController.togglePlayPause() }
+            )
+            TransportButton(
+                imageVector = Icons.Default.SkipNext,
+                contentDescription = "Next",
+                tint = MaterialTheme.colorScheme.onBackground,
+                size = sideButtonSize,
+                onClick = { musicController.skipToNext() }
+            )
+            ModeButton(
+                musicController = musicController,
+                repeatMode = repeatMode,
+                shuffleModeEnabled = shuffleModeEnabled
+            )
+        }
+    }
+}
+//
+///**
+// * Legacy (removed to minimize the complexity of the player) Wide horizontal variant (aspect ratio above 3:2): transport controls on the first row and
+// * the Mod / shuffle-cycle controls on a second row, so nothing is crowded out horizontally.
+// * The Mod key is shown inline ("Mod: NM"). Buttons are still sized from the info column width.
+// */
+//@OptIn(ExperimentalMaterial3Api::class)
+//@Composable
+//private fun WidePlayerControls(
+//    musicController: MusicController,
+//    isPlaying: Boolean,
+//    playbackMod: PlaybackMod,
+//    modifier: Modifier = Modifier
+//) {
+//    val repeatMode by musicController.repeatMode.collectAsState()
+//    val shuffleModeEnabled by musicController.shuffleModeEnabled.collectAsState()
+//    var modMenuExpanded by remember { mutableStateOf(false) }
+//
+//    BoxWithConstraints(
+//        modifier = modifier.fillMaxWidth(),
+//        contentAlignment = Alignment.Center
+//    ) {
+//        val sideButtonSize = maxWidth * H_SIDE_BUTTON_WIDTH_FRACTION
+//        val playButtonSize = maxWidth * H_PLAY_BUTTON_WIDTH_FRACTION
+//
+//        Column(modifier = Modifier.fillMaxWidth()) {
+//            // Row 2: Mod (inline) on the left, shuffle/cycle on the right.
+//            Row(
+//                modifier = Modifier.fillMaxWidth(),
+//                horizontalArrangement = Arrangement.SpaceBetween,
+//                verticalAlignment = Alignment.CenterVertically
+//            ) {
+//                ModControl(
+//                    playbackMod = playbackMod,
+//                    expanded = modMenuExpanded,
+//                    onExpandedChange = { modMenuExpanded = it },
+//                    onSelect = { musicController.setPlaybackMod(it) }
+//                )
+//                ModeButton(
+//                    musicController = musicController,
+//                    repeatMode = repeatMode,
+//                    shuffleModeEnabled = shuffleModeEnabled
+//                )
+//            }
+//            Spacer(Modifier.height(10.dp))
+//
+//            // Row 1: previous / play-pause / next, centered.
+//            Row(
+//                modifier = Modifier.fillMaxWidth(),
+//                horizontalArrangement = Arrangement.SpaceEvenly,
+//                verticalAlignment = Alignment.CenterVertically
+//            ) {
+//                TransportButton(
+//                    imageVector = Icons.Default.SkipPrevious,
+//                    contentDescription = "Previous",
+//                    tint = MaterialTheme.colorScheme.onBackground,
+//                    size = sideButtonSize,
+//                    onClick = { musicController.skipToPrevious() }
+//                )
+//                Spacer(Modifier.width(sideButtonSize * 0.5f))
+//                PlayPauseButton(
+//                    size = playButtonSize,
+//                    isPlaying = isPlaying,
+//                    onClick = { musicController.togglePlayPause() }
+//                )
+//                Spacer(Modifier.width(sideButtonSize * 0.5f))
+//                TransportButton(
+//                    imageVector = Icons.Default.SkipNext,
+//                    contentDescription = "Next",
+//                    tint = MaterialTheme.colorScheme.onBackground,
+//                    size = sideButtonSize,
+//                    onClick = { musicController.skipToNext() }
+//                )
+//            }
+//        }
+//    }
+//}
+
+@Composable
+private fun TransportButton(
+    imageVector: ImageVector,
+    contentDescription: String,
+    tint: Color,
+    size: Dp,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(size)
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+private fun PlayPauseButton(
+    size: Dp,
+    isPlaying: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(size)
+            .background(MaterialTheme.colorScheme.primary, CircleShape)
+    ) {
+        Icon(
+            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Default.PlayArrow,
+            contentDescription = if (isPlaying) "Pause" else "Play",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.fillMaxSize(PLAY_ICON_FRACTION)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModControl(
+    playbackMod: PlaybackMod,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (PlaybackMod) -> Unit,
+    modifier: Modifier = Modifier,
+    horizontal: Boolean = false
+) {
+    val modTint = when (playbackMod) {
+        PlaybackMod.NIGHT_CORE -> MaterialTheme.colorScheme.primary
+        PlaybackMod.DOUBLE_TIME -> Color(0xFFFFD059)
+        else -> MaterialTheme.colorScheme.onBackground
+    }
+    // Wraps its own content so the box hugs the text; SpaceEvenly then distributes the
+    // actual rendered sizes instead of measuring a larger empty box.
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (horizontal) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onExpandedChange(true) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Mod: ",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = modLabel(playbackMod),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = modTint
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .clickable { onExpandedChange(true) }
+            ) {
+                Text(
+                    text = "Mod",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = modLabel(playbackMod),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = modTint
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+        ) {
+            PlaybackMod.entries.forEach { mod ->
+                DropdownMenuItem(
+                    modifier = Modifier.alpha(0.9f).fillMaxSize(),
+                    text = { Text(
+                        text = modMenuLabel(mod),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = when (mod) {
+                            PlaybackMod.NIGHT_CORE -> MaterialTheme.colorScheme.primary
+                            PlaybackMod.DOUBLE_TIME -> Color(0xFFFFD059)
+                            else -> MaterialTheme.colorScheme.onBackground
+                        },
+                    ) },
+                    onClick = {
+                        onSelect(mod)
+                        onExpandedChange(false)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModeButton(
+    musicController: MusicController,
+    repeatMode: Int,
+    shuffleModeEnabled: Boolean
+) {
+    IconButton(
+        onClick = {
+            when {
+                shuffleModeEnabled -> {
+                    // Random -> Single
+                    musicController.setShuffleMode(false)
+                    musicController.setRepeatMode(Player.REPEAT_MODE_ONE)
+                }
+                repeatMode == Player.REPEAT_MODE_ONE -> {
+                    // Single -> Sequence (repeat all, shuffle off)
+                    musicController.setShuffleMode(false)
+                    musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
+                }
+                else -> {
+                    // Sequence -> Random (shuffle on, repeat all)
+                    musicController.setRepeatMode(Player.REPEAT_MODE_ALL)
+                    musicController.setShuffleMode(true)
+                }
+            }
+        },
+        modifier = Modifier.size(ModeIconSize)
+    ) {
+        val icon = when {
+            shuffleModeEnabled -> Icons.Default.Shuffle
+            repeatMode == Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
+            else -> Icons.Default.Repeat // Sequence
+        }
+        val tint = if (shuffleModeEnabled || repeatMode == Player.REPEAT_MODE_ONE)
+            MaterialTheme.colorScheme.primary
+        else
+            MaterialTheme.colorScheme.onBackground
+
+        Icon(
+            imageVector = icon,
+            contentDescription = "Mode",
+            tint = tint
+        )
     }
 }
 
@@ -411,7 +785,10 @@ private fun PlayerProgressBar(
         }
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(0.97f),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         val sliderColors = SliderDefaults.colors(
             thumbColor = Color.Transparent,
             disabledThumbColor = Color.Transparent,

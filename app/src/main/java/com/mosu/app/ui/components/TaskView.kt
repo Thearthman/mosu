@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -57,7 +58,15 @@ fun TaskView(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                tasks.values.toList().reversed().forEach { task ->
+                // Active downloads stay on top (oldest first, FIFO); finished
+                // ("Success") downloads sink to the bottom of the list.
+                val orderedTasks = remember(tasks) {
+                    tasks.values
+                        .toList()
+                        .reversed()
+                        .sortedBy { if (it.status == DownloadStatus.Success) 1 else 0 }
+                }
+                orderedTasks.forEach { task ->
                     TaskItem(
                         task = task,
                         onCancel = { onCancel(task.setId) },

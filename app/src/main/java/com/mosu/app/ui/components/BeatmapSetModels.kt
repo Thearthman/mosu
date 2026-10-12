@@ -50,6 +50,10 @@ data class BeatmapSetData(
 data class BeatmapTrackData(
     val id: Long, // Unique ID (uid or beatmapId)
     val difficultyName: String,
+    // The difficulty string as stored in the playlist row. This is the membership key used for
+    // removal, which can differ from the resolved/downloaded difficultyName (e.g. an imported
+    // set that resolves to a sibling difficulty of the downloaded set).
+    val storedDifficultyName: String = difficultyName,
     val title: String? = null,
     val artist: String? = null,
     val audioPath: String? = null,

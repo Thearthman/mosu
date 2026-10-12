@@ -1,5 +1,13 @@
 package com.mosu.app.ui.playlist
 
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +22,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +36,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
@@ -78,6 +89,7 @@ import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.services.TrackService
 import com.mosu.app.domain.search.BeatmapSearchService
+import com.mosu.app.domain.playlist.PlaylistTransferService
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.BeatmapSetActions
 import com.mosu.app.ui.components.BeatmapSetData
@@ -136,6 +148,14 @@ fun PlaylistScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var pendingExportText by remember { mutableStateOf<String?>(null) }
+
+    // Import / export text interfaces (also used for clipboard transfer).
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importText by remember { mutableStateOf("") }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var exportText by remember { mutableStateOf("") }
+    var exportName by remember { mutableStateOf("") }
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var renamePlaylistId by remember { mutableStateOf<Long?>(null) }
@@ -160,7 +180,134 @@ fun PlaylistScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
+    val clipboard = remember(context) {
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    }
     var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
+
+    fun pasteFromClipboard(): String {
+        val item = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+        return item?.coerceToText(context)?.toString().orEmpty()
+    }
+
+    fun copyToClipboard(text: String) {
+        clipboard.setPrimaryClip(ClipData.newPlainText("Mosu playlist", text))
+    }
+
+    // Writes the pending JSON to the document chosen in the export picker.
+    val exportPlaylistLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        val text = pendingExportText
+        pendingExportText = null
+        if (result.resultCode == Activity.RESULT_OK && uri != null && text != null) {
+            scope.launch {
+                try {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(text.toByteArray(Charsets.UTF_8))
+                        } ?: error("Unable to open export file")
+                    }
+                    Toast.makeText(context, R.string.playlist_export_success, Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.playlist_export_failed, e.message ?: ""),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    // Loads a picked file into the import text interface.
+    val importPlaylistLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null) {
+            scope.launch {
+                try {
+                    val content = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)
+                            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                            ?: error("Unable to open import file")
+                    }
+                    importText = content
+                    showImportDialog = true
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.playlist_import_file_failed, e.message ?: ""),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    fun performImport(content: String) {
+        if (content.isBlank()) {
+            Toast.makeText(context, R.string.playlist_import_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        scope.launch {
+            try {
+                val importResult = PlaylistTransferService.importPlaylist(
+                    db = db,
+                    repository = repository,
+                    content = content,
+                    defaultName = context.getString(R.string.playlist_import_default_name)
+                )
+                if (importResult == null) {
+                    Toast.makeText(context, R.string.playlist_import_empty, Toast.LENGTH_LONG).show()
+                } else {
+                    // Kick off downloads for any imported set that is not in the local library.
+                    importResult.pendingDownloads.forEach { pending ->
+                        downloadManager.enqueue(
+                            setId = pending.setId,
+                            title = pending.title,
+                            artist = pending.artist,
+                            creator = pending.creator,
+                            accessToken = accessToken,
+                            genreId = pending.genreId,
+                            coverUrl = pending.coverUrl
+                        )
+                    }
+                    MosuBackupService.exportState(context, db)
+                    val message = when {
+                        importResult.skippedSets > 0 -> context.getString(
+                            R.string.playlist_import_success_skipped,
+                            importResult.playlistName,
+                            importResult.importedSets,
+                            importResult.skippedSets
+                        )
+                        else -> context.getString(
+                            R.string.playlist_import_success,
+                            importResult.playlistName,
+                            importResult.importedSets
+                        )
+                    }
+                    val downloading = if (importResult.pendingDownloads.isNotEmpty()) {
+                        context.getString(
+                            R.string.playlist_import_started_downloads,
+                            importResult.pendingDownloads.size
+                        )
+                    } else ""
+                    Toast.makeText(context, message + downloading, Toast.LENGTH_LONG).show()
+                    showImportDialog = false
+                    importText = ""
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.playlist_import_failed, e.message ?: ""),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
 
     // Download Tasks from global manager
     val downloadTasks by downloadManager.tasks.collectAsState()
@@ -240,7 +387,7 @@ fun PlaylistScreen(
     // Transform to BeatmapSetData for the list
     val groupedTracks = remember(playlistTracksWithStatus, pendingDeletions, selectedPlaylistId) {
         playlistTracksWithStatus
-            .filter { "${selectedPlaylistId}|${it.beatmapSetId}|${it.difficultyName ?: it.storedDifficultyName}" !in pendingDeletions }
+            .filter { "${selectedPlaylistId}|${it.beatmapSetId}|${it.storedDifficultyName}" !in pendingDeletions }
             .groupBy { it.beatmapSetId }
     }
 
@@ -267,6 +414,7 @@ fun PlaylistScreen(
                     BeatmapTrackData(
                         id = track.uid ?: track.beatmapSetId, 
                         difficultyName = track.difficultyName ?: track.storedDifficultyName,
+                        storedDifficultyName = track.storedDifficultyName,
                         title = track.beatmapTitle ?: track.storedTitle,
                         artist = track.beatmapArtist ?: track.storedArtist,
                         creator = track.creator ?: track.storedArtist,
@@ -305,14 +453,14 @@ fun PlaylistScreen(
             onTrackSwipeLeft = { trackData ->
                 // UI-only remove: hide it
                 if (selectedPlaylistId != null) {
-                    val key = "${selectedPlaylistId}|${trackData.beatmapSetId}|${trackData.difficultyName}"
+                    val key = "${selectedPlaylistId}|${trackData.beatmapSetId}|${trackData.storedDifficultyName}"
                     deferredActionViewModel.addPendingPlaylistRemoval(key)
                 }
             },
             onTrackSwipeLeftRevert = { trackData ->
                 // Redo: just un-hide
                 if (selectedPlaylistId != null) {
-                    val key = "${selectedPlaylistId}|${trackData.beatmapSetId}|${trackData.difficultyName}"
+                    val key = "${selectedPlaylistId}|${trackData.beatmapSetId}|${trackData.storedDifficultyName}"
                     deferredActionViewModel.removePendingPlaylistRemoval(key)
                 }
             },
@@ -321,7 +469,7 @@ fun PlaylistScreen(
                 if (selectedPlaylistId != null) {
                     val playlistId = selectedPlaylistId!!
                     val trackSetId = trackData.beatmapSetId
-                    val trackDiff = trackData.difficultyName
+                    val trackDiff = trackData.storedDifficultyName
                     deferredActionViewModel.viewModelScope.launch {
                         TrackService.removeTrackFromPlaylist(playlistId, trackSetId, trackDiff, db, context)
                         val key = "${playlistId}|${trackSetId}|${trackDiff}"
@@ -346,7 +494,7 @@ fun PlaylistScreen(
                 // UI-only remove: hide the whole set
                 if (selectedPlaylistId != null) {
                     set.tracks.forEach {
-                        val key = "${selectedPlaylistId}|${set.id}|${it.difficultyName}"
+                        val key = "${selectedPlaylistId}|${set.id}|${it.storedDifficultyName}"
                         deferredActionViewModel.addPendingPlaylistRemoval(key)
                     }
                 }
@@ -355,7 +503,7 @@ fun PlaylistScreen(
                 // Redo: un-hide the set
                 if (selectedPlaylistId != null) {
                     set.tracks.forEach {
-                        val key = "${selectedPlaylistId}|${set.id}|${it.difficultyName}"
+                        val key = "${selectedPlaylistId}|${set.id}|${it.storedDifficultyName}"
                         deferredActionViewModel.removePendingPlaylistRemoval(key)
                     }
                 }
@@ -419,8 +567,19 @@ fun PlaylistScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
-                IconButton(onClick = { showCreateDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_create_playlist))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = {
+                        importText = ""
+                        showImportDialog = true
+                    }) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = stringResource(id = R.string.playlist_cd_import_playlist)
+                        )
+                    }
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_create_playlist))
+                    }
                 }
             }
 
@@ -503,6 +662,32 @@ fun PlaylistScreen(
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    val playlistId = selectedPlaylistId ?: return@IconButton
+                    scope.launch {
+                        try {
+                            val exported = PlaylistTransferService.exportPlaylist(db, playlistId)
+                            if (exported == null || exported.setIds.isEmpty()) {
+                                Toast.makeText(context, R.string.playlist_export_empty, Toast.LENGTH_SHORT).show()
+                            } else {
+                                exportText = exported.content
+                                exportName = exported.name
+                                showExportDialog = true
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.playlist_export_failed, e.message ?: ""),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }) {
+                    Icon(
+                        Icons.Default.FileUpload,
+                        contentDescription = stringResource(id = R.string.playlist_cd_export_playlist)
+                    )
+                }
                 IconButton(onClick = {
                     addSelection = emptySet()
                     showAddDialog = true
@@ -700,6 +885,118 @@ fun PlaylistScreen(
                 },
             beatmapSetId = track.beatmapSetId,
             onDismiss = { showPlaylistDialog = false }
+        )
+    }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text(stringResource(id = R.string.playlist_import_dialog_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(id = R.string.playlist_import_dialog_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = importText,
+                        onValueChange = { importText = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp),
+                        minLines = 4,
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        placeholder = { Text(stringResource(id = R.string.playlist_import_placeholder)) }
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { importText = pasteFromClipboard() }) {
+                            Text(stringResource(id = R.string.playlist_paste))
+                        }
+                        TextButton(onClick = {
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "*/*"
+                                putExtra(
+                                    Intent.EXTRA_MIME_TYPES,
+                                    arrayOf("application/json", "text/plain", "text/*")
+                                )
+                            }
+                            importPlaylistLauncher.launch(intent)
+                        }) {
+                            Text(stringResource(id = R.string.playlist_import_from_file))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { performImport(importText) },
+                    enabled = importText.isNotBlank()
+                ) {
+                    Text(stringResource(id = R.string.playlist_import))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportDialog = false }) {
+                    Text(stringResource(id = R.string.playlist_cancel_button))
+                }
+            }
+        )
+    }
+
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text(stringResource(id = R.string.playlist_export_dialog_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(id = R.string.playlist_export_dialog_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = exportText,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp),
+                        minLines = 4,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            copyToClipboard(exportText)
+                            Toast.makeText(context, R.string.playlist_copied, Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text(stringResource(id = R.string.playlist_copy))
+                        }
+                        TextButton(onClick = {
+                            pendingExportText = exportText
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = PlaylistTransferService.EXPORT_MIME_TYPE
+                                putExtra(
+                                    Intent.EXTRA_TITLE,
+                                    PlaylistTransferService.suggestedFileName(exportName)
+                                )
+                            }
+                            exportPlaylistLauncher.launch(intent)
+                        }) {
+                            Text(stringResource(id = R.string.playlist_export_to_file))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showExportDialog = false }) {
+                    Text(stringResource(id = R.string.playlist_close_button))
+                }
+            }
         )
     }
 

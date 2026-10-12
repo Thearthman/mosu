@@ -11,6 +11,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
     fun getPlaylists(): Flow<List<PlaylistEntity>>
 
+    @Query("SELECT * FROM playlists WHERE id = :playlistId LIMIT 1")
+    suspend fun getPlaylistById(playlistId: Long): PlaylistEntity?
+
     @Query("SELECT playlistId, COUNT(*) as count FROM playlist_tracks GROUP BY playlistId")
     fun getPlaylistCounts(): Flow<List<PlaylistTrackCount>>
 
@@ -72,7 +75,19 @@ interface PlaylistDao {
             b.genreId,
             b.isAlbum
         FROM playlist_tracks pt
-        LEFT JOIN beatmaps b ON pt.beatmapSetId = b.beatmapSetId AND pt.difficultyName = b.difficultyName
+        LEFT JOIN beatmaps b ON b.uid = COALESCE(
+            (
+                SELECT x.uid FROM beatmaps x
+                WHERE x.beatmapSetId = pt.beatmapSetId AND x.difficultyName = pt.difficultyName
+                LIMIT 1
+            ),
+            (
+                SELECT y.uid FROM beatmaps y
+                WHERE y.beatmapSetId = pt.beatmapSetId
+                ORDER BY y.uid ASC
+                LIMIT 1
+            )
+        )
         WHERE pt.playlistId = :playlistId
         ORDER BY pt.addedAt ASC
     """
@@ -81,4 +96,7 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM playlist_tracks")
     fun getAllPlaylistTracks(): Flow<List<PlaylistTrackEntity>>
+
+    @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY addedAt ASC")
+    suspend fun getPlaylistTrackRefs(playlistId: Long): List<PlaylistTrackEntity>
 }

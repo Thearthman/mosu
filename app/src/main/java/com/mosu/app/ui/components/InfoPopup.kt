@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.window.DialogProperties
 
 /**
  * Data class for info popup configuration
@@ -88,10 +89,13 @@ fun InfoPopup(
 
     val uriHandler = LocalUriHandler.current
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        onDismissRequest = onDismiss
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth(.8f),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,

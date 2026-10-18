@@ -24,6 +24,7 @@
     <string name="search_filter_recent">最近</string>
     <string name="search_filter_favorite">收藏</string>
     <string name="search_filter_most_played">最多遊玩</string>
+    <string name="search_filter_top_play">最佳表現</string>
     <string name="search_filter_all">全部</string>
     <string name="search_filter_select">選擇</string>
     <string name="search_history_title">最近</string>

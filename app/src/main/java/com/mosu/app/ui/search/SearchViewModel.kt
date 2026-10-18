@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mosu.app.data.api.model.BestScore
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.SearchHistoryEntity
@@ -31,9 +32,11 @@ class SearchViewModel(
     // Search state
     var searchQuery by mutableStateOf("")
     var filterMode by mutableStateOf("played")
+    var scoreModeFilter by mutableStateOf("osu")
     var searchResults by mutableStateOf<List<BeatmapsetCompact>>(emptyList())
     var recentGroupedResults by mutableStateOf<List<RecentItem>>(emptyList())
-    var searchResultsMetadata by mutableStateOf<Map<Long, Pair<Int, Int>>>(emptyMap())
+    var searchResultsMetadata by mutableStateOf<Map<Long, Pair<Int, Int?>>>(emptyMap())
+    var searchScoreResults by mutableStateOf<Map<Long, BestScore>>(emptyMap())
     var recentTimestamps by mutableStateOf<Map<Long, Long>>(emptyMap())
     var selectedGenreId by mutableStateOf<Int?>(null)
     var currentCursor by mutableStateOf<String?>(null)
@@ -87,9 +90,10 @@ class SearchViewModel(
         onlyLeaderboard: Boolean,
         playedMode: String,
         searchAny: Boolean,
-        showPlayHistory: Boolean
+        showPlayHistory: Boolean,
+        scoreMode: String
     ) {
-        val loadKey = "$accessToken|$mode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$selectedGenreId|$showPlayHistory"
+        val loadKey = "$accessToken|$mode|$scoreMode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$selectedGenreId|$showPlayHistory"
         if (lastInitialLoadKey == loadKey) return
         lastInitialLoadKey = loadKey
 
@@ -99,13 +103,14 @@ class SearchViewModel(
                 if (mode == "recent") {
                     // 1. Load local data immediately
                     val (groupedItems, mergeGroupsResult, timestamps) = searchService.loadRecentFiltered(
-                        accessToken, uid, searchQuery, selectedGenreId, forceRefresh = false, showPlayHistory = showPlayHistory
+                        accessToken, uid, searchQuery, selectedGenreId, scoreMode, forceRefresh = false, showPlayHistory = showPlayHistory
                     )
                     mergeGroups = mergeGroupsResult
                     recentGroupedResults = groupedItems
                     searchResults = emptyList()
                     currentCursor = null
                     searchResultsMetadata = emptyMap()
+                    searchScoreResults = emptyMap()
                     recentTimestamps = timestamps
 
                     // 2. Refresh in background
@@ -113,7 +118,7 @@ class SearchViewModel(
                         launch {
                             try {
                                 val (freshItems, freshMergeGroups, freshTimestamps) = searchService.loadRecentFiltered(
-                                    accessToken, uid, searchQuery, selectedGenreId, forceRefresh = true, showPlayHistory = showPlayHistory
+                                    accessToken, uid, searchQuery, selectedGenreId, scoreMode, forceRefresh = true, showPlayHistory = showPlayHistory
                                 )
                                 mergeGroups = freshMergeGroups
                                 recentGroupedResults = freshItems
@@ -133,7 +138,8 @@ class SearchViewModel(
                         filterMode = mode,
                         playedFilterMode = playedMode,
                         userId = uid,
-                        searchAny = searchAny
+                        searchAny = searchAny,
+                        scoreMode = scoreMode
                     )
                     if (cachedResult != null) {
                         val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
@@ -141,19 +147,26 @@ class SearchViewModel(
                         searchResults = deduped
                         currentCursor = cachedResult.cursor
                         searchResultsMetadata = searchService.filterMetadataFor(deduped, cachedResult.metadata)
+                        searchScoreResults = cachedResult.scoreResults
                     }
+
+                    // Top plays are expensive to fetch. Reuse the cached rows until the
+                    // user explicitly pulls to refresh.
+                    if (cachedResult != null && mode == "top_play") return@launch
 
                     // 2. Refresh in background
                     launch {
                         try {
                             val result = repository.getPlayedBeatmaps(
-                                accessToken, selectedGenreId, null, null, mode, playedMode, uid, isSupporter, searchAny
+                                accessToken, selectedGenreId, null, null, mode, playedMode, uid, isSupporter, searchAny,
+                                scoreMode = scoreMode
                             )
                             val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
                             mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                             searchResults = deduped
                             currentCursor = result.cursor
                             searchResultsMetadata = searchService.filterMetadataFor(deduped, result.metadata)
+                            searchScoreResults = result.scoreResults
                         } catch (e: Exception) {
                             if (e !is CancellationException) {
                                 Log.e("SearchViewModel", "Background refresh failed", e)
@@ -177,7 +190,7 @@ class SearchViewModel(
             infoLoading = true
             infoError = null
             infoSets = emptyList()
-            val result = searchService.loadInfoPopup(target.title, target.artist)
+            val result = searchService.loadInfoPopup(target.title, target.artist, scoreModeFilter)
             result.onSuccess { sets -> infoSets = sets }
             result.onFailure { e -> infoError = e.message ?: errorFallback }
             infoLoading = false
@@ -188,6 +201,7 @@ class SearchViewModel(
         searchResults = emptyList()
         recentGroupedResults = emptyList()
         searchResultsMetadata = emptyMap()
+        searchScoreResults = emptyMap()
         recentTimestamps = emptyMap()
         lastInitialLoadKey = null
     }

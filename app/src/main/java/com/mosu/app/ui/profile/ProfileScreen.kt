@@ -312,7 +312,7 @@ fun ProfileScreen(
                         }
                     )
             ) {
-                Box {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -345,21 +345,12 @@ fun ProfileScreen(
                             )
                         }
                     }
-                    Box(
+                    AccountHelpIcon(
+                        onClick = { showActionHelpDialog = true },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 4.dp, end = 4.dp)
-                            .size(24.dp)
-                            .clickable { showActionHelpDialog = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = stringResource(R.string.profile_account_help_content_desc),
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    )
                 }
             }
         } else {
@@ -382,7 +373,7 @@ fun ProfileScreen(
                         }
                     )
             ) {
-                Box {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = stringResource(R.string.profile_login_title),
@@ -399,21 +390,12 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.secondary
                         )
                     }
-                    Box(
+                    AccountHelpIcon(
+                        onClick = { showActionHelpDialog = true },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 4.dp, end = 4.dp)
-                            .size(24.dp)
-                            .clickable { showActionHelpDialog = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = stringResource(R.string.profile_account_help_content_desc),
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -1029,6 +1011,26 @@ fun ProfileScreen(
         )
     }
 
+}
+
+@Composable
+private fun AccountHelpIcon(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Info,
+            contentDescription = stringResource(R.string.profile_account_help_content_desc),
+            tint = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }
 
 @Composable

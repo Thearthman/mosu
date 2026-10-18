@@ -27,7 +27,8 @@ data class BeatmapSetData(
     val ranking: Int? = null,      // e.g. #1
     val playCount: Int? = null,    // e.g. 123
     val lastPlayed: String? = null, // e.g. "2h ago"
-    val genreId: Int? = null
+    val genreId: Int? = null,
+    val score: BeatmapSetScoreData? = null
 ) {
     val trackCount: Int
         get() = tracks.size
@@ -43,6 +44,18 @@ data class BeatmapSetData(
         beatmaps = emptyList()
     )
 }
+
+/**
+ * Score-specific presentation data for a beatmapset row.
+ */
+data class BeatmapSetScoreData(
+    val grade: String? = null,
+    val mode: String? = null,
+    val difficultyName: String? = null,
+    val pp: Float? = null,
+    val starRating: Float? = null,
+    val lengthSeconds: Int? = null
+)
 
 /**
  * Data model for individual tracks within a set

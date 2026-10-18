@@ -19,7 +19,21 @@ data class OsuUserCompact(
 data class BeatmapPlaycount(
     @SerializedName("beatmap_id") val beatmapId: Long,
     @SerializedName("count") val count: Int,
+    @SerializedName("beatmap") val beatmap: RecentBeatmap? = null,
     @SerializedName("beatmapset") val beatmapset: BeatmapsetCompact
+)
+
+data class BestScore(
+    @SerializedName("id") val scoreId: Long? = null,
+    @SerializedName("rank") val rank: String? = null,
+    @SerializedName("pp") val pp: Float? = null,
+    @SerializedName("accuracy") val accuracy: Float? = null,
+    @SerializedName("max_combo") val maxCombo: Int? = null,
+    @SerializedName("passed") val passed: Boolean? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("mode") val mode: String? = null,
+    @SerializedName("beatmap") val beatmap: RecentBeatmap? = null,
+    @SerializedName("beatmapset") val beatmapset: BeatmapsetCompact? = null
 )
 
 data class RecentScore(

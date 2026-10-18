@@ -13,7 +13,11 @@ import java.util.LinkedHashMap
 
 sealed class RecentItem {
     data class Header(val timestamp: String) : RecentItem()
-    data class Song(val beatmapset: BeatmapsetCompact, val playedAt: Long) : RecentItem()
+    data class Song(
+        val beatmapset: BeatmapsetCompact,
+        val playedAt: Long,
+        val play: RecentPlayEntity
+    ) : RecentItem()
 }
 
 class BeatmapSearchService(
@@ -104,7 +108,10 @@ class BeatmapSearchService(
         return map.values.toList()
     }
 
-    fun filterMetadataFor(list: List<BeatmapsetCompact>, metadata: Map<Long, Pair<Int, Int>>): Map<Long, Pair<Int, Int>> {
+    fun filterMetadataFor(
+        list: List<BeatmapsetCompact>,
+        metadata: Map<Long, Pair<Int, Int?>>
+    ): Map<Long, Pair<Int, Int?>> {
         if (metadata.isEmpty()) return emptyMap()
         val allowedIds = list.map { it.id }.toSet()
         return metadata.filterKeys { it in allowedIds }
@@ -144,6 +151,7 @@ class BeatmapSearchService(
         userId: String?,
         searchQuery: String,
         selectedGenreId: Int?,
+        scoreMode: String = "all",
         forceRefresh: Boolean = false,
         showPlayHistory: Boolean = false
     ): Triple<List<RecentItem>, Map<String, Set<Long>>, Map<Long, Long>> {
@@ -159,7 +167,8 @@ class BeatmapSearchService(
                 beatmapset.artist.contains(searchQuery, ignoreCase = true) ||
                 beatmapset.creator.contains(searchQuery, ignoreCase = true)
             val matchesGenre = selectedGenreId == null || beatmapset.genreId == selectedGenreId
-            matchesSearch && matchesGenre
+            val matchesMode = play.matchesScoreMode(scoreMode)
+            matchesSearch && matchesGenre && matchesMode
         }
 
         // Group the filtered plays
@@ -172,10 +181,11 @@ class BeatmapSearchService(
 
     suspend fun loadInfoPopup(
         title: String,
-        artist: String
+        artist: String,
+        scoreMode: String = "all"
     ): Result<List<com.mosu.app.data.api.model.BeatmapsetCompact>> = withContext(Dispatchers.IO) {
         try {
-            val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(title, artist)
+            val matchingBeatmapsets = repository.searchBeatmapsetsByTitleArtist(title, artist, scoreMode)
             Result.success(matchingBeatmapsets)
         } catch (e: Exception) {
             Result.failure(e)
@@ -212,7 +222,7 @@ class BeatmapSearchService(
         for ((timeLabel, plays) in grouped) {
             result.add(RecentItem.Header(timeLabel))
             plays.sortedByDescending { it.playedAt }.forEach { play ->
-                result.add(RecentItem.Song(play.toBeatmapset(), play.playedAt))
+                result.add(RecentItem.Song(play.toBeatmapset(), play.playedAt, play))
             }
         }
 
@@ -221,5 +231,14 @@ class BeatmapSearchService(
 
     private fun getTimePeriodLabel(timestamp: Long): String {
         return formatRecentPlayTimestamp(timestamp, context)
+    }
+}
+
+private fun RecentPlayEntity.matchesScoreMode(scoreMode: String): Boolean {
+    if (scoreMode == "all") return true
+    val normalizedMode = mode?.lowercase() ?: return false
+    return when (scoreMode) {
+        "fruits" -> normalizedMode == "fruits" || normalizedMode == "catch"
+        else -> normalizedMode == scoreMode.lowercase()
     }
 }

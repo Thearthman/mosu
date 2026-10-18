@@ -37,15 +37,14 @@
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
-- [ ] [v1.1] Add Top Play(top 200) filter mode.
+- [x] [v1.1] Add Top Play(top 200) filter mode.
 
 #### Library
 - [ ] [v1.3] Add an artist view toggle. In artist view, group songs by normalized artist names, removing special characters and spaces to reduce typo-related misses. Clicking an artist should open a playlist-style song list for that artist.
 - [ ] Make the library genre filter apply to loop/random playlists once current playing playlist logic is in place.
 
 #### Score
-- [ ] [v1.1] Add Top Play(top 200) with detailed stats (different from the search/download focused view in search top play filter mode)
-- [ ] [v1.1] Add long press 
+- [ ] [v1.2] Add Top Play(top 200) with detailed stats (different from the search/download focused view in search top play filter mode)
 
 ## Completed
 
@@ -109,6 +108,7 @@
 - [x] Made score page panels collapse/expand when their panel titles are clicked.
 - [x] Added an average star-number panel for beatmaps passed in different grades (e.g. "A: 5.8 stars, B: 6.3 stars").
 - [x] Added a recently passed beatmaps panel including pp, star rate, and length.
+- [x] [v1.1] Added long-press actions to Recent Passed and unified score rows with `BeatmapSetItem`.
 - [x] Added an achievements panel: longest map played, fastest (BPM) map played, lowest AR played, highest CS played, and PP record with a "last PP record held x days" info text.
 - [x] Refactored the recent score database with a non-destructive migration so it suffices the panels' data requirements.
 

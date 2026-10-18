@@ -3,8 +3,6 @@ package com.mosu.app.ui.score
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,10 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -54,8 +51,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -63,9 +58,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.mosu.app.R
 import com.mosu.app.data.SettingsManager
+import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.repository.OsuRepository
@@ -73,7 +68,16 @@ import com.mosu.app.domain.model.createGradientStops
 import com.mosu.app.domain.model.formatPlayedAtTimestamp
 import com.mosu.app.domain.model.getGradientColorsForRange
 import com.mosu.app.domain.model.getStarRatingColor
-import com.mosu.app.domain.model.modeLabel
+import com.mosu.app.domain.search.BeatmapSearchService
+import com.mosu.app.ui.components.BeatmapSetActions
+import com.mosu.app.ui.components.BeatmapSetItem
+import com.mosu.app.ui.components.GradeBadge
+import com.mosu.app.ui.components.InfoPopup
+import com.mosu.app.ui.components.InfoPopupConfig
+import com.mosu.app.ui.components.ScoreModeFilterIcons
+import com.mosu.app.ui.components.displayGrade
+import com.mosu.app.ui.components.formatLength
+import com.mosu.app.ui.components.toBeatmapSetData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -81,12 +85,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 
 private const val SCORE_SCREEN_TAG = "ScoreScreen"
-
-/** Diameter of a mode-filter icon (and the height of the score-count text it sits next to). */
-private val ScoreModeIconSize = 36.dp
 
 @Composable
 fun ScoreScreen(
@@ -103,6 +103,22 @@ fun ScoreScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scoreModeFilter by settingsManager.scoreModeFilter.collectAsState(initial = "osu")
+    val searchService = remember(repository, db, context) {
+        BeatmapSearchService(repository, db, context)
+    }
+    var infoDialogVisible by remember { mutableStateOf(false) }
+    var infoTarget by remember { mutableStateOf<BeatmapsetCompact?>(null) }
+    var infoSets by remember { mutableStateOf<List<BeatmapsetCompact>>(emptyList()) }
+    var infoLoading by remember { mutableStateOf(false) }
+    var infoError by remember { mutableStateOf<String?>(null) }
+    val scoreActions = remember {
+        BeatmapSetActions(
+            onLongClick = { set ->
+                infoTarget = set.toCompact()
+                infoDialogVisible = true
+            }
+        )
+    }
 
     // Universal entry point: every consumer of score data reads from this filtered
     // list, so the mode filter is applied before any panel-level filtering/calculation.
@@ -151,6 +167,19 @@ fun ScoreScreen(
         }
     }
 
+    LaunchedEffect(infoTarget, infoDialogVisible, scoreModeFilter) {
+        val target = infoTarget
+        if (!infoDialogVisible || target == null) return@LaunchedEffect
+
+        infoLoading = true
+        infoError = null
+        infoSets = emptyList()
+        searchService.loadInfoPopup(target.title, target.artist, scoreModeFilter)
+            .onSuccess { infoSets = it }
+            .onFailure { infoError = it.message ?: context.getString(R.string.search_info_load_error) }
+        infoLoading = false
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -189,9 +218,7 @@ fun ScoreScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(ScoreModeIconSize),
+                        modifier = Modifier.weight(1f),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
@@ -230,10 +257,23 @@ fun ScoreScreen(
             }
         } else {
             item { AverageStarsPanel(filteredScores) }
-            item { RecentPassedPanel(filteredScores) }
+            item { RecentPassedPanel(filteredScores, scoreActions) }
             item { AchievementsPanel(filteredScores) }
         }
     }
+
+    InfoPopup(
+        visible = infoDialogVisible,
+        onDismiss = { infoDialogVisible = false },
+        target = infoTarget,
+        sets = infoSets,
+        loading = infoLoading,
+        error = infoError,
+        config = InfoPopupConfig(
+            infoCoverEnabled = false,
+            showConfirmButton = false
+        )
+    )
 }
 
 @Composable
@@ -251,72 +291,6 @@ private fun EmptyScoreState(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-private data class ScoreModeOption(
-    val value: String,
-    val labelRes: Int,
-    val iconRes: Int? = null,
-    val imageVector: ImageVector? = null
-)
-
-private val scoreModeOptions = listOf(
-    ScoreModeOption("osu", R.string.score_mode_osu, iconRes = R.drawable.std_icon),
-    ScoreModeOption("taiko", R.string.score_mode_taiko, iconRes = R.drawable.taiko_icon),
-    ScoreModeOption("fruits", R.string.score_mode_catch, iconRes = R.drawable.cth_icon),
-    ScoreModeOption("mania", R.string.score_mode_mania, iconRes = R.drawable.mania_icon),
-    ScoreModeOption("all", R.string.score_mode_all, imageVector = Icons.Default.Apps)
-)
-
-@Composable
-private fun ScoreModeFilterIcons(
-    selectedMode: String,
-    onModeSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        scoreModeOptions.forEach { option ->
-            val selected = option.value == selectedMode
-            val tint = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            Box(
-                modifier = Modifier
-                    .size(ScoreModeIconSize)
-                    .clip(CircleShape)
-                    .background(
-                        if (selected) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                        } else {
-                            Color.Transparent
-                        }
-                    )
-                    .clickable { onModeSelected(option.value) },
-                contentAlignment = Alignment.Center
-            ) {
-                when {
-                    option.iconRes != null -> Icon(
-                        painter = painterResource(option.iconRes),
-                        contentDescription = stringResource(option.labelRes),
-                        tint = tint,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    option.imageVector != null -> Icon(
-                        imageVector = option.imageVector,
-                        contentDescription = stringResource(option.labelRes),
-                        tint = tint,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -405,7 +379,10 @@ private fun StarDifficultyProgressBar(
 }
 
 @Composable
-private fun RecentPassedPanel(scores: List<RecentPlayEntity>) {
+private fun RecentPassedPanel(
+    scores: List<RecentPlayEntity>,
+    actions: BeatmapSetActions
+) {
     val recentPassed = remember(scores) {
         scores.passedScores()
             .sortedByDescending { it.playedAt }
@@ -416,9 +393,12 @@ private fun RecentPassedPanel(scores: List<RecentPlayEntity>) {
         if (recentPassed.isEmpty()) {
             MissingMetricsText(stringResource(R.string.score_recent_passed_empty))
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column() {
                 recentPassed.forEach { score ->
-                    RecentScoreRow(score)
+                    BeatmapSetItem(
+                        set = score.toBeatmapSetData(),
+                        actions = actions
+                    )
                 }
             }
         }
@@ -440,105 +420,6 @@ private fun AchievementsPanel(scores: List<RecentPlayEntity>) {
                     AchievementRow(achievement)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun RecentScoreRow(score: RecentPlayEntity) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = score.coverUrl,
-            contentDescription = score.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(6.dp))
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                score.rank?.let { GradeBadge(it) }
-                if (score.mode != null) {
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        modeLabel(score.mode),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Text(
-                score.title,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                listOfNotNull(score.artist, score.difficultyName).joinToString(" - "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                score.pp?.let { stringResource(R.string.score_pp_value, it) }
-                    ?: stringResource(R.string.score_pp_none),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                StarRatingBadge(score.starRating)
-                Text(
-                    stringResource(R.string.score_length_prefix, formatLength(score.lengthSeconds)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StarRatingBadge(stars: Float?) {
-    val color = stars?.let { getStarRatingColor(it) } ?: MaterialTheme.colorScheme.surfaceVariant
-    val contentColor = if (stars == null) {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    } else if (color.luminance() > 0.55f) {
-        Color.Black
-    } else {
-        Color.White
-    }
-
-    Surface(
-        shape = RoundedCornerShape(5.dp),
-        color = color,
-        contentColor = contentColor
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = stars?.let { "%.1f".format(Locale.US, it) } ?: "--",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Icon(
-                imageVector = Icons.Default.Star,
-                contentDescription = stringResource(R.string.score_cd_star_rating),
-                modifier = Modifier.size(10.dp)
-            )
         }
     }
 }
@@ -623,23 +504,6 @@ private fun ScorePanel(
                 content()
             }
         }
-    }
-}
-
-@Composable
-private fun GradeBadge(grade: String) {
-    val color = gradeColor(grade)
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = color,
-        contentColor = if (color.luminance() > 0.55f) Color.Black else Color.White
-    ) {
-        Text(
-            text = grade.uppercase(Locale.US),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 
@@ -752,31 +616,6 @@ private fun gradeSortIndex(grade: String): Int {
     }
 }
 
-private fun gradeColor(grade: String): Color {
-    return when (displayGrade(grade)) {
-        "SS+", "SS" -> Color(0xFFFFD54F)
-        "S+", "S" -> Color(0xFFFFF176)
-        "A" -> Color(0xFF66BB6A)
-        "B" -> Color(0xFF42A5F5)
-        "C" -> Color(0xFFAB47BC)
-        "D" -> Color(0xFFEF5350)
-        else -> Color(0xFF90A4AE)
-    }
-}
-
-private fun displayGrade(rank: String): String {
-    return when (rank.uppercase(Locale.US)) {
-        "XH" -> "SS+"
-        "X" -> "SS"
-        "SH" -> "S+"
-        else -> rank.uppercase(Locale.US)
-    }
-}
-
-private fun Color.luminance(): Float {
-    return (0.299f * red + 0.587f * green + 0.114f * blue)
-}
-
 private fun Color.brighten(amount: Float): Color {
     val clamped = amount.coerceIn(0f, 1f)
     return Color(
@@ -785,13 +624,6 @@ private fun Color.brighten(amount: Float): Color {
         blue = blue + (1f - blue) * clamped,
         alpha = alpha
     )
-}
-
-private fun formatLength(seconds: Int?): String {
-    if (seconds == null || seconds <= 0) return "--:--"
-    val minutes = seconds / 60
-    val remaining = seconds % 60
-    return "%d:%02d".format(Locale.US, minutes, remaining)
 }
 
 private fun daysSince(timestamp: Long): Long {

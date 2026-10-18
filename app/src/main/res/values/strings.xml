@@ -24,6 +24,7 @@
     <string name="search_filter_recent">Recent</string>
     <string name="search_filter_favorite">Favorite</string>
     <string name="search_filter_most_played">Most Played</string>
+    <string name="search_filter_top_play">Top Play</string>
     <string name="search_filter_all">All</string>
     <string name="search_filter_select">Select</string>
     <string name="search_history_title">Recent</string>

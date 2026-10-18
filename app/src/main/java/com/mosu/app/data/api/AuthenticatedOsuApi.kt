@@ -2,6 +2,7 @@ package com.mosu.app.data.api
 
 import com.mosu.app.data.TokenManager
 import com.mosu.app.data.api.model.BeatmapPlaycount
+import com.mosu.app.data.api.model.BestScore
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.api.model.SearchResponse
 import kotlinx.coroutines.flow.first
@@ -38,6 +39,18 @@ class AuthenticatedOsuApi(
         }
     }
 
+    suspend fun getUserBestScores(
+        userId: String,
+        mode: String,
+        limit: Int = 100,
+        offset: Int = 0,
+        legacyOnly: Int = 0
+    ): List<BestScore> {
+        return makeAuthenticatedCall { authHeader ->
+            osuApi.getUserBestScores(authHeader, userId, mode, limit, offset, legacyOnly)
+        }
+    }
+
     suspend fun getUserFavoriteBeatmapsets(userId: String, limit: Int = 50, offset: Int = 0): List<com.mosu.app.data.api.model.BeatmapsetCompact> {
         return makeAuthenticatedCall { authHeader ->
             osuApi.getUserFavoriteBeatmapsets(authHeader, userId, limit, offset)
@@ -48,11 +61,12 @@ class AuthenticatedOsuApi(
         played: String? = null,
         query: String? = null,
         genre: Int? = null,
+        mode: Int? = null,
         status: String? = null,
         cursorString: String? = null
     ): SearchResponse {
         return makeAuthenticatedCall { authHeader ->
-            osuApi.searchBeatmapsets(authHeader, played, query, genre, status, cursorString)
+            osuApi.searchBeatmapsets(authHeader, played, query, genre, mode, status, cursorString)
         }
     }
 

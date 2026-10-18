@@ -1,6 +1,7 @@
 package com.mosu.app.data.api
 
 import com.mosu.app.data.api.model.BeatmapPlaycount
+import com.mosu.app.data.api.model.BestScore
 import com.mosu.app.data.api.model.OsuTokenResponse
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.api.model.SearchResponse
@@ -60,6 +61,15 @@ interface OsuApi {
         // Curosr for scrolling behavior should be implemented in the fetching method in future
     ): List<com.mosu.app.data.api.model.RecentScore>
 
+    @GET("api/v2/users/{user_id}/scores/best")
+    suspend fun getUserBestScores(
+        @Header("Authorization") authHeader: String,
+        @Path("user_id") userId: String,
+        @Query("mode") mode: String,
+        @Query("limit") limit: Int = 100,
+        @Query("offset") offset: Int = 0,
+        @Query("legacy_only") legacyOnly: Int = 0
+    ): List<BestScore>
 
     @GET("api/v2/users/{user_id}/beatmapsets/favourite")
     suspend fun getUserFavoriteBeatmapsets(
@@ -75,6 +85,7 @@ interface OsuApi {
         @Query("played") played: String? = null,
         @Query("q") query: String? = null,
         @Query("g") genre: Int? = null,
+        @Query("m") mode: Int? = null,
         @Query("s") status: String? = null,
         @Query("cursor_string") cursorString: String? = null
     ): SearchResponse
@@ -85,4 +96,3 @@ interface OsuApi {
         @Path("beatmapset_id") beatmapsetId: Long
     ): com.mosu.app.data.api.model.BeatmapsetDetail
 }
-

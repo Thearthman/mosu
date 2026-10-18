@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken
 import com.mosu.app.data.api.RetrofitClient
 import com.mosu.app.data.api.model.BeatmapPlaycount
 import com.mosu.app.data.api.model.BeatmapsetCompact
+import com.mosu.app.data.api.model.BestScore
 import com.mosu.app.data.api.model.OsuTokenResponse
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.api.model.RecentScore
@@ -40,15 +41,21 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         return RetrofitClient.api.getBeatmapsetDetail("", beatmapsetId)
     }
 
-    suspend fun searchBeatmapsetsByTitleArtist(title: String, artist: String): List<BeatmapsetCompact> {
+    suspend fun searchBeatmapsetsByTitleArtist(
+        title: String,
+        artist: String,
+        scoreMode: String = "all"
+    ): List<BeatmapsetCompact> {
         // Search using title and artist as query
         val query = "\"$title\" \"$artist\""
-        
-            val response = RetrofitClient.api.searchBeatmapsets(
-                authHeader = "", // No auth needed for public search
-                query = query,
-                status = "any" // Include ranked, loved, qualified, etc.
-            )
+        val normalizedMode = scoreMode.normalizedScoreMode()
+
+        val response = RetrofitClient.api.searchBeatmapsets(
+            authHeader = "", // No auth needed for public search
+            query = query,
+            mode = normalizedMode.toSearchModeQuery(),
+            status = "any" // Include ranked, loved, qualified, etc.
+        )
         val beatmapsets = response.beatmapsets
 
         // Filter results to ensure exact title/artist matches (case-insensitive, trimmed)
@@ -57,7 +64,8 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
 
         return beatmapsets.filter { beatmapset ->
             beatmapset.title.trim().lowercase() == targetTitle &&
-            beatmapset.artist.trim().lowercase() == targetArtist
+            beatmapset.artist.trim().lowercase() == targetArtist &&
+            beatmapset.hasMode(normalizedMode)
         }
     }
 
@@ -134,7 +142,8 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
     data class PlayedBeatmapsResult(
         val beatmaps: List<BeatmapsetCompact>,
         val cursor: String?,
-        val metadata: Map<Long, Pair<Int, Int>> = emptyMap() // beatmapId -> (rank, playcount) for most_played
+        val metadata: Map<Long, Pair<Int, Int?>> = emptyMap(), // beatmapsetId -> (rank, optional playcount)
+        val scoreResults: Map<Long, BestScore> = emptyMap() // beatmapsetId -> best score details
     )
     
     suspend fun getCachedPlayedBeatmaps(
@@ -143,16 +152,38 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         filterMode: String = "played",
         playedFilterMode: String = "url",
         userId: String? = null,
-        searchAny: Boolean = false
+        searchAny: Boolean = false,
+        scoreMode: String = "all"
     ): PlayedBeatmapsResult? {
         val safeQuery = sanitizeQuery(searchQuery)
+        val normalizedMode = scoreMode.normalizedScoreMode()
+
+        if (filterMode == "top_play") {
+            if (safeQuery != null || userId == null) return null
+            val cached = searchCacheDao?.getCachedResult(
+                topPlayCacheKey(userId, genreId, normalizedMode)
+            ) ?: return null
+            return runCatching {
+                val payload = gson.fromJson(cached.resultsJson, TopPlayCachePayload::class.java)
+                PlayedBeatmapsResult(
+                    beatmaps = payload.entries.map { it.beatmapset },
+                    cursor = null,
+                    metadata = payload.entries.associate {
+                        it.beatmapset.id to Pair(it.rank, null)
+                    },
+                    scoreResults = payload.entries.associate {
+                        it.beatmapset.id to it.score
+                    }
+                )
+            }.getOrNull()
+        }
 
         // Generate appropriate cache key based on filter mode
         val cacheKey = when (filterMode) {
-            "favorite" -> "favorite_user_${userId}_offset_0"
-            "most_played" -> "most_played_user_${userId}"
-            "played" -> "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_searchAny_${searchAny}_initial"
-            else -> "search_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_searchAny_${searchAny}_initial"
+            "favorite" -> "favorite_user_${userId}_ruleset_${normalizedMode}_offset_0"
+            "most_played" -> "most_played_user_${userId}_ruleset_${normalizedMode}"
+            "played" -> "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_searchAny_${searchAny}_ruleset_${normalizedMode}_initial"
+            else -> "search_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_searchAny_${searchAny}_ruleset_${normalizedMode}_initial"
         }
 
         // Check cache for initial load conditions (no cursor/query for most modes)
@@ -177,15 +208,42 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         userId: String? = null,
         isSupporter: Boolean = true, // Assume supporter unless specified
         searchAny: Boolean = false,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        scoreMode: String = "all"
     ): PlayedBeatmapsResult {
         val safeQuery = sanitizeQuery(searchQuery)
+        val normalizedMode = scoreMode.normalizedScoreMode()
+
+        if (filterMode == "top_play") {
+            if (cursorString != null || userId == null) {
+                return PlayedBeatmapsResult(emptyList(), null)
+            }
+            if (!forceRefresh) {
+                getCachedPlayedBeatmaps(
+                    genreId = genreId,
+                    searchQuery = safeQuery,
+                    filterMode = filterMode,
+                    playedFilterMode = playedFilterMode,
+                    userId = userId,
+                    searchAny = searchAny,
+                    scoreMode = normalizedMode
+                )?.let { return it }
+            }
+            return getTopPlayBeatmaps(
+                accessToken = accessToken,
+                userId = userId,
+                genreId = genreId,
+                safeQuery = safeQuery,
+                scoreMode = normalizedMode
+            )
+        }
 
         // Explicit most_played view
         if (filterMode == "most_played" && userId != null && cursorString == null) {
             val mostPlayedData = RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100)
+            val modeFilteredData = filterMostPlayedByMode(mostPlayedData, normalizedMode)
 
-            val groupedData = mostPlayedData.groupBy { it.beatmapset.title }
+            val groupedData = modeFilteredData.groupBy { it.beatmapset.title }
             val deduplicatedData = groupedData.map { (_, items) ->
                 val firstItem = items.first()
                 val totalPlaycount = items.sumOf { it.count }
@@ -197,7 +255,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             }
 
             val sortedData = deduplicatedData.sortedByDescending { it.count }
-            val metadata = mutableMapOf<Long, Pair<Int, Int>>()
+            val metadata = mutableMapOf<Long, Pair<Int, Int?>>()
             sortedData.forEachIndexed { index, item ->
                 metadata[item.beatmapset.id] = Pair(index + 1, item.count)
             }
@@ -230,9 +288,10 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         if (filterMode == "played" && effectivePlayedMode == "most_played" && userId != null && cursorString == null) {
             // Use most played data - note: this doesn't support pagination/cursor
             val mostPlayedData = RetrofitClient.api.getUserMostPlayed("Bearer $accessToken", userId, limit = 100) // Get top 100
+            val modeFilteredData = filterMostPlayedByMode(mostPlayedData, normalizedMode)
             
             // Group by song title (to combine same songs from different mappers + different difficulties)
-            val groupedData = mostPlayedData.groupBy { it.beatmapset.title }
+            val groupedData = modeFilteredData.groupBy { it.beatmapset.title }
             val deduplicatedData = groupedData.map { (_, items) ->
                 val firstItem = items.first() // Keep first (highest individual rank) for beatmapset data
                 val totalPlaycount = items.sumOf { it.count } // Sum all playcounts across all difficulties and mappers
@@ -247,7 +306,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             val sortedData = deduplicatedData.sortedByDescending { it.count }
             
             // Build metadata map with ranking and summed playcount
-            val metadata = mutableMapOf<Long, Pair<Int, Int>>()
+            val metadata = mutableMapOf<Long, Pair<Int, Int?>>()
             sortedData.forEachIndexed { index, item ->
                 metadata[item.beatmapset.id] = Pair(index + 1, item.count) // rank (1-based), summed playcount
             }
@@ -274,7 +333,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         
         // Otherwise use URL-based filtering (original logic)
         // Generate cache key (only cache first page without search query)
-        val cacheKey = "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_searchAny_${searchAny}_initial"
+        val cacheKey = "played_genre_${genreId ?: "all"}_query_${safeQuery ?: "none"}_mode_${filterMode}_playedMode_${playedFilterMode}_searchAny_${searchAny}_ruleset_${normalizedMode}_initial"
         
         // Only use cache for initial load (no cursor) without search query
         if (cursorString == null && safeQuery.isNullOrEmpty() && !forceRefresh) {
@@ -293,6 +352,7 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             authHeader = "Bearer $accessToken",
             played = if (filterMode == "played") "played" else null,
             genre = genreId,
+            mode = normalizedMode.toSearchModeQuery(),
             cursorString = cursorString,
             query = safeQuery,
             status = when {
@@ -302,36 +362,135 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
             }
         )
         
-        // Save to cache only for initial load without search
+        val responseBeatmapsets = response.beatmapsets.filter { it.hasMode(normalizedMode) }
+
+        // Populate the cache on first load and replace it only on explicit refresh.
         if (cursorString == null && safeQuery.isNullOrEmpty()) {
             searchCacheDao?.let {
                 val existing = it.getCachedResult(cacheKey)
-                val existingList = existing?.resultsJson?.let { json ->
-                    val type = object : TypeToken<List<BeatmapsetCompact>>() {}.type
-                    runCatching { gson.fromJson<List<BeatmapsetCompact>>(json, type) }.getOrDefault(emptyList())
-                } ?: emptyList()
-                val toStore = if (filterMode == "played") {
-                    // Merge while keeping existing order, appending only new ids
-                    val seenIds = existingList.map { bm -> bm.id }.toMutableSet()
-                    val merged = existingList.toMutableList()
-                    response.beatmapsets.forEach { bm ->
-                        if (seenIds.add(bm.id)) merged.add(bm)
+                if (forceRefresh || existing == null) {
+                    val existingList = existing?.resultsJson?.let { json ->
+                        val type = object : TypeToken<List<BeatmapsetCompact>>() {}.type
+                        runCatching { gson.fromJson<List<BeatmapsetCompact>>(json, type) }.getOrDefault(emptyList())
+                    } ?: emptyList()
+                    val toStore = if (filterMode == "played") {
+                        // Merge while keeping existing order, appending only new ids
+                        val seenIds = existingList.map { bm -> bm.id }.toMutableSet()
+                        val merged = existingList.toMutableList()
+                        responseBeatmapsets.forEach { bm ->
+                            if (seenIds.add(bm.id)) merged.add(bm)
+                        }
+                        merged
+                    } else {
+                        // Preserve API order for other modes (e.g., favorite)
+                        responseBeatmapsets
                     }
-                    merged
-                } else {
-                    // Preserve API order for other modes (e.g., favorite)
-                    response.beatmapsets
-                }
 
-                it.insertCache(SearchCacheEntity(
-                    queryKey = cacheKey,
-                    resultsJson = gson.toJson(toStore),
-                    cursorString = response.cursorString // Cache the cursor too!
-                ))
+                    it.insertCache(SearchCacheEntity(
+                        queryKey = cacheKey,
+                        resultsJson = gson.toJson(toStore),
+                        cursorString = response.cursorString // Cache the cursor too!
+                    ))
+                }
             }
         }
         
-        return PlayedBeatmapsResult(response.beatmapsets, response.cursorString)
+        return PlayedBeatmapsResult(responseBeatmapsets, response.cursorString)
+    }
+
+    private suspend fun getTopPlayBeatmaps(
+        accessToken: String,
+        userId: String,
+        genreId: Int?,
+        safeQuery: String?,
+        scoreMode: String
+    ): PlayedBeatmapsResult {
+        val rulesets = if (scoreMode == "all") scoreModes else listOf(scoreMode)
+        val scores = mutableListOf<BestScore>()
+
+        rulesets.forEach { ruleset ->
+            var offset = 0
+            while (offset < TOP_PLAY_LIMIT) {
+                val page = RetrofitClient.api.getUserBestScores(
+                    authHeader = "Bearer $accessToken",
+                    userId = userId,
+                    mode = ruleset,
+                    limit = TOP_PLAY_PAGE_SIZE,
+                    offset = offset,
+                    legacyOnly = 0
+                )
+                scores.addAll(page)
+                if (page.size < TOP_PLAY_PAGE_SIZE) break
+                offset += TOP_PLAY_PAGE_SIZE
+            }
+        }
+
+        val bestScoreBySet = LinkedHashMap<Long, BestScore>()
+        scores.forEach { score ->
+            val beatmapset = score.beatmapset ?: return@forEach
+            val pp = score.pp ?: return@forEach
+            val existing = bestScoreBySet[beatmapset.id]
+            if (existing == null || pp > (existing.pp ?: Float.NEGATIVE_INFINITY)) {
+                bestScoreBySet[beatmapset.id] = score
+            }
+        }
+
+        val rankedScores = bestScoreBySet.values
+            .sortedByDescending { it.pp ?: Float.NEGATIVE_INFINITY }
+            .take(TOP_PLAY_LIMIT)
+
+        val metadata = rankedScores.mapIndexed { index, score ->
+            val beatmapset = score.beatmapset ?: error("Ranked top play missing beatmapset")
+            beatmapset.id to Pair(index + 1, null)
+        }.toMap()
+
+        val filteredBeatmapsets = rankedScores
+            .mapNotNull { it.beatmapset }
+            .filter { beatmapset ->
+                val genreMatches = genreId == null || beatmapset.genreId == genreId
+                val queryMatches = safeQuery == null ||
+                    beatmapset.title.contains(safeQuery, ignoreCase = true) ||
+                    beatmapset.artist.contains(safeQuery, ignoreCase = true)
+                genreMatches && queryMatches
+            }
+
+        val filteredIds = filteredBeatmapsets.map { it.id }.toSet()
+        val scoreResults = rankedScores
+            .mapNotNull { score -> score.beatmapset?.let { it.id to score } }
+            .filter { (setId, _) -> setId in filteredIds }
+            .toMap()
+
+        if (safeQuery == null) {
+            val cacheEntries = filteredBeatmapsets.mapNotNull { beatmapset ->
+                val score = scoreResults[beatmapset.id] ?: return@mapNotNull null
+                val rank = metadata[beatmapset.id]?.first ?: return@mapNotNull null
+                TopPlayCacheEntry(
+                    beatmapset = beatmapset,
+                    score = score,
+                    rank = rank
+                )
+            }
+            searchCacheDao?.insertCache(
+                SearchCacheEntity(
+                    queryKey = topPlayCacheKey(userId, genreId, scoreMode),
+                    resultsJson = gson.toJson(TopPlayCachePayload(cacheEntries))
+                )
+            )
+        }
+
+        return PlayedBeatmapsResult(filteredBeatmapsets, null, metadata, scoreResults)
+    }
+
+    private fun filterMostPlayedByMode(
+        playcounts: List<BeatmapPlaycount>,
+        scoreMode: String
+    ): List<BeatmapPlaycount> {
+        if (scoreMode == "all") return playcounts
+        return playcounts.filter { playcount ->
+            val mode = playcount.beatmap?.mode
+                ?: playcount.beatmapset.beatmaps.firstOrNull { it.id == playcount.beatmapId }?.mode
+            mode.matchesScoreMode(scoreMode)
+        }
     }
 
     private fun sanitizeQuery(query: String?): String? {
@@ -342,5 +501,54 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
         // Normalize whitespace
         val collapsedSpaces = noControl.replace(Regex("\\s+"), " ").trim()
         return collapsedSpaces.ifEmpty { null }
+    }
+
+    private fun topPlayCacheKey(userId: String, genreId: Int?, scoreMode: String): String {
+        return "top_play_user_${userId}_genre_${genreId ?: "all"}_ruleset_${scoreMode}_initial"
+    }
+
+    companion object {
+        private const val TOP_PLAY_LIMIT = 200
+        private const val TOP_PLAY_PAGE_SIZE = 100
+        private val scoreModes = listOf("osu", "taiko", "fruits", "mania")
+    }
+}
+
+private data class TopPlayCachePayload(
+    val entries: List<TopPlayCacheEntry> = emptyList()
+)
+
+private data class TopPlayCacheEntry(
+    val beatmapset: BeatmapsetCompact,
+    val score: BestScore,
+    val rank: Int
+)
+
+private fun String.normalizedScoreMode(): String {
+    val normalized = lowercase()
+    return if (normalized in listOf("osu", "taiko", "fruits", "mania", "all")) normalized else "all"
+}
+
+private fun String.toSearchModeQuery(): Int? {
+    return when (this) {
+        "osu" -> 0
+        "taiko" -> 1
+        "fruits" -> 2
+        "mania" -> 3
+        else -> null
+    }
+}
+
+private fun BeatmapsetCompact.hasMode(scoreMode: String): Boolean {
+    if (scoreMode == "all") return true
+    return beatmaps.any { it.mode.matchesScoreMode(scoreMode) }
+}
+
+private fun String?.matchesScoreMode(scoreMode: String): Boolean {
+    if (scoreMode == "all") return true
+    if (this == null) return false
+    return when (scoreMode) {
+        "fruits" -> equals("fruits", ignoreCase = true) || equals("catch", ignoreCase = true)
+        else -> equals(scoreMode, ignoreCase = true)
     }
 }

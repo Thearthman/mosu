@@ -14,8 +14,8 @@
 #### Core
 - [ ] Implement Equalizer.
 - [ ] [v1.2] Implement Activity Heatmap from recent play data with week, month, and year views.
-- [ ] [v1.1] Implement song recommendations based on tags, genre, and related metadata.
-- [ ] [v1.1] Implement smart playlist generation based on how long the user stays on songs in random play mode.
+- [ ] [v1.2] Implement song recommendations based on tags, genre, and related metadata.
+- [ ] [v1.3] Implement smart playlist generation based on how long the user stays on songs in random play mode.
 - [ ] [v1.2] Implement DJ mixing for smooth transition
 
 #### Settings
@@ -37,7 +37,6 @@
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
-- [x] [v1.1] Add Top Play(top 200) filter mode.
 
 #### Library
 - [ ] [v1.3] Add an artist view toggle. In artist view, group songs by normalized artist names, removing special characters and spaces to reduce typo-related misses. Clicking an artist should open a playlist-style song list for that artist.
@@ -95,6 +94,7 @@
 - [x] Recent play supports all modes.
 - [x] [v1.0] Added persistent Search history.
 - [x] [v1.1] Added a Settings toggle to make the Recent play filter display every recorded entry as Play History, not just newest played songs.
+- [x] [v1.1] Add Top Play(top 200) filter mode.
 
 #### Library
 - [x] Implemented library genre filter matching Search genre filter.

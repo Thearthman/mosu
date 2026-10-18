@@ -4,11 +4,12 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PlaylistDao {
-    @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
+    @Query("SELECT * FROM playlists ORDER BY sortOrder ASC, createdAt DESC")
     fun getPlaylists(): Flow<List<PlaylistEntity>>
 
     @Query("SELECT * FROM playlists WHERE id = :playlistId LIMIT 1")
@@ -28,6 +29,16 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET name = :newName WHERE id = :playlistId")
     suspend fun updatePlaylistName(playlistId: Long, newName: String)
+
+    @Query("UPDATE playlists SET sortOrder = :sortOrder WHERE id = :playlistId")
+    suspend fun updatePlaylistSortOrder(playlistId: Long, sortOrder: Int)
+
+    @Transaction
+    suspend fun updatePlaylistSortOrders(orderedPlaylistIds: List<Long>) {
+        orderedPlaylistIds.forEachIndexed { index, playlistId ->
+            updatePlaylistSortOrder(playlistId, index)
+        }
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addTrack(crossRef: PlaylistTrackEntity)

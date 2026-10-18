@@ -65,16 +65,16 @@ the download path — it also maintains the preserved list and the backup.
 
 ## Database (Room)
 
-`AppDatabase` (`data/db/AppDatabase.kt`), DB name `mosu_database`, **version 19**,
+`AppDatabase` (`data/db/AppDatabase.kt`), DB name `mosu_database`, **version 20**,
 `exportSchema = false`, `.fallbackToDestructiveMigration()` is registered only as a
-last resort. Migrations 8→19 are hand-written and guarded (idempotent `PRAGMA table_info`
+last resort. Migrations 8→20 are hand-written and guarded (idempotent `PRAGMA table_info`
 checks). See that file for the authoritative table definitions.
 
 | Table | Entity | Key(s) | Meaning |
 |-------|--------|--------|---------|
 | `beatmaps` | `BeatmapEntity` | `uid` PK (auto); **indexed `beatmapSetId`** | One row = one **downloaded difficulty**. A set may have many rows (`isAlbum` for multi-audio sets). |
 | `preserved_beatmap_set_ids` | `PreservedBeatmapSetIdEntity` | `beatmapSetId` PK | **The "Restore Downloads" list**: set ids the user ever downloaded. Mirrored into SharedPreferences `preserved_beatmaps` / key `preserved_set_ids`. |
-| `playlists` | `PlaylistEntity` | `id` PK | Playlist container. |
+| `playlists` | `PlaylistEntity` | `id` PK | Playlist container; `sortOrder` stores the user-defined grid order. |
 | `playlist_tracks` | `PlaylistTrackEntity` | PK `(playlistId, beatmapSetId, difficultyName)` | Membership + denormalized title/artist for undownloaded rows. Keyed on `beatmapSetId` for stability across restores. |
 | `recent_plays` | `RecentPlayEntity` | `uid` PK; unique index `scoreId` | Play history pulled from the osu! API. |
 | `search_cache` | `SearchCacheEntity` | `queryKey` PK | Serialized `List<BeatmapsetCompact>` + cursor for paginated search. |

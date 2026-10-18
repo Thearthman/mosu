@@ -132,7 +132,8 @@ object MosuBackupService {
                     PlaylistEntity(
                         id = playlist.id,
                         name = playlist.name,
-                        createdAt = playlist.createdAt
+                        createdAt = playlist.createdAt,
+                        sortOrder = playlist.sortOrder
                     )
                 )
             }
@@ -184,7 +185,8 @@ object MosuBackupService {
         return BackupPlaylist(
             id = id,
             name = name,
-            createdAt = createdAt
+            createdAt = createdAt,
+            sortOrder = sortOrder
         )
     }
 
@@ -310,7 +312,8 @@ data class BackupTrack(
 data class BackupPlaylist(
     val id: Long,
     val name: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val sortOrder: Int = 0
 )
 
 data class BackupPlaylistTrack(

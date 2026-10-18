@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
         SearchHistoryEntity::class,
         DownloadTaskEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -308,6 +308,43 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 19 to 20: Persist the user-defined playlist order.
+        // Existing rows are seeded from the previous createdAt DESC ordering.
+        private val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val cursor = db.query("PRAGMA table_info(playlists)")
+                var sortOrderExists = false
+                cursor.use {
+                    while (it.moveToNext()) {
+                        if (it.getString(it.getColumnIndex("name")) == "sortOrder") {
+                            sortOrderExists = true
+                            break
+                        }
+                    }
+                }
+
+                if (!sortOrderExists) {
+                    db.execSQL(
+                        "ALTER TABLE playlists ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0"
+                    )
+                    db.execSQL(
+                        """
+                        UPDATE playlists
+                        SET sortOrder = (
+                            SELECT COUNT(*)
+                            FROM playlists newer
+                            WHERE newer.createdAt > playlists.createdAt
+                               OR (
+                                   newer.createdAt = playlists.createdAt
+                                   AND newer.id > playlists.id
+                               )
+                        )
+                        """.trimIndent()
+                    )
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -326,7 +363,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_15_16,
                     MIGRATION_16_17,
                     MIGRATION_17_18,
-                    MIGRATION_18_19
+                    MIGRATION_18_19,
+                    MIGRATION_19_20
                 )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()

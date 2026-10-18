@@ -30,7 +30,7 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - Per-item download progress; downloaded items tap-to-play from Search/Library. Undownloaded items: tap to play preview; preview stops when starting full playback (from search, info popup, or MiniPlayer).
 - Downloaded songs in Search: swipe left to delete, swipe right to add to playlist (playlist selector dialog), same as Library.
 - Library with genre filter, search bar, and "Find current song" locator that scrolls/highlights the playing track; swipe-to-delete or add to playlists.
-- Playlists: create custom playlists, add/remove songs, long-press to rename/delete playlists, playlist-specific playback modes.
+- Playlists: create custom playlists, add/remove songs, drag to rearrange playlist cards, long-press to rename/delete playlists, playlist-specific playback modes.
 - Player: background playback (Media3), collapsible MiniPlayer with controls, expandable full player view; mod selector (NM/DT/NC) with persistence, deterministic shuffle cycling, playback mode persistence (single/loop/random).
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.
 - UI polish: Apple Music-inspired design, dark mode, gamemode icons in search results, individual difficulty titles in player, smooth animations, no divider lines.
@@ -58,6 +58,6 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 ### 3. Usage tips
 - Search: choose view via dropdown (Played/Recent/Favorite/Most Played/All); genre chips; pull-to-refresh cache; long-press for enhanced beatmap info popup showing all matching beatmapsets with color-coded difficulty gradients; short-press to play downloaded songs.
 - Library: genre filter; search bar; swipe left to delete, right to add to playlist; "Find current song" button (bottom-right) to scroll/highlight current track.
-- Playlists: create custom playlists; long-press playlist to rename/delete; within playlists, swipe right to remove from playlist, left to delete from library.
+- Playlists: create custom playlists; drag playlist cards to rearrange them; long-press a playlist to rename/delete; within playlists, swipe right to remove from playlist, left to delete from library.
 - Player: tap MiniPlayer to expand; drag progress bar; cycle through playback modes (single/loop/random); Mod selector for DT/NC effects; mods persist across tracks.
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.

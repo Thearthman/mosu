@@ -11,9 +11,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,10 +30,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -63,18 +67,30 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.mosu.app.R
@@ -106,6 +122,7 @@ import com.mosu.app.ui.components.beatmapSetList
 import com.mosu.app.utils.MediaPathUtils
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mosu.app.ui.DeferredActionViewModel
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,6 +148,19 @@ fun PlaylistScreen(
     val playlistMembership = playlistTrackRefs
         .groupBy { it.playlistId }
         .mapValues { entry -> entry.value.map { "${it.beatmapSetId}|${it.difficultyName}" }.toSet() }
+
+    val playlistGridState = rememberLazyGridState()
+    var orderedPlaylists by remember { mutableStateOf(playlists) }
+    var draggedPlaylistId by remember { mutableStateOf<Long?>(null) }
+    var dragPointerWindowPosition by remember { mutableStateOf(Offset.Zero) }
+    var dragGrabOffset by remember { mutableStateOf(Offset.Zero) }
+    var playlistGridCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    LaunchedEffect(playlists) {
+        if (draggedPlaylistId == null) {
+            orderedPlaylists = playlists
+        }
+    }
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
     
@@ -179,11 +209,85 @@ fun PlaylistScreen(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val density = LocalDensity.current
     val searchService = remember { BeatmapSearchService(repository, db, context) }
     val clipboard = remember(context) {
         context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     }
     var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
+
+    fun updateDraggedPlaylistTarget() {
+        val draggedId = draggedPlaylistId ?: return
+        val gridCoordinates = playlistGridCoordinates ?: return
+
+        val target = playlistGridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+            if (item.key == draggedId) return@firstOrNull false
+            val topLeft = gridCoordinates.localToWindow(
+                Offset(item.offset.x.toFloat(), item.offset.y.toFloat())
+            )
+            val bounds = Rect(
+                offset = topLeft,
+                size = Size(item.size.width.toFloat(), item.size.height.toFloat())
+            )
+            bounds.contains(dragPointerWindowPosition)
+        } ?: return
+
+        val targetId = target.key as? Long ?: return
+        val fromIndex = orderedPlaylists.indexOfFirst { it.id == draggedId }
+        val toIndex = orderedPlaylists.indexOfFirst { it.id == targetId }
+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return
+
+        orderedPlaylists = orderedPlaylists.toMutableList().apply {
+            add(toIndex, removeAt(fromIndex))
+        }
+    }
+
+    fun startPlaylistDrag(
+        playlistId: Long,
+        pointerWindowPosition: Offset,
+        grabOffset: Offset
+    ) {
+        if (orderedPlaylists.none { it.id == playlistId }) return
+        draggedPlaylistId = playlistId
+        dragPointerWindowPosition = pointerWindowPosition
+        dragGrabOffset = grabOffset
+    }
+
+    fun finishPlaylistDrag() {
+        val orderedIds = orderedPlaylists.map { it.id }
+        draggedPlaylistId = null
+        dragPointerWindowPosition = Offset.Zero
+        dragGrabOffset = Offset.Zero
+        if (orderedIds.isEmpty()) return
+
+        scope.launch {
+            db.playlistDao().updatePlaylistSortOrders(orderedIds)
+            MosuBackupService.exportState(context, db)
+        }
+    }
+
+    LaunchedEffect(draggedPlaylistId) {
+        val edgeSize = with(density) { 72.dp.toPx() }
+        val scrollStep = with(density) { 12.dp.toPx() }
+
+        while (draggedPlaylistId != null) {
+            val gridCoordinates = playlistGridCoordinates
+            if (gridCoordinates != null && gridCoordinates.isAttached) {
+                val localPointer = gridCoordinates.windowToLocal(dragPointerWindowPosition)
+                val viewportHeight = gridCoordinates.size.height.toFloat()
+                val scrollDelta = when {
+                    localPointer.y < edgeSize -> -scrollStep
+                    localPointer.y > viewportHeight - edgeSize -> scrollStep
+                    else -> 0f
+                }
+                if (scrollDelta != 0f) {
+                    playlistGridState.scrollBy(scrollDelta)
+                    updateDraggedPlaylistTarget()
+                }
+            }
+            withFrameNanos { }
+        }
+    }
 
     fun pasteFromClipboard(): String {
         val item = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
@@ -585,7 +689,7 @@ fun PlaylistScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (playlists.isEmpty()) {
+            if (orderedPlaylists.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -594,41 +698,103 @@ fun PlaylistScreen(
                 }
             } else {
                 val countsMap = playlistCounts.associate { it.playlistId to it.count }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxSize()
+                        .padding(6.dp)
                 ) {
-                    items(playlists, key = { it.id }) { playlist ->
-                        val coverPaths = playlistTrackRefs
-                            .asSequence()
-                            .filter { it.playlistId == playlist.id }
-                            .sortedBy { it.addedAt }
-                            .mapNotNull { ref -> beatmapBySetId[ref.beatmapSetId]?.coverPath }
-                            .filter { it.isNotBlank() }
-                            .take(4)
-                            .toList()
-                        PlaylistCard(
-                            playlist = playlist,
-                            trackCount = countsMap[playlist.id] ?: 0,
-                            coverPaths = coverPaths,
-                            onClick = { selectedPlaylistId = playlist.id },
-                            onDelete = {
-                                scope.launch {
-                                    // Delete all tracks from this playlist first
-                                    db.playlistDao().removeAllTracksFromPlaylist(playlist.id)
-                                    // Then delete the playlist itself
-                                    db.playlistDao().deletePlaylist(playlist.id)
-                                    MosuBackupService.exportState(context, db)
+                    val columnCount = playlistColumnCountForWidth(maxWidth.value)
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columnCount),
+                        state = playlistGridState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .onGloballyPositioned { playlistGridCoordinates = it },
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        items(orderedPlaylists, key = { it.id }) { playlist ->
+                            val coverPaths = playlistTrackRefs
+                                .asSequence()
+                                .filter { it.playlistId == playlist.id }
+                                .sortedBy { it.addedAt }
+                                .mapNotNull { ref -> beatmapBySetId[ref.beatmapSetId]?.coverPath }
+                                .filter { it.isNotBlank() }
+                                .take(4)
+                                .toList()
+
+                            val isDragging = draggedPlaylistId == playlist.id
+
+                            PlaylistCard(
+                                playlist = playlist,
+                                trackCount = countsMap[playlist.id] ?: 0,
+                                coverPaths = coverPaths,
+                                modifier = if (isDragging) {
+                                    Modifier
+                                } else {
+                                    Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                                },
+                                isDragging = isDragging,
+                                dragOffsetProvider = {
+                                    if (draggedPlaylistId == playlist.id) {
+                                        val draggedItemInfo = playlistGridState.layoutInfo
+                                            .visibleItemsInfo
+                                            .firstOrNull { it.key == playlist.id }
+                                        val gridCoordinates = playlistGridCoordinates
+                                        if (draggedItemInfo != null && gridCoordinates != null) {
+                                            val itemTopLeft = gridCoordinates.localToWindow(
+                                                Offset(
+                                                    draggedItemInfo.offset.x.toFloat(),
+                                                    draggedItemInfo.offset.y.toFloat()
+                                                )
+                                            )
+                                            dragPointerWindowPosition - itemTopLeft - dragGrabOffset
+                                        } else {
+                                            Offset.Zero
+                                        }
+                                    } else {
+                                        Offset.Zero
+                                    }
+                                },
+                                onDragStart = { pointerWindowPosition, grabOffset ->
+                                    startPlaylistDrag(
+                                        playlistId = playlist.id,
+                                        pointerWindowPosition = pointerWindowPosition,
+                                        grabOffset = grabOffset
+                                    )
+                                },
+                                onDrag = { pointerWindowPosition ->
+                                    if (draggedPlaylistId == playlist.id) {
+                                        dragPointerWindowPosition = pointerWindowPosition
+                                        updateDraggedPlaylistTarget()
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (draggedPlaylistId == playlist.id) {
+                                        finishPlaylistDrag()
+                                    }
+                                },
+                                onDragCancel = {
+                                    if (draggedPlaylistId == playlist.id) {
+                                        finishPlaylistDrag()
+                                    }
+                                },
+                                onClick = { selectedPlaylistId = playlist.id },
+                                onDelete = {
+                                    scope.launch {
+                                        // Delete all tracks from this playlist first
+                                        db.playlistDao().removeAllTracksFromPlaylist(playlist.id)
+                                        // Then delete the playlist itself
+                                        db.playlistDao().deletePlaylist(playlist.id)
+                                        MosuBackupService.exportState(context, db)
+                                    }
+                                },
+                                onRename = {
+                                    renamePlaylistId = playlist.id
+                                    renamePlaylistName = playlist.name
+                                    showRenameDialog = true
                                 }
-                            },
-                            onRename = {
-                                renamePlaylistId = playlist.id
-                                renamePlaylistName = playlist.name
-                                showRenameDialog = true
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -1039,22 +1205,64 @@ fun PlaylistScreen(
     )
 }
 
+/**
+ * Chooses the column count that keeps playlist cards between 200dp and 250dp,
+ * preferring the width closest to 225dp. If no column count fits that range,
+ * the closest width to 225dp is used instead.
+ */
+private fun playlistColumnCountForWidth(availableWidth: Float): Int {
+    if (availableWidth <= 0f) return 1
+
+    val candidates = (1..10).map { columns ->
+        columns to availableWidth / columns
+    }
+    val inRange = candidates.filter { (_, cardWidth) -> cardWidth in 200f..250f }
+
+    return (inRange.ifEmpty { candidates })
+        .minWithOrNull(
+            compareBy<Pair<Int, Float>> { abs(it.second - 225f) }
+                .thenByDescending { it.first }
+        )
+        ?.first ?: 1
+}
+
 @Composable
 private fun PlaylistCard(
     playlist: PlaylistEntity,
     trackCount: Int,
     coverPaths: List<String>,
+    modifier: Modifier = Modifier,
+    isDragging: Boolean,
+    dragOffsetProvider: () -> Offset,
+    onDragStart: (pointerWindowPosition: Offset, grabOffset: Offset) -> Unit,
+    onDrag: (pointerWindowPosition: Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onRename: () -> Unit
 ) {
     var showEditIcons by remember { mutableStateOf(false) }
+    var cardCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val hapticFeedback = LocalHapticFeedback.current
+
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(150.dp)
-            .pointerInput(Unit) {
-                detectTapGestures(
+            .aspectRatio(1f)
+            .zIndex(if (isDragging) 1f else 0f)
+            .graphicsLayer {
+                val dragOffset = dragOffsetProvider()
+                translationX = dragOffset.x
+                translationY = dragOffset.y
+                val targetScale = if (isDragging) 1.04f else 1f
+                scaleX = targetScale
+                scaleY = targetScale
+                shadowElevation = if (isDragging) 16.dp.toPx() else 0f
+            }
+            .onGloballyPositioned { cardCoordinates = it }
+            .pointerInput(playlist.id) {
+                detectTapLongPressDrag(
                     onTap = {
                         if (showEditIcons) {
                             // If edit icons are showing, hide them instead of opening playlist
@@ -1065,7 +1273,19 @@ private fun PlaylistCard(
                     },
                     onLongPress = {
                         showEditIcons = true
-                    }
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                    onDragStart = { pointerLocalPosition, grabOffset ->
+                        showEditIcons = false
+                        val pointerWindowPosition = cardCoordinates
+                            ?.localToWindow(pointerLocalPosition)
+                            ?: pointerLocalPosition
+                        onDragStart(pointerWindowPosition, grabOffset)
+                    },
+                    onDrag = onDrag,
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragCancel,
+                    coordinatesProvider = { cardCoordinates }
                 )
             },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -1164,6 +1384,76 @@ private fun PlaylistCard(
                 )
             }
         }
+        }
+    }
+}
+
+
+/**
+ * A playlist card gesture that mirrors the iOS home-screen interaction:
+ * a long press reveals card actions, and continuing to move starts a drag.
+ */
+private suspend fun PointerInputScope.detectTapLongPressDrag(
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    onDragStart: (pointerLocalPosition: Offset, grabOffset: Offset) -> Unit,
+    onDrag: (pointerWindowPosition: Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+    coordinatesProvider: () -> LayoutCoordinates?
+) {
+    fun windowPosition(position: Offset): Offset =
+        coordinatesProvider()?.localToWindow(position) ?: position
+
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        if (down.isConsumed) return@awaitEachGesture
+
+        try {
+            val up = withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                waitForUpOrCancellation()
+            }
+            if (up != null) {
+                up.consume()
+                onTap()
+            }
+            return@awaitEachGesture
+        } catch (_: PointerEventTimeoutCancellationException) {
+            // The pointer stayed down through the long-press timeout.
+        }
+
+        onLongPress()
+        var dragging = false
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                if (dragging) onDragCancel()
+                return@awaitEachGesture
+            }
+            if (!change.pressed) {
+                if (dragging) {
+                    onDrag(windowPosition(change.position))
+                    change.consume()
+                    onDragEnd()
+                }
+                return@awaitEachGesture
+            }
+
+            if (!dragging) {
+                if ((change.position - down.position).getDistance() >
+                    viewConfiguration.touchSlop
+                ) {
+                    dragging = true
+                    // Keep the card anchored to the point where the finger first went down,
+                    // including the touch-slop distance already travelled.
+                    onDragStart(windowPosition(change.position), down.position)
+                    change.consume()
+                }
+            } else {
+                onDrag(windowPosition(change.position))
+                change.consume()
+            }
         }
     }
 }

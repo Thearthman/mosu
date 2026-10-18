@@ -35,9 +35,6 @@
 - [ ] Implement a current playing playlist display.
 - [ ] [v1.2] Add ability to view beatmap comments.
 
-#### Playlist
-- [ ] [v1.1] Implement playlist rearrangement/placement management.
-
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
 - [ ] [v1.1] Add Top Play(top 200) filter mode.
@@ -80,6 +77,7 @@
 - [x] Added playlist rename dialog from the long-press edit action.
 - [x] Added Playlist page with playlist creation, album grid, playlist detail view, song adding, and playlist play behavior.
 - [x] [v1.1] Implemented playlist import/export with a list of beatmapset ids.
+- [x] [v1.1] Implemented persisted playlist song rearrangement.
 
 #### Search
 - [x] When a downloaded song is clicked in Search, it plays.

@@ -50,6 +50,13 @@ The **Scores** tab turns your cached osu! recent plays into a compact dashboard.
 
 > Score statistics come from the cached recent-score history (up to 500 plays), not your complete osu! profile history.
 
+## Standby Player
+In landscape, the full player becomes a wide CarPlay-style standby screen with large cover artwork, track details, transport controls, progress, mods, and shuffle controls.
+
+<p align="center">
+  <img src="icons/readme/all-player-horizontal.jpg" width="100%" alt="horizontal CarPlay-style standby player with wide cover artwork and playback controls">
+</p>
+
 
 ## Setup Tutorial
 

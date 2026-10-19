@@ -653,9 +653,9 @@ fun PlaylistScreen(
             .then(
                 if (selectedPlaylistId != null) {
                     // Remove padding when viewing playlist to allow content to touch miniplayer
-                    Modifier
+                    Modifier.padding(top = 16.dp)
                 } else {
-                    Modifier.padding(16.dp)
+                    Modifier.padding(horizontal = 16.dp)
                 }
             )
     ) {
@@ -668,8 +668,8 @@ fun PlaylistScreen(
             ) {
                 Text(
                     text = stringResource(id = R.string.playlist_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.displayMedium,
+                    modifier = Modifier.padding(vertical=16.dp)
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = {
@@ -699,7 +699,8 @@ fun PlaylistScreen(
             } else {
                 val countsMap = playlistCounts.associate { it.playlistId to it.count }
                 BoxWithConstraints(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
                         .padding(6.dp)
                 ) {
                     val columnCount = playlistColumnCountForWidth(maxWidth.value)

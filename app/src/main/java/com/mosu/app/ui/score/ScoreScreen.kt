@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -183,7 +184,7 @@ fun ScoreScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -194,7 +195,9 @@ fun ScoreScreen(
                 ) {
                     Text(
                         stringResource(R.string.score_title),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 16.dp),
                         style = MaterialTheme.typography.displayMedium
                     )
                     if (isLoading) {
@@ -393,11 +396,12 @@ private fun RecentPassedPanel(
         if (recentPassed.isEmpty()) {
             MissingMetricsText(stringResource(R.string.score_recent_passed_empty))
         } else {
-            Column() {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 recentPassed.forEach { score ->
                     BeatmapSetItem(
                         set = score.toBeatmapSetData(),
-                        actions = actions
+                        actions = actions,
+                        contentPadding = PaddingValues(0.dp)
                     )
                 }
             }

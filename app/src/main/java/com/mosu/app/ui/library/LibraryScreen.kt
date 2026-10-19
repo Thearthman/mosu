@@ -42,7 +42,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -81,6 +80,7 @@ import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.Modifier
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -384,13 +384,16 @@ fun LibraryScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 10.dp, horizontal = 16.dp),
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(
                     text = stringResource(id = R.string.library_title),
                     style = MaterialTheme.typography.displayMedium, // Apple Music style large title
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 16.dp, bottom = 16.dp)
+
                 )
 
                 // Custom search field with dynamic text positioning

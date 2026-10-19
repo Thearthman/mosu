@@ -11,12 +11,22 @@ Mosu 允许您使用 osu! 账号登录，获取您玩过/收藏的谱面，将�
 📥 **最新版本**: [从 GitHub Releases 下载](https://github.com/Thearthman/mosu/releases/latest)
 
 ## UI 和页面设计
+<img src="icons/readme/en-search.gif" width="300" alt="search page showing recent played maps">
+<p align="center">
+  <img src="icons/readme/en-library.jpg" width="300" alt="library page">
+  <img src="icons/readme/en-playlist.jpg" width="300" alt="playlist page">
+  <img src="icons/readme/en-scores-main.jpg" width="300" alt="player view">
+  <img src="icons/readme/en-scores-achievements.jpg" width="300" alt="player view">
+  <img src="icons/readme/all-player.jpg" width="300" alt="player view">
+  <img src="icons/readme/en-profile.jpg" width="300" alt="profile page">
+</p>
+
 <p align="center">
   <img src="icons/readme/zh-library.jpg" width="300" alt="曲库页面">
-  <img src="icons/readme/all-player.jpg" width="300" alt="播放器视图">
   <img src="icons/readme/zh-playlist.jpg" width="300" alt="播放列表页面">
-  <img src="icons/readme/zh-search-recentplayed.jpg" width="300" alt="搜索页面显示最近玩过的谱面">
-  <img src="icons/readme/zh-search-mostplayed.jpg" width="300" alt="搜索页面显示最常玩的谱面">
+  <img src="icons/readme/zh-scores-main.jpg" width="300" alt="搜索页面显示最近玩过的谱面">
+  <img src="icons/readme/zh-scores-achievements.jpg" width="300" alt="搜索页面显示最常玩的谱面">
+  <img src="icons/readme/all-player.jpg" width="300" alt="播放器视图">
   <img src="icons/readme/zh-profile.jpg" width="300" alt="个人资料页面">
 </p>
 

@@ -13,12 +13,13 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 📥 **Latest Release**: [Download from GitHub Releases](https://github.com/Thearthman/mosu/releases/latest)
 
 ## UI and Page design
+<img src="icons/readme/en-search.gif" width="300" alt="search page showing recent played maps">
 <p align="center">
   <img src="icons/readme/en-library.jpg" width="300" alt="library page">
   <img src="icons/readme/en-playlist.jpg" width="300" alt="playlist page">
   <img src="icons/readme/all-player.jpg" width="300" alt="player view">
-  <img src="icons/readme/en-search-recentplayed.jpg" width="300" alt="search page showing recent played maps">
-  <img src="icons/readme/en-search-mostplayed.jpg" width="300" alt="search page showing most played maps">
+  <img src="icons/readme/en-scores-main.jpg" width="300" alt="player view">
+  <img src="icons/readme/en-scores-achievements.jpg" width="300" alt="player view">
   <img src="icons/readme/en-profile.jpg" width="300" alt="profile page">
 </p>
 

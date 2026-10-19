@@ -6,6 +6,7 @@
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
 
 ### UIUX
+- [ ] Add frosted glass fade to most of the components that involves scrolling. 
 - [ ] Fix the UI scaling issue.
 - [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
 

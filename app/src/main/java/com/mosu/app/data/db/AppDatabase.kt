@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +22,10 @@ import kotlinx.coroutines.withContext
         SearchHistoryEntity::class,
         DownloadTaskEntity::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = false
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun beatmapDao(): BeatmapDao
     abstract fun searchCacheDao(): SearchCacheDao
@@ -345,6 +347,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 20 to 21: Persist additional recent score fields.
+        private val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                fun addColumnIfMissing(name: String, definition: String) {
+                    val cursor = db.query("PRAGMA table_info(recent_plays)")
+                    var exists = false
+                    cursor.use {
+                        while (it.moveToNext()) {
+                            if (it.getString(it.getColumnIndex("name")) == name) {
+                                exists = true
+                                break
+                            }
+                        }
+                    }
+                    if (!exists) {
+                        db.execSQL("ALTER TABLE recent_plays ADD COLUMN $definition")
+                    }
+                }
+
+                addColumnIfMissing("modeInt", "modeInt INTEGER")
+                addColumnIfMissing("mods", "mods TEXT")
+                addColumnIfMissing("rawScore", "rawScore INTEGER")
+                addColumnIfMissing("perfect", "perfect INTEGER")
+                addColumnIfMissing("replay", "replay INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -364,7 +393,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_16_17,
                     MIGRATION_17_18,
                     MIGRATION_18_19,
-                    MIGRATION_19_20
+                    MIGRATION_19_20,
+                    MIGRATION_20_21
                 )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()

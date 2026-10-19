@@ -38,14 +38,33 @@ data class BestScore(
 
 data class RecentScore(
     @SerializedName("id") val scoreId: Long? = null,
-    @SerializedName("created_at") val createdAt: String?,
-    @SerializedName("rank") val rank: String? = null,
-    @SerializedName("pp") val pp: Float? = null,
+    @SerializedName("best_id") val bestId: Long? = null,
+    @SerializedName("user_id") val userId: Long? = null,
     @SerializedName("accuracy") val accuracy: Float? = null,
+    @SerializedName("mods") val mods: List<String>? = null,
+    @SerializedName("score") val rawScore: Int? = null,
     @SerializedName("max_combo") val maxCombo: Int? = null,
+    @SerializedName("perfect") val perfect: Boolean? = null,
+    @SerializedName("statistics") val statistics: ScoreStatistics? = null,
     @SerializedName("passed") val passed: Boolean? = null,
+    @SerializedName("pp") val pp: Float? = null,
+    @SerializedName("rank") val rank: String? = null,
+    @SerializedName("created_at") val createdAt: String?,
+    @SerializedName("mode") val mode: String? = null,
+    @SerializedName("mode_int") val modeInt: Int? = null,
+    @SerializedName("replay") val replay: Boolean? = null,
+    @SerializedName("type") val type: String? = null,
     @SerializedName("beatmap") val beatmap: RecentBeatmap?,
     @SerializedName("beatmapset") val beatmapset: BeatmapsetCompact?  // Primary source: beatmapset at score level
+)
+
+data class ScoreStatistics(
+    @SerializedName("count_50") val count50: Int? = null,
+    @SerializedName("count_100") val count100: Int? = null,
+    @SerializedName("count_300") val count300: Int? = null,
+    @SerializedName("count_geki") val countGeki: Int? = null,
+    @SerializedName("count_katu") val countKatu: Int? = null,
+    @SerializedName("count_miss") val countMiss: Int? = null
 )
 
 data class RecentBeatmap(

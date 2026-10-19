@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -48,9 +49,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import com.mosu.app.R
@@ -373,131 +376,145 @@ fun LibraryScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Animated width for collapsible search bar
-            val searchBarWidth by animateDpAsState(
-                targetValue = if (isSearchExpanded || searchQuery.isNotEmpty()) 200.dp else 50.dp,
-                animationSpec = tween(durationMillis = 300),
-                label = "searchBarWidth"
-            )
+            val libraryTitle = stringResource(id = R.string.library_title)
+            val titleStyle = MaterialTheme.typography.displayMedium
+            val textMeasurer = rememberTextMeasurer()
+            val titleWidth = with(LocalDensity.current) {
+                textMeasurer.measure(text = libraryTitle, style = titleStyle).size.width.toDp()
+            }
 
             // Header with title and search bar
-            Row(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.Bottom
             ) {
-                Text(
-                    text = stringResource(id = R.string.library_title),
-                    style = MaterialTheme.typography.displayMedium, // Apple Music style large title
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(top = 16.dp, bottom = 16.dp)
-
+                // Animated width for collapsible search bar
+                val expandedSearchBarWidth = (maxWidth - titleWidth).coerceAtLeast(50.dp)
+                val searchBarWidth by animateDpAsState(
+                    targetValue = if (isSearchExpanded || searchQuery.isNotEmpty()) {
+                        expandedSearchBarWidth
+                    } else {
+                        50.dp
+                    },
+                    animationSpec = tween(durationMillis = 300),
+                    label = "searchBarWidth"
                 )
 
-                // Custom search field with dynamic text positioning
-                Box(
-                    modifier = Modifier
-                        .width(searchBarWidth)
-                        .height(50.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .focusRequester(searchFocusRequester)
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
-                                isSearchExpanded = true
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Text(
+                        text = libraryTitle,
+                        style = titleStyle, // Apple Music style large title
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(top = 16.dp, bottom = 16.dp)
+                    )
+
+                    // Custom search field with dynamic text positioning
+                    Box(
+                        modifier = Modifier
+                            .width(searchBarWidth)
+                            .height(50.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .focusRequester(searchFocusRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    isSearchExpanded = true
+                                }
+                            }
+                    ) {
+                        // Search icon (fades/disappears based on width)
+                        if (searchBarWidth < 120.dp) {
+                            val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
+
+                            IconButton(
+                                onClick = {
+                                    if (!isSearchExpanded) {
+                                        isSearchExpanded = true
+                                        searchFocusRequester.requestFocus()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "Open search",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = iconAlpha)
+                                )
                             }
                         }
-                ) {
-                    // Search icon (fades/disappears based on width)
-                    if (searchBarWidth < 120.dp) {
-                        val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
 
-                        IconButton(
-                            onClick = {
-                                if (!isSearchExpanded) {
+                        // Text field content with dynamic positioning
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = {
+                                searchQuery = it
+                                // Keep expanded when there's text
+                                if (it.isNotEmpty()) {
                                     isSearchExpanded = true
-                                    searchFocusRequester.requestFocus()
                                 }
                             },
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "Open search",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = iconAlpha)
-                            )
-                        }
-                    }
-
-                    // Text field content with dynamic positioning
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = {
-                            searchQuery = it
-                            // Keep expanded when there's text
-                            if (it.isNotEmpty()) {
-                                isSearchExpanded = true
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(
-                                start = if (searchBarWidth >= 120.dp) 18.dp else 10.dp, // More space when icon hidden
-                                end = 30.dp,  // Space for clear button
-                                bottom = 1.dp
-                            ),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                // Search is already triggered by the filtering logic
-                            }
-                        ),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (searchQuery.isEmpty() && searchBarWidth >= 125.dp) {
-                                    Text(
-                                        text = stringResource(id = R.string.library_search_placeholder),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                .fillMaxSize()
+                                .padding(
+                                    start = if (searchBarWidth >= 120.dp) 18.dp else 10.dp, // More space when icon hidden
+                                    end = 30.dp,  // Space for clear button
+                                    bottom = 1.dp
+                                ),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    // Search is already triggered by the filtering logic
                                 }
-                                innerTextField()
+                            ),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty() && searchBarWidth >= 125.dp) {
+                                        Text(
+                                            text = stringResource(id = R.string.library_search_placeholder),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    innerTextField()
+                                }
                             }
-                        }
-                    )
+                        )
 
-                    // Clear button
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .padding(end = 10.dp)
-                                .size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Clear,
-                                contentDescription = stringResource(id = R.string.search_cd_clear),
-                                modifier = Modifier.size(16.dp)
-                            )
+                        // Clear button
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 10.dp)
+                                    .size(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Clear,
+                                    contentDescription = stringResource(id = R.string.search_cd_clear),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
-
             }
 
             // BeatmapSet List

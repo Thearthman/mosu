@@ -90,8 +90,8 @@
     <!-- Score Screen -->
     <string name="score_title">Scores</string>
     <plurals name="score_recent_cached">
-        <item quantity="one">%1$d recent score cached</item>
-        <item quantity="other">%1$d recent scores cached</item>
+        <item quantity="one">%1$d score cached</item>
+        <item quantity="other">%1$d scores cached</item>
     </plurals>
     <string name="score_cd_refresh">Refresh scores</string>
     <string name="score_load_error">Unable to load scores</string>
@@ -123,8 +123,8 @@
     <string name="score_pp_value">%1$.0fpp</string>
     <string name="score_pp_none">--pp</string>
     <plurals name="score_pp_record_held">
-        <item quantity="one">Record has stood for %1$d day since %2$s</item>
-        <item quantity="other">Record has stood for %1$d days since %2$s</item>
+        <item quantity="one">%1$d day ago, %2$s</item>
+        <item quantity="other">%1$d days ago, %2$s</item>
     </plurals>
     <string name="score_length_prefix">/%1$s</string>
     <string name="score_cd_star_rating">Star rating</string>

@@ -90,7 +90,7 @@
     <!-- 成績介面 -->
     <string name="score_title">成績</string>
     <plurals name="score_recent_cached">
-        <item quantity="other">已快取 %1$d 筆近期成績</item>
+        <item quantity="other">已快取 %1$d 筆成績</item>
     </plurals>
     <string name="score_cd_refresh">重新整理成績</string>
     <string name="score_load_error">無法載入成績</string>
@@ -122,7 +122,7 @@
     <string name="score_pp_value">%1$.0fpp</string>
     <string name="score_pp_none">--pp</string>
     <plurals name="score_pp_record_held">
-        <item quantity="other">紀錄已保持 %1$d 天，自 %2$s</item>
+        <item quantity="other">%1$d 天前，%2$s</item>
     </plurals>
     <string name="score_length_prefix">/%1$s</string>
     <string name="score_cd_star_rating">星級評分</string>

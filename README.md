@@ -13,13 +13,13 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 📥 **Latest Release**: [Download from GitHub Releases](https://github.com/Thearthman/mosu/releases/latest)
 
 ## UI and Page design
+<p align="center">
 <img src="icons/readme/en-search.gif" width="300" alt="search page showing recent played maps">
+</p>
 <p align="center">
   <img src="icons/readme/en-library.jpg" width="300" alt="library page">
   <img src="icons/readme/en-playlist.jpg" width="300" alt="playlist page">
   <img src="icons/readme/all-player.jpg" width="300" alt="player view">
-  <img src="icons/readme/en-scores-main.jpg" width="300" alt="player view">
-  <img src="icons/readme/en-scores-achievements.jpg" width="300" alt="player view">
   <img src="icons/readme/en-profile.jpg" width="300" alt="profile page">
 </p>
 
@@ -35,6 +35,20 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - Player: background playback (Media3), collapsible MiniPlayer with controls, expandable full player view; mod selector (NM/DT/NC) with persistence, deterministic shuffle cycling, playback mode persistence (single/loop/random).
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.
 - UI polish: Apple Music-inspired design, dark mode, gamemode icons in search results, individual difficulty titles in player, smooth animations, no divider lines.
+
+## Scores
+The **Scores** tab turns your cached osu! recent plays into a compact dashboard. Scores are synced across standard, taiko, catch, and mania, then filtered with the mode icons; the selected mode is persisted. Up to 500 recent plays are kept locally, and the dashboard can be refreshed manually or by the daily background sync.
+
+<p align="center">
+  <img src="icons/readme/en-scores-main.jpg" width="300" alt="scores dashboard showing average stars by grade and recently passed plays">
+  <img src="icons/readme/en-scores-achievements.jpg" width="300" alt="scores dashboard showing achievements panel">
+</p>
+
+- **Average Stars by Grade**: groups passed scores by grade (SS, S, A, B, …) and shows the average star rating for each grade.
+- **Recently Passed**: lists up to 30 passed scores, newest first, with grade, mode, difficulty, PP, star rating, and map length. Long-press a row to open the beatmapset info popup.
+- **Achievements**: highlights the longest map, fastest BPM, lowest AR, highest CS, and the best PP play among cached passed scores.
+
+> Score statistics come from the cached recent-score history (up to 500 plays), not your complete osu! profile history.
 
 
 ## Setup Tutorial
@@ -57,8 +71,9 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 - Login will redirect via `mosu://callback` (already in the manifest).
 
 ### 3. Usage tips
-- Search: choose view via dropdown (Played/Recent/Favorite/Most Played/All); genre chips; pull-to-refresh cache; long-press for enhanced beatmap info popup showing all matching beatmapsets with color-coded difficulty gradients; short-press to play downloaded songs.
+- Search: choose view via dropdown (Played/Recent/Favorite/Most Played/Top Play/All); genre chips; pull-to-refresh cache; long-press for enhanced beatmap info popup showing all matching beatmapsets with color-coded difficulty gradients; short-press to play downloaded songs.
 - Library: genre filter; search bar; swipe left to delete, right to add to playlist; "Find current song" button (bottom-right) to scroll/highlight current track.
 - Playlists: create custom playlists; drag playlist cards to rearrange them; long-press a playlist to rename/delete; within playlists, swipe right to remove from playlist, left to delete from library.
 - Player: tap MiniPlayer to expand; drag progress bar; cycle through playback modes (single/loop/random); Mod selector for DT/NC effects; mods persist across tracks.
+- Scores: switch between standard, taiko, catch, mania, and all with the mode icons; tap a panel title to collapse or expand it; long-press a recently passed score for beatmapset details.
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.

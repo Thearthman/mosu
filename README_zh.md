@@ -11,21 +11,12 @@ Mosu 允许您使用 osu! 账号登录，获取您玩过/收藏的谱面，将�
 📥 **最新版本**: [从 GitHub Releases 下载](https://github.com/Thearthman/mosu/releases/latest)
 
 ## UI 和页面设计
-<img src="icons/readme/en-search.gif" width="300" alt="search page showing recent played maps">
 <p align="center">
-  <img src="icons/readme/en-library.jpg" width="300" alt="library page">
-  <img src="icons/readme/en-playlist.jpg" width="300" alt="playlist page">
-  <img src="icons/readme/en-scores-main.jpg" width="300" alt="player view">
-  <img src="icons/readme/en-scores-achievements.jpg" width="300" alt="player view">
-  <img src="icons/readme/all-player.jpg" width="300" alt="player view">
-  <img src="icons/readme/en-profile.jpg" width="300" alt="profile page">
+<img src="icons/readme/en-search.gif" width="300" alt="search page showing recent played maps">
 </p>
-
 <p align="center">
   <img src="icons/readme/zh-library.jpg" width="300" alt="曲库页面">
   <img src="icons/readme/zh-playlist.jpg" width="300" alt="播放列表页面">
-  <img src="icons/readme/zh-scores-main.jpg" width="300" alt="搜索页面显示最近玩过的谱面">
-  <img src="icons/readme/zh-scores-achievements.jpg" width="300" alt="搜索页面显示最常玩的谱面">
   <img src="icons/readme/all-player.jpg" width="300" alt="播放器视图">
   <img src="icons/readme/zh-profile.jpg" width="300" alt="个人资料页面">
 </p>
@@ -41,6 +32,20 @@ Mosu 允许您使用 osu! 账号登录，获取您玩过/收藏的谱面，将�
 - 播放器：后台播放（Media3），可折叠 MiniPlayer 带控制，展开完整播放器视图；模组选择器（NM/DT/NC）带持久化，确定性随机播放循环，播放模式持久化（单曲/循环/随机）。
 - 个人资料：用户信息，下载数量，默认搜索视图设置，包含非排名切换，OAuth 凭据管理，语言选择跟随系统语言环境。
 - UI 打磨：受 Apple Music 启发的设计，深色模式，搜索结果中的游戏模式图标，播放器中的单独难度标题，流畅动画，无分割线。
+
+## 成绩页面
+**成绩**标签页会将本地缓存的 osu! 近期成绩整合成一个紧凑的仪表盘。成绩会同步 std、taiko、catch 和 mania 四种模式，并可通过模式图标筛选；所选模式会持久保存。本地最多保留 500 条近期成绩，你可以手动刷新，后台也会每日同步。
+
+<p align="center">
+  <img src="icons/readme/zh-scores-main.jpg" width="300" alt="成绩页面显示各等级平均星数和最近通过的谱面">
+  <img src="icons/readme/zh-scores-achievements.jpg" width="300" alt="成绩页面显示成就面板">
+</p>
+
+- **各等级平均星数**：将已通过成绩按等级（SS、S、A、B……）分组，并显示各等级的平均星级。
+- **最近通过**：按时间倒序列出最多 30 条已通过成绩，包含等级、模式、难度、PP、星级和谱面长度。长按条目可打开谱面集信息弹窗。
+- **成就**：展示已通过成绩中最长的谱面、最快 BPM、最低 AR、最高 CS，以及缓存成绩中的最高 PP 成绩。
+
+> 成绩统计来自本地缓存的近期成绩（最多 500 条），并非完整的 osu! 个人资料历史。
 
 ## 设置教程
 
@@ -62,10 +67,11 @@ Mosu 允许您使用 osu! 账号登录，获取您玩过/收藏的谱面，将�
 - 登录将通过 `mosu://callback` 重定向（已在清单中配置）。
 
 ### 3. 使用提示
-- 搜索：通过下拉菜单选择视图（已玩/最近/收藏/最常玩/全部）；流派标签；下拉刷新缓存；长按获取增强谱面信息弹窗，显示所有匹配谱面集并带颜色编码难度梯度；短按播放已下载歌曲。
+- 搜索：通过下拉菜单选择视图（已玩/最近/收藏/最常玩/最高分/全部）；流派标签；下拉刷新缓存；长按获取增强谱面信息弹窗，显示所有匹配谱面集并带颜色编码难度梯度；短按播放已下载歌曲。
 - 曲库：流派筛选；搜索栏；左滑删除，右滑添加到播放列表；"查找当前歌曲"按钮（右下角）滚动/高亮当前曲目。
 - 播放列表：创建自定义播放列表；长按播放列表重命名/删除；在播放列表中，右滑从播放列表移除，左滑从曲库删除。
 - 播放器：点击 MiniPlayer 展开；拖拽进度条；循环播放模式（单曲/循环/随机）；DT/NC 效果模组选择器；模组跨曲目持久化。
+- 成绩：使用模式图标在 std、taiko、catch、mania 和全部之间切换；点击面板标题可折叠或展开；长按最近通过的成绩可查看谱面集详情。
 - 个人资料：用户信息，下载数量，默认搜索视图设置，包含非排名切换，OAuth 凭据管理，语言选择跟随系统语言环境。
 
 ### 4. 注意事项

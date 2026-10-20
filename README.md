@@ -34,7 +34,7 @@ Mosu lets you sign in with your osu! account, browse the beatmaps you've played 
 - Playlists: create custom playlists, add/remove beatmaps, drag to rearrange playlist cards, long-press to rename/delete playlists, playlist-specific playback modes.
 - Player: background playback (Media3), collapsible MiniPlayer with controls, expandable full player view; mod selector (NM/DT/NC) with persistence, deterministic shuffle cycling, playback mode persistence (single/loop/random).
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.
-- UI polish: Apple Music-inspired design, dark mode, gamemode icons in search results, individual difficulty titles in player, smooth animations, no divider lines.
+- UI polish: refined media-player-inspired design, dark mode, gamemode icons in search results, individual difficulty titles in player, smooth animations, no divider lines.
 
 ## Scores
 The **Scores** tab turns your cached osu! recent plays into a compact dashboard. Scores are synced across standard, taiko, catch, and mania, then filtered with the mode icons; the selected mode is persisted. Up to 500 recent plays are kept locally, and the dashboard can be refreshed manually or by the daily background sync.

@@ -237,7 +237,7 @@
     <string name="playlist_cd_delete_playlist">刪除播放清單</string>
     <string name="playlist_cd_import_playlist">匯入播放清單</string>
     <string name="playlist_cd_export_playlist">匯出播放清單</string>
-    <string name="library_find_current_cd">定位目前歌曲</string>
+    <string name="library_find_current_cd">定位目前譜面</string>
     <string name="library_cd_add_playlist">加入播放清單</string>
     <string name="library_cd_delete">刪除</string>
     <string name="library_cd_expand">展開</string>

@@ -2,12 +2,12 @@
 <img src="icons/icon(new).png" width="200" alt="icon">
 </p>
 
-# Mosu — osu!-powered offline music player (Android)
+# Mosu — an offline osu! beatmap library for Android
 
 **中文版**: [README_zh.md](README_zh.md)
 
 ## Introduction
-Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps, download them as songs, and play them offline with Media3/ExoPlayer. It uses mirrors for `.osz` downloads, extracts audio/cover art, and stores metadata in Room with cached search results for speed.
+Mosu lets you sign in with your osu! account, browse the beatmaps you've played or favorited, download them from public mirrors, and build an offline collection. It extracts audio and cover art from each `.osz`, stores beatmap metadata in Room, and plays the extracted audio with Media3/ExoPlayer.
 
 ## Download
 📥 **Latest Release**: [Download from GitHub Releases](https://github.com/Thearthman/mosu/releases/latest)
@@ -27,11 +27,11 @@ Mosu lets you log in with your osu! account, fetch your played/favorite beatmaps
 ### Features
 - OAuth login with automatic token refresh and credential management.
 - Search views (selectable and persisted): Played, Recent (with timestamps), Favorite, Most Played, All; global "include unranked (s=any)" toggle in Profile.
-- Advanced search: merge duplicate songs by title/author, enhanced info popups showing all matching beatmapsets from osu API (difficulties, star ratings, game modes), color-coded difficulty gradients, manual cache refresh (pull-to-refresh).
+- Advanced search: merge duplicate beatmapsets by title/artist, enhanced info popups showing all matching beatmapsets from osu API (difficulties, star ratings, game modes), color-coded difficulty gradients, manual cache refresh (pull-to-refresh).
 - Per-item download progress; downloaded items tap-to-play from Search/Library. Undownloaded items: tap to play preview; preview stops when starting full playback (from search, info popup, or MiniPlayer).
-- Downloaded songs in Search: swipe left to delete, swipe right to add to playlist (playlist selector dialog), same as Library.
-- Library with genre filter, search bar, and "Find current song" locator that scrolls/highlights the playing track; swipe-to-delete or add to playlists.
-- Playlists: create custom playlists, add/remove songs, drag to rearrange playlist cards, long-press to rename/delete playlists, playlist-specific playback modes.
+- Downloaded beatmaps in Search: swipe left to delete, swipe right to add to playlist (playlist selector dialog), same as Library.
+- Library with genre filter, search bar, and a current-track locator that scrolls/highlights the playing track; swipe-to-delete or add to playlists.
+- Playlists: create custom playlists, add/remove beatmaps, drag to rearrange playlist cards, long-press to rename/delete playlists, playlist-specific playback modes.
 - Player: background playback (Media3), collapsible MiniPlayer with controls, expandable full player view; mod selector (NM/DT/NC) with persistence, deterministic shuffle cycling, playback mode persistence (single/loop/random).
 - Profile: user info, downloaded count, default search view setting, include-unranked toggle, OAuth credentials management, language selector following system locale.
 - UI polish: Apple Music-inspired design, dark mode, gamemode icons in search results, individual difficulty titles in player, smooth animations, no divider lines.
@@ -78,8 +78,8 @@ In landscape, the full player becomes a wide CarPlay-style standby screen with l
 - Login will redirect via `mosu://callback` (already in the manifest).
 
 ### 3. Usage tips
-- Search: choose view via dropdown (Played/Recent/Favorite/Most Played/Top Play/All); genre chips; pull-to-refresh cache; long-press for enhanced beatmap info popup showing all matching beatmapsets with color-coded difficulty gradients; short-press to play downloaded songs.
-- Library: genre filter; search bar; swipe left to delete, right to add to playlist; "Find current song" button (bottom-right) to scroll/highlight current track.
+- Search: choose view via dropdown (Played/Recent/Favorite/Most Played/Top Play/All); genre chips; pull-to-refresh cache; long-press for enhanced beatmap info popup showing all matching beatmapsets with color-coded difficulty gradients; short-press to play downloaded beatmaps.
+- Library: genre filter; search bar; swipe left to delete, right to add to playlist; bottom-right locator button to scroll/highlight the current track.
 - Playlists: create custom playlists; drag playlist cards to rearrange them; long-press a playlist to rename/delete; within playlists, swipe right to remove from playlist, left to delete from library.
 - Player: tap MiniPlayer to expand; drag progress bar; cycle through playback modes (single/loop/random); Mod selector for DT/NC effects; mods persist across tracks.
 - Scores: switch between standard, taiko, catch, mania, and all with the mode icons; tap a panel title to collapse or expand it; long-press a recently passed score for beatmapset details.

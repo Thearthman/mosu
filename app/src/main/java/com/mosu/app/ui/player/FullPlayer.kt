@@ -82,7 +82,6 @@ import com.mosu.app.domain.render.OsuRenderTimeline
 import com.mosu.app.domain.render.OsuRenderer
 import com.mosu.app.domain.render.OsuSkin
 import com.mosu.app.domain.render.OsuSkinLoader
-import com.mosu.app.domain.render.SmoothPlaybackClock
 import com.mosu.app.player.MusicController
 import com.mosu.app.player.PlaybackMod
 import com.mosu.app.ui.components.Track
@@ -376,7 +375,6 @@ private fun VerticalPlayerLayout(
                 skin = skin,
                 musicController = musicController,
                 isExpanded = isExpanded,
-                isPlaying = isPlaying,
                 currentMediaId = currentMediaId,
                 landscape = false,
                 rendererEnabled = rendererEnabled
@@ -481,7 +479,6 @@ private fun HorizontalPlayerLayout(
                 skin = skin,
                 musicController = musicController,
                 isExpanded = isExpanded,
-                isPlaying = isPlaying,
                 currentMediaId = currentMediaId,
                 landscape = true,
                 rendererEnabled = rendererEnabled
@@ -600,7 +597,6 @@ private fun PlayerArtwork(
     skin: OsuSkin?,
     musicController: MusicController,
     isExpanded: Boolean,
-    isPlaying: Boolean,
     currentMediaId: Long?,
     landscape: Boolean,
     rendererEnabled: Boolean
@@ -613,42 +609,14 @@ private fun PlayerArtwork(
     var mapTimeMs by remember(timeline, currentMediaId) {
         mutableDoubleStateOf(musicController.currentPositionMs().toDouble())
     }
-    val playbackClock = remember { SmoothPlaybackClock() }
-    LaunchedEffect(isExpanded, isPlaying, timeline, currentMediaId) {
+    LaunchedEffect(isExpanded, timeline, currentMediaId) {
         if (!isExpanded) return@LaunchedEffect
-        mapTimeMs = musicController.currentPositionMs().toDouble()
-        if (isPlaying) {
-            var firstFrame = true
-            var handledSeekSequence = Long.MIN_VALUE
-            while (isActive) {
-                withFrameNanos { frameNanos ->
-                    val reportedPositionMs = musicController.currentPositionMs()
-                    val playbackSpeed = musicController.currentPlaybackSpeed()
-                    val seek = musicController.playbackSeek.value?.takeIf {
-                        it.sequence != handledSeekSequence && it.mediaId == currentMediaId
-                    }
-                    if (firstFrame || seek != null) {
-                        // Rebase on the seek target in the very next frame. Waiting
-                        // for Media3's next 300 ms progress sample makes the map
-                        // visibly lag behind (or lead) the freshly-seeked audio.
-                        val positionMs = seek?.positionMs ?: reportedPositionMs
-                        playbackClock.reset(positionMs, frameNanos, playbackSpeed)
-                        mapTimeMs = positionMs.toDouble()
-                        if (seek != null) handledSeekSequence = seek.sequence
-                        firstFrame = false
-                    } else {
-                        mapTimeMs = playbackClock.update(
-                            frameNanos = frameNanos,
-                            reportedPositionMs = reportedPositionMs,
-                            playbackSpeed = playbackSpeed
-                        )
-                    }
-                }
-            }
-        } else {
-            // Keep a paused seek responsive without running a frame loop.
-            musicController.currentPosition.collect { positionMs ->
-                mapTimeMs = positionMs.toDouble()
+        while (isActive) {
+            withFrameNanos {
+                // This is the renderer's single source of time. No interpolation:
+                // playback, pause, resume, seeks, and DT/NC all arrive through the
+                // same Media3 playback clock.
+                mapTimeMs = musicController.currentPositionMs().toDouble()
             }
         }
     }

@@ -23,19 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/**
- * An immutable seek/discontinuity signal for frame-driven playback views.
- *
- * [sequence] lets consumers distinguish repeated seeks to the same position,
- * while [mediaId] prevents a seek from an outgoing track being applied to the
- * next track's render timeline.
- */
-data class PlaybackSeekEvent(
-    val sequence: Long,
-    val mediaId: Long?,
-    val positionMs: Long
-)
-
 class MusicController(
     context: Context,
     private val settingsManager: SettingsManager
@@ -59,9 +46,6 @@ class MusicController(
     private val _currentPosition = MutableStateFlow(0L)
     val currentPosition = _currentPosition.asStateFlow()
 
-    private val _playbackSeek = MutableStateFlow<PlaybackSeekEvent?>(null)
-    val playbackSeek = _playbackSeek.asStateFlow()
-
     private val _duration = MutableStateFlow(0L)
     val duration = _duration.asStateFlow()
 
@@ -74,9 +58,7 @@ class MusicController(
     private val _playbackMod = MutableStateFlow(PlaybackMod.NONE)
     val playbackMod = _playbackMod.asStateFlow()
 
-    private var seekSequence = 0L
-    private var pendingSeek: PlaybackSeekEvent? = null
-    private var pendingSeekExpiresAtMs = 0L
+    private var pendingSeek: PendingSeek? = null
 
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -97,16 +79,7 @@ class MusicController(
                     reason: Int
                 ) {
                     val positionMs = newPosition.positionMs.coerceAtLeast(0L)
-                    val mediaId = newPosition.mediaItem?.mediaId?.toLongOrNull()
-                        ?: _currentMediaId.value
-                    val localSeek = pendingSeek
-                    if (localSeek != null && localSeek.mediaId == mediaId) {
-                        // The seek target was already published synchronously by seekTo().
-                        pendingSeek = null
-                    } else if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                        // Covers seeks initiated outside the app's progress bar.
-                        publishSeek(positionMs, mediaId)
-                    }
+                    pendingSeek = null
                     _currentPosition.value = positionMs
                 }
 
@@ -233,49 +206,39 @@ class MusicController(
     
     fun seekTo(positionMs: Long) {
         val targetMs = positionMs.coerceAtLeast(0L)
-        val mediaId = _currentMediaId.value
-        val event = PlaybackSeekEvent(
-            sequence = ++seekSequence,
-            mediaId = mediaId,
-            positionMs = targetMs
+        pendingSeek = PendingSeek(
+            mediaId = _currentMediaId.value,
+            positionMs = targetMs,
+            expiresAtMs = SystemClock.elapsedRealtime() + SEEK_SETTLE_TIMEOUT_MS
         )
-        pendingSeek = event
-        pendingSeekExpiresAtMs = SystemClock.elapsedRealtime() + SEEK_SETTLE_TIMEOUT_MS
-        _playbackSeek.value = event
         _currentPosition.value = targetMs
         controller?.seekTo(targetMs)
     }
 
     /**
-     * High-resolution playback position for frame-driven views. The 300 ms
-     * [currentPosition] flow is intentionally kept for cheap progress-bar updates.
+     * High-resolution playback position for frame-driven views.
+     *
+     * Media3 estimates this value continuously from its latest session sample,
+     * including the active playback speed. Consumers must use it verbatim:
+     * predicting or slowly correcting it introduces visible speed changes and
+     * play/pause discontinuities.
      */
     fun currentPositionMs(): Long {
         val seek = pendingSeek
         if (
             seek != null &&
             seek.mediaId == _currentMediaId.value &&
-            SystemClock.elapsedRealtime() <= pendingSeekExpiresAtMs
+            SystemClock.elapsedRealtime() <= seek.expiresAtMs
         ) {
             // Media3 can briefly keep returning the pre-seek position while
-            // the session processes the seek. Hold the requested position for
-            // that short window so the render clock cannot fall back behind
-            // the new audio position.
+            // the session processes the seek. Show the requested position
+            // immediately; the discontinuity callback clears this hold.
             return seek.positionMs
         }
         if (seek != null) pendingSeek = null
         return controller?.currentPosition?.coerceAtLeast(0L)
             ?: _currentPosition.value
     }
-
-    /**
-     * Playback speed used by the media clock. Frame-driven previews need this
-     * to advance map time between quarter-second position samples.
-     */
-    fun currentPlaybackSpeed(): Float =
-        controller?.playbackParameters?.speed
-            ?.takeIf { it.isFinite() && it > 0f }
-            ?: _playbackMod.value.speed
 
     fun toggleShuffleMode() {
         val controller = this.controller ?: return
@@ -330,17 +293,15 @@ class MusicController(
         MediaController.releaseFuture(controllerFuture)
     }
 
-    private fun publishSeek(positionMs: Long, mediaId: Long?) {
-        _playbackSeek.value = PlaybackSeekEvent(
-            sequence = ++seekSequence,
-            mediaId = mediaId,
-            positionMs = positionMs.coerceAtLeast(0L)
-        )
-    }
-
     private companion object {
         const val SEEK_SETTLE_TIMEOUT_MS = 1_000L
     }
+
+    private data class PendingSeek(
+        val mediaId: Long?,
+        val positionMs: Long,
+        val expiresAtMs: Long
+    )
 }
 
 enum class PlaybackMod(val speed: Float, val pitch: Float, val label: String) {

@@ -23,13 +23,17 @@ class SmoothPlaybackClock(
     private var renderPositionMs = 0.0
     private var lastPlaybackSpeed = 1.0
 
-    fun reset(reportedPositionMs: Long, frameNanos: Long) {
+    fun reset(
+        reportedPositionMs: Long,
+        frameNanos: Long,
+        playbackSpeed: Float = 1f
+    ) {
         val position = reportedPositionMs.coerceAtLeast(0L)
         initialised = true
         lastFrameNanos = frameNanos
         lastReportedPositionMs = position
         renderPositionMs = position.toDouble()
-        lastPlaybackSpeed = 1.0
+        lastPlaybackSpeed = normalisePlaybackSpeed(playbackSpeed)
     }
 
     /**
@@ -53,11 +57,7 @@ class SmoothPlaybackClock(
         } else {
             0.0
         }
-        val speed = if (playbackSpeed.isFinite() && playbackSpeed > 0f) {
-            playbackSpeed.toDouble()
-        } else {
-            1.0
-        }
+        val speed = normalisePlaybackSpeed(playbackSpeed)
         val predicted = previousRenderPosition + elapsedMs * speed
         val error = reported.toDouble() - predicted
         val hasFreshSample = reported > lastReportedPositionMs
@@ -99,6 +99,13 @@ class SmoothPlaybackClock(
         lastPlaybackSpeed = speed
         return renderPositionMs
     }
+
+    private fun normalisePlaybackSpeed(playbackSpeed: Float): Double =
+        if (playbackSpeed.isFinite() && playbackSpeed > 0f) {
+            playbackSpeed.toDouble()
+        } else {
+            1.0
+        }
 
     private companion object {
         const val NANOS_PER_MILLI = 1_000_000.0

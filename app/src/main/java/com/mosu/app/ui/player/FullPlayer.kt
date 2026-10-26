@@ -619,18 +619,28 @@ private fun PlayerArtwork(
         mapTimeMs = musicController.currentPositionMs().toDouble()
         if (isPlaying) {
             var firstFrame = true
+            var handledSeekSequence = Long.MIN_VALUE
             while (isActive) {
                 withFrameNanos { frameNanos ->
                     val reportedPositionMs = musicController.currentPositionMs()
-                    if (firstFrame) {
-                        playbackClock.reset(reportedPositionMs, frameNanos)
-                        mapTimeMs = reportedPositionMs.toDouble()
+                    val playbackSpeed = musicController.currentPlaybackSpeed()
+                    val seek = musicController.playbackSeek.value?.takeIf {
+                        it.sequence != handledSeekSequence && it.mediaId == currentMediaId
+                    }
+                    if (firstFrame || seek != null) {
+                        // Rebase on the seek target in the very next frame. Waiting
+                        // for Media3's next 300 ms progress sample makes the map
+                        // visibly lag behind (or lead) the freshly-seeked audio.
+                        val positionMs = seek?.positionMs ?: reportedPositionMs
+                        playbackClock.reset(positionMs, frameNanos, playbackSpeed)
+                        mapTimeMs = positionMs.toDouble()
+                        if (seek != null) handledSeekSequence = seek.sequence
                         firstFrame = false
                     } else {
                         mapTimeMs = playbackClock.update(
                             frameNanos = frameNanos,
                             reportedPositionMs = reportedPositionMs,
-                            playbackSpeed = musicController.currentPlaybackSpeed()
+                            playbackSpeed = playbackSpeed
                         )
                     }
                 }

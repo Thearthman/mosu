@@ -156,6 +156,33 @@ class SmoothPlaybackClockTest {
         )
     }
 
+    @Test
+    fun seekRebaseStartsAtTheNewTargetImmediately() {
+        val clock = SmoothPlaybackClock()
+        clock.reset(1_000L, frameNanos(0.0))
+        clock.update(frameNanos(16.0), 1_016L, playbackSpeed = 1f)
+
+        clock.reset(5_000L, frameNanos(32.0), playbackSpeed = 1f)
+
+        assertEquals(
+            5_016.0,
+            clock.update(frameNanos(48.0), 5_016L, playbackSpeed = 1f),
+            0.0001
+        )
+    }
+
+    @Test
+    fun seekRebasePreservesPlaybackSpeedWithoutASecondSnap() {
+        val clock = SmoothPlaybackClock()
+        clock.reset(5_000L, frameNanos(0.0), playbackSpeed = 1.5f)
+
+        assertEquals(
+            5_024.3,
+            clock.update(frameNanos(16.0), 5_030L, playbackSpeed = 1.5f),
+            0.0001
+        )
+    }
+
     private fun frameNanos(milliseconds: Double): Long =
         (milliseconds * 1_000_000.0).toLong()
 }

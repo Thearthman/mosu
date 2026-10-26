@@ -7,7 +7,7 @@
 **中文版**: [README_zh.md](README_zh.md)
 
 ## Introduction
-Mosu lets you sign in with your osu! account, browse the beatmaps you've played or favorited, download them from public mirrors, and build an offline collection. It extracts audio and cover art from each `.osz`, stores beatmap metadata in Room, and plays the extracted audio with Media3/ExoPlayer.
+Mosu lets you sign in with your osu! account, browse the beatmaps you've played or favorited, download them from public mirrors, and build an offline collection. It allows you to view your favorite beatmap directly on your phone, specifically built with hit-sound mechanism so you can practice the map in your mind anywhere!
 
 ## Download
 📥 **Latest Release**: [Download from GitHub Releases](https://github.com/Thearthman/mosu/releases/latest)

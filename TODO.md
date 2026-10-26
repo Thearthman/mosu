@@ -1,9 +1,10 @@
 # TODO
-
 ## Active
 
 ### Bugs
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
+- [ ] A downloaded multi-ruleset osu!+catch beatmapset can retain all of its `.osu` files but expose no renderable difficulty in Full Player. `ZipExtractor` preserves every `.osu` regardless of `Mode`, while `OsuMapPreviewLoader` accepts only osu!standard (`Mode: 0`) maps with a matching `BeatmapSetID` and selected-audio group. Add diagnostics that report the extracted `.osu` count and rejection reason for each file (catch/unsupported mode, missing or mismatched set ID, parse failure, audio-group mismatch). Catch-only sets should continue falling back to cover art; if the reported mixed set does contain a valid standard `.osu`, fix the catalog selection path so it appears.
+- [ ] Debug .osu file backfill may stuck at "queued, waiting for network or background worker to start"
 
 ### UIUX
 - [ ] Add frosted glass fade to most of the components that involves scrolling. 

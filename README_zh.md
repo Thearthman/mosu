@@ -5,7 +5,7 @@
 # Mosu — 面向 Android 的离线 osu! 谱面库
 
 ## 简介
-Mosu 允许您使用 osu! 账号登录，浏览您玩过或收藏的谱面集，从公共镜像下载，并建立离线收藏。它会从每个 `.osz` 中提取音频和封面，将谱面元数据存储在 Room 数据库中，并使用 Media3/ExoPlayer 播放提取出的音频。
+Mosu 让你可以使用 osu! 账号登录，浏览你玩过或收藏的谱面集，从公共镜像下载它们，并建立离线收藏。它让你能直接在手机上查看喜爱的谱面，并专门内置了打击音效机制，让你随时随地都能在脑海中练习谱面！
 
 ## 下载
 📥 **最新版本**: [从 GitHub Releases 下载](https://github.com/Thearthman/mosu/releases/latest)

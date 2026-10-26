@@ -45,7 +45,7 @@ class OsuRenderTypesTest {
     }
 
     @Test
-    fun activeObjectQueryReturnsOnlyObjectsWhoseIntervalsOverlap() {
+    fun activeObjectQueryReturnsOverlappingObjectsBackToFront() {
         val first = OsuCircleObject(
             startTimeMs = 1_000.0,
             position = RenderPoint(10f, 10f),
@@ -70,9 +70,21 @@ class OsuRenderTypesTest {
 
         assertEquals(emptyList<Int>(), activeComboNumbers(timeline, 399.0))
         assertEquals(listOf(1), activeComboNumbers(timeline, 400.0))
-        assertEquals(listOf(1, 2), activeComboNumbers(timeline, 800.0))
-        assertEquals(listOf(1, 2), activeComboNumbers(timeline, 1_239.0))
+        assertEquals(listOf(2, 1), activeComboNumbers(timeline, 800.0))
+        assertEquals(listOf(2, 1), activeComboNumbers(timeline, 1_239.0))
         assertEquals(listOf(2), activeComboNumbers(timeline, 1_241.0))
+    }
+
+    @Test
+    fun sliderBodyRevealsBehindTheBallDuringItsFirstSpan() {
+        val slider = slider(spanCount = 2, spanDurationMs = 1_000.0)
+
+        assertEquals(0f, slider.revealedPathLengthAt(-1.0), 0.0001f)
+        assertEquals(0f, slider.revealedPathLengthAt(0.0), 0.0001f)
+        assertEquals(25f, slider.revealedPathLengthAt(250.0), 0.0001f)
+        assertEquals(100f, slider.revealedPathLengthAt(1_000.0), 0.0001f)
+        assertEquals(100f, slider.revealedPathLengthAt(1_500.0), 0.0001f)
+        assertEquals(100f, slider.revealedPathLengthAt(2_000.0), 0.0001f)
     }
 
     @Test

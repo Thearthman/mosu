@@ -128,8 +128,6 @@ class OsuRenderer(private val skin: OsuSkin) {
             .coerceIn(0.0, 1.0).toFloat()
         val trackAlpha = fadeIn * (1f - afterEnd)
         if (trackAlpha > 0f) {
-            val snakeProgress = ((time - obj.activeStartMs) / (obj.preemptMs / 3.0))
-                .coerceIn(0.0, 1.0).toFloat()
             val colour = comboColour(timeline, obj.comboColourIndex)
             val trackColour = timeline.sliderTrackOverride
                 ?: skin.sliderTrackOverride
@@ -140,13 +138,14 @@ class OsuRenderer(private val skin: OsuSkin) {
             drawSliderTrack(
                 canvas = canvas,
                 slider = obj,
-                trackedLength = obj.path.length * snakeProgress,
+                trackedLength = obj.revealedPathLengthAt(time),
                 trackColour = trackColour,
                 borderColour = borderColour,
                 alpha = trackAlpha
             )
-            drawSliderTail(canvas, obj, colour, trackAlpha)
-            drawRepeatArrows(canvas, obj, colour, trackAlpha)
+            if (time >= obj.startTimeMs + obj.spanDurationMs) {
+                drawRepeatArrows(canvas, obj, colour, trackAlpha)
+            }
         }
 
         val headAlpha = fadeIn * postHitAlpha(obj.startTimeMs, time)
@@ -627,33 +626,6 @@ class OsuRenderer(private val skin: OsuSkin) {
             setStroke(Color.WHITE, alpha * 0.75f, max(1.5f, fallbackDiameter * 0.025f))
             canvas.drawCircle(centre.x, centre.y, fallbackDiameter / 2f, strokePaint)
         }
-    }
-
-    private fun drawSliderTail(
-        canvas: Canvas,
-        slider: OsuSliderObject,
-        colour: Int,
-        alpha: Float
-    ) {
-        val finalFraction = if (slider.spanCount % 2 == 0) 0f else 1f
-        val tail = slider.stackedPosition +
-            (slider.path.positionAtFraction(finalFraction) - slider.position)
-        val hasPrefixedEnd = skin.sliderEndCircle != null
-        drawCirclePiece(
-            canvas = canvas,
-            centre = tail,
-            objectScale = slider.objectScale,
-            sizeMultiplier = 1f,
-            comboNumber = null,
-            colour = colour,
-            alpha = alpha,
-            baseBitmap = skin.sliderEndCircle ?: skin.hitCircle,
-            overlayBitmap = if (hasPrefixedEnd) {
-                skin.sliderEndOverlay
-            } else {
-                skin.hitCircleOverlay
-            }
-        )
     }
 
     private fun drawRepeatArrows(

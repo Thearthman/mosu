@@ -187,6 +187,20 @@ data class OsuSliderObject(
 ) : OsuRenderObject() {
     val repeatCount: Int get() = (spanCount - 1).coerceAtLeast(0)
 
+    /**
+     * Distance revealed behind the slider ball. Before activation only the
+     * slider head is visible; during the first slide the body grows to follow
+     * the ball. Repeats keep the path revealed after the ball has reached the
+     * far edge once.
+     */
+    fun revealedPathLengthAt(timeMs: Double): Float {
+        if (timeMs <= startTimeMs || path.length <= 0f) return 0f
+        if (spanDurationMs <= 0.0) return path.length
+        val firstSpanProgress = ((timeMs - startTimeMs) / spanDurationMs)
+            .coerceIn(0.0, 1.0)
+        return path.length * firstSpanProgress.toFloat()
+    }
+
     /** The slider ball's gameplay path position at [timeMs], including repeats. */
     fun pathPositionAt(timeMs: Double): RenderPoint {
         if (spanCount <= 0 || spanDurationMs <= 0.0) return path.points.firstOrNull() ?: position
@@ -248,7 +262,9 @@ data class OsuRenderTimeline(
 
     /**
      * Iterates only objects whose preempt/fade interval can be visible at
-     * [timeMs]. No list is allocated on the frame path.
+     * [timeMs], from latest to earliest. Drawing in this order puts objects
+     * further in the future underneath the preceding object, matching osu!'s
+     * back-to-front hit-object ordering. No list is allocated on the frame path.
      */
     inline fun forEachActiveObject(timeMs: Double, block: (OsuRenderObject) -> Unit) {
         val ordered = activeOrder
@@ -271,11 +287,11 @@ data class OsuRenderTimeline(
         while (firstRelevant > 0 && activeStarts[firstRelevant - 1] >= earliestRelevantStart) {
             firstRelevant--
         }
-        var index = firstRelevant
-        while (index <= candidate) {
+        var index = candidate
+        while (index >= firstRelevant) {
             val obj = objects[ordered[index]]
             if (timeMs <= obj.activeEndMs) block(obj)
-            index++
+            index--
         }
     }
 }

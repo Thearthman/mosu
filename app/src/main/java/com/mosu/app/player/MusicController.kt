@@ -37,6 +37,9 @@ class MusicController(
     private val _nowPlaying = MutableStateFlow<MediaMetadata?>(null)
     val nowPlaying = _nowPlaying.asStateFlow()
 
+    private val _currentMediaId = MutableStateFlow<Long?>(null)
+    val currentMediaId = _currentMediaId.asStateFlow()
+
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
 
@@ -63,6 +66,7 @@ class MusicController(
             controller.addListener(object : Player.Listener {
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     _nowPlaying.value = mediaItem?.mediaMetadata
+                    _currentMediaId.value = mediaItem?.mediaId?.toLongOrNull()
                     _duration.value = controller.duration.coerceAtLeast(0L)
                 }
 
@@ -86,6 +90,7 @@ class MusicController(
             })
             // Initialize state
             _nowPlaying.value = controller.currentMediaItem?.mediaMetadata
+            _currentMediaId.value = controller.currentMediaItem?.mediaId?.toLongOrNull()
             _isPlaying.value = controller.isPlaying
             _repeatMode.value = controller.repeatMode
             _shuffleModeEnabled.value = controller.shuffleModeEnabled
@@ -190,7 +195,23 @@ class MusicController(
         controller?.seekTo(positionMs)
         _currentPosition.value = positionMs
     }
-    
+
+    /**
+     * High-resolution playback position for frame-driven views. The 300 ms
+     * [currentPosition] flow is intentionally kept for cheap progress-bar updates.
+     */
+    fun currentPositionMs(): Long = controller?.currentPosition?.coerceAtLeast(0L)
+        ?: _currentPosition.value
+
+    /**
+     * Playback speed used by the media clock. Frame-driven previews need this
+     * to advance map time between quarter-second position samples.
+     */
+    fun currentPlaybackSpeed(): Float =
+        controller?.playbackParameters?.speed
+            ?.takeIf { it.isFinite() && it > 0f }
+            ?: _playbackMod.value.speed
+
     fun toggleShuffleMode() {
         val controller = this.controller ?: return
         val newEnabled = !controller.shuffleModeEnabled

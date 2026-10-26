@@ -129,6 +129,11 @@
     <string name="score_cd_collapse">收合 %1$s</string>
     <string name="score_cd_expand">展開 %1$s</string>
 
+    <!-- 播放器 -->
+    <string name="player_select_difficulty">選擇難度</string>
+    <string name="player_show_cover">顯示封面</string>
+    <string name="player_show_renderer">顯示譜面渲染</string>
+
     <!-- 帳戶 -->
     <string name="profile_login_title">未登錄</string>
     <string name="profile_login_description">點擊以登錄 osu!</string>
@@ -184,9 +189,13 @@
     <string name="profile_restore_failed_toast">恢復失敗: %1$s</string>
     <string name="profile_debug_menu">除錯</string>
     <string name="profile_debug_fix_metadata">修復譜面元資料</string>
+    <string name="profile_debug_fix_missing_osu">修復缺失的 .osu 檔案</string>
     <string name="profile_debug_repair_none">沒有可修復的譜面</string>
     <string name="profile_debug_repair_clean">已修復 %1$d/%2$d 個譜面集</string>
     <string name="profile_debug_repair_result">已修復 %1$d/%2$d 個譜面集，跳過 %3$d (%4$s)</string>
+    <string name="profile_debug_missing_osu_none">沒有譜面集需要修復 .osu 檔案</string>
+    <string name="profile_debug_missing_osu_clean">已修復 %1$d/%2$d 個譜面集的 .osu 檔案</string>
+    <string name="profile_debug_missing_osu_result">已修復 %1$d/%2$d 個譜面集的 .osu 檔案，跳過 %3$d (%4$s)</string>
     <string name="profile_config_backup_title">設定備份</string>
     <string name="profile_config_backup_desc">匯出或匯入曲庫、歌單和播放記錄。</string>
     <string name="profile_config_export">匯出</string>

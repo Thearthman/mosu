@@ -49,6 +49,7 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.repair.BeatmapMetadataRepairService
+import com.mosu.app.domain.repair.MissingOsuBackfillService
 import com.mosu.app.domain.restore.RestoreDownloadsService
 import com.mosu.app.utils.RegionUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -119,6 +120,7 @@ fun ProfileScreen(
     // Debug tools state
     var debugMenuExpanded by remember { mutableStateOf(false) }
     var isRepairingMetadata by remember { mutableStateOf(false) }
+    var isRepairingOsu by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -794,9 +796,9 @@ fun ProfileScreen(
                     Box {
                         OutlinedButton(
                             onClick = { debugMenuExpanded = true },
-                            enabled = !isRepairingMetadata
+                            enabled = !isRepairingMetadata && !isRepairingOsu
                         ) {
-                            if (isRepairingMetadata) {
+                            if (isRepairingMetadata || isRepairingOsu) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
@@ -856,6 +858,62 @@ fun ProfileScreen(
                                                 ).show()
                                             } finally {
                                                 isRepairingMetadata = false
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.profile_debug_fix_missing_osu)) },
+                                onClick = {
+                                    debugMenuExpanded = false
+                                    if (!isRepairingMetadata && !isRepairingOsu) {
+                                        isRepairingOsu = true
+                                        scope.launch {
+                                            try {
+                                                val result = MissingOsuBackfillService(
+                                                    context = context,
+                                                    db = db,
+                                                    settingsManager = settingsManager
+                                                ).repairAll()
+                                                val message = when {
+                                                    result.total == 0 ->
+                                                        context.getString(
+                                                            R.string.profile_debug_missing_osu_none
+                                                        )
+                                                    result.skipped == 0 ->
+                                                        context.getString(
+                                                            R.string.profile_debug_missing_osu_clean,
+                                                            result.repaired,
+                                                            result.total
+                                                        )
+                                                    else -> {
+                                                        val reasons = result.failureReasons.entries
+                                                            .joinToString(", ") {
+                                                                "${it.key} ×${it.value}"
+                                                            }
+                                                        context.getString(
+                                                            R.string.profile_debug_missing_osu_result,
+                                                            result.repaired,
+                                                            result.total,
+                                                            result.skipped,
+                                                            reasons
+                                                        )
+                                                    }
+                                                }
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    message,
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    e.message ?: "Missing .osu repair failed",
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            } finally {
+                                                isRepairingOsu = false
                                             }
                                         }
                                     }
@@ -1074,7 +1132,7 @@ private fun MirrorSourceToggle(
     currentSource: String,
     onSourceSelected: (String) -> Unit
 ) {
-    val options = listOf("nerinyan", "sayobot")
+    val options = listOf("nerinyan", "sayobot", "catboy")
     val isLightTheme = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     val outerPillColor = if (isLightTheme) {
         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
@@ -1110,12 +1168,12 @@ private fun MirrorSourceToggle(
                         .clip(RoundedCornerShape(20.dp))
                         .background(backgroundColor)
                         .clickable { onSourceSelected(option) }
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = option.uppercase(),
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = contentColor,
                         maxLines = 1
                     )

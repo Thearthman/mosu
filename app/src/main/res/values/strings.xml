@@ -131,6 +131,11 @@
     <string name="score_cd_collapse">Collapse %1$s</string>
     <string name="score_cd_expand">Expand %1$s</string>
 
+    <!-- Player -->
+    <string name="player_select_difficulty">Select difficulty</string>
+    <string name="player_show_cover">Show cover art</string>
+    <string name="player_show_renderer">Show beatmap renderer</string>
+
     <!-- Account -->
     <string name="profile_login_title">Not signed in</string>
     <string name="profile_login_description">Tap to sign in with osu!</string>
@@ -186,9 +191,13 @@
     <string name="profile_restore_failed_toast">Restore failed: %1$s</string>
     <string name="profile_debug_menu">Debug</string>
     <string name="profile_debug_fix_metadata">Fix beatmap metadata</string>
+    <string name="profile_debug_fix_missing_osu">Fix missing .osu files</string>
     <string name="profile_debug_repair_none">No beatmaps to repair</string>
     <string name="profile_debug_repair_clean">Repaired %1$d of %2$d beatmapsets</string>
     <string name="profile_debug_repair_result">Repaired %1$d of %2$d beatmapsets, skipped %3$d (%4$s)</string>
+    <string name="profile_debug_missing_osu_none">No beatmap sets need .osu repair</string>
+    <string name="profile_debug_missing_osu_clean">Repaired .osu files for %1$d of %2$d beatmapsets</string>
+    <string name="profile_debug_missing_osu_result">Repaired .osu files for %1$d of %2$d beatmapsets, skipped %3$d (%4$s)</string>
     <string name="profile_config_backup_title">Config Backup</string>
     <string name="profile_config_backup_desc">Export or import the library, playlists, and played history.</string>
     <string name="profile_config_export">Export</string>

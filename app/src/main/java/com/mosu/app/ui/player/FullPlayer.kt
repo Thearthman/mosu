@@ -1,6 +1,7 @@
 package com.mosu.app.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -43,10 +46,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +61,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -64,10 +71,29 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import com.mosu.app.R
+import com.mosu.app.data.SettingsManager
+import com.mosu.app.data.db.AppDatabase
+import com.mosu.app.domain.render.OsuDifficultyMap
+import com.mosu.app.domain.render.OsuMapPreviewLoader
+import com.mosu.app.domain.render.OsuPlayfieldSize
+import com.mosu.app.domain.render.OsuPreviewCatalog
+import com.mosu.app.domain.render.OsuRenderTimeline
+import com.mosu.app.domain.render.OsuRenderer
+import com.mosu.app.domain.render.OsuSkin
+import com.mosu.app.domain.render.OsuSkinLoader
+import com.mosu.app.domain.render.SmoothPlaybackClock
 import com.mosu.app.player.MusicController
 import com.mosu.app.player.PlaybackMod
 import com.mosu.app.ui.components.Track
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
+import kotlinx.coroutines.flow.collect
 
 // -- Responsive layout ---------------------------------------------------------
 // The full player was designed against a 1216 x 2640 px panel (~2.874 density,
@@ -105,11 +131,24 @@ private const val WIDE_HORIZONTAL_RATIO = 1.5f
 // of the cover art) rather than the row height, which balloons them on short/wide screens.
 private const val H_SIDE_BUTTON_WIDTH_FRACTION = 0.18f
 private const val H_PLAY_BUTTON_WIDTH_FRACTION = 0.20f
+private const val PREVIEW_ASPECT_RATIO = 7f / 6f
+private val PreviewEdgeInset = 8.dp
+private val PreviewBorderWidth = 1.dp
+
+private data class OsuPreviewData(
+    val mediaId: Long,
+    val catalog: OsuPreviewCatalog,
+    val selectedDifficulty: String,
+    val timeline: OsuRenderTimeline?
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullPlayer(
     musicController: MusicController,
+    settingsManager: SettingsManager,
+    db: AppDatabase,
+    isExpanded: Boolean,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -117,6 +156,80 @@ fun FullPlayer(
     val isPlaying by musicController.isPlaying.collectAsState()
     val duration by musicController.duration.collectAsState()
     val playbackMod by musicController.playbackMod.collectAsState()
+    val currentMediaId by musicController.currentMediaId.collectAsState()
+    val rendererPreference by settingsManager.rendererEnabled.collectAsState(initial = null)
+    val rendererEnabled = rendererPreference ?: true
+    val preferenceLoaded = rendererPreference != null
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val previewLoader = remember(context, db) { OsuMapPreviewLoader(context, db) }
+    var previewData by remember { mutableStateOf<OsuPreviewData?>(null) }
+    var skin by remember { mutableStateOf<OsuSkin?>(null) }
+
+    LaunchedEffect(
+        preferenceLoaded,
+        rendererEnabled,
+        isExpanded,
+        currentMediaId,
+        previewLoader
+    ) {
+        val mediaId = currentMediaId
+        if (!preferenceLoaded || !rendererEnabled || !isExpanded || mediaId == null) {
+            return@LaunchedEffect
+        }
+        if (previewData?.mediaId == mediaId) return@LaunchedEffect
+        if (previewData?.mediaId != mediaId) previewData = null
+        val catalog = previewLoader.loadCatalog(mediaId) ?: return@LaunchedEffect
+        previewData = OsuPreviewData(
+            mediaId = mediaId,
+            catalog = catalog,
+            selectedDifficulty = catalog.defaultDifficultyName,
+            timeline = null
+        )
+    }
+
+    LaunchedEffect(
+        previewData?.mediaId,
+        previewData?.selectedDifficulty,
+        rendererEnabled,
+        isExpanded
+    ) {
+        val data = previewData ?: return@LaunchedEffect
+        if (!preferenceLoaded || !rendererEnabled || !isExpanded || data.timeline != null) {
+            return@LaunchedEffect
+        }
+        val timeline = previewLoader.loadTimeline(data.catalog, data.selectedDifficulty)
+        val latest = previewData
+        if (
+            latest?.mediaId == data.mediaId &&
+            latest.selectedDifficulty == data.selectedDifficulty
+        ) {
+            previewData = latest.copy(timeline = timeline)
+        }
+    }
+
+    LaunchedEffect(preferenceLoaded, rendererEnabled, isExpanded) {
+        if (!preferenceLoaded || !rendererEnabled || !isExpanded || skin != null) {
+            return@LaunchedEffect
+        }
+        skin = withContext(Dispatchers.IO) {
+            runCatching { OsuSkinLoader.load(context) }.getOrNull()
+        }
+    }
+
+    val activePreview = previewData?.takeIf { it.mediaId == currentMediaId }
+    val onRendererEnabledChange: (Boolean) -> Unit = { enabled ->
+        scope.launch { settingsManager.saveRendererEnabled(enabled) }
+    }
+    val onDifficultySelected: (String) -> Unit = { difficultyName ->
+        val current = previewData
+        if (current != null && current.mediaId == currentMediaId) {
+            previewData = current.copy(
+                selectedDifficulty = difficultyName,
+                timeline = null
+            )
+        }
+    }
 
     if (nowPlaying != null) {
         BoxWithConstraints(
@@ -170,6 +283,13 @@ fun FullPlayer(
                     title = title,
                     artist = artist,
                     onCollapse = onCollapse,
+                    isExpanded = isExpanded,
+                    currentMediaId = currentMediaId,
+                    rendererEnabled = rendererEnabled,
+                    previewData = activePreview,
+                    skin = skin,
+                    onRendererEnabledChange = onRendererEnabledChange,
+                    onDifficultySelected = onDifficultySelected,
                     wideMode = isWideHorizontal,
                     modifier = Modifier
                 )
@@ -183,6 +303,13 @@ fun FullPlayer(
                     title = title,
                     artist = artist,
                     onCollapse = onCollapse,
+                    isExpanded = isExpanded,
+                    currentMediaId = currentMediaId,
+                    rendererEnabled = rendererEnabled,
+                    previewData = activePreview,
+                    skin = skin,
+                    onRendererEnabledChange = onRendererEnabledChange,
+                    onDifficultySelected = onDifficultySelected,
                     modifier = Modifier
                 )
             }
@@ -205,6 +332,13 @@ private fun VerticalPlayerLayout(
     title: String,
     artist: String,
     onCollapse: () -> Unit,
+    isExpanded: Boolean,
+    currentMediaId: Long?,
+    rendererEnabled: Boolean,
+    previewData: OsuPreviewData?,
+    skin: OsuSkin?,
+    onRendererEnabledChange: (Boolean) -> Unit,
+    onDifficultySelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -236,12 +370,30 @@ private fun VerticalPlayerLayout(
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            CoverArt(artworkUri = artworkUri)
+            PlayerArtwork(
+                artworkUri = artworkUri,
+                timeline = previewData?.timeline,
+                skin = skin,
+                musicController = musicController,
+                isExpanded = isExpanded,
+                isPlaying = isPlaying,
+                currentMediaId = currentMediaId,
+                landscape = false,
+                rendererEnabled = rendererEnabled
+            )
         }
 
         Spacer(modifier = Modifier.height(50.dp))
 
-        TrackInfo(title = title, artist = artist)
+        TrackInfo(
+            title = title,
+            artist = artist,
+            rendererEnabled = rendererEnabled,
+            selectedDifficulty = previewData?.selectedDifficulty,
+            difficulties = previewData?.catalog?.difficulties.orEmpty(),
+            onRendererEnabledChange = onRendererEnabledChange,
+            onDifficultySelected = onDifficultySelected
+        )
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -288,6 +440,13 @@ private fun HorizontalPlayerLayout(
     title: String,
     artist: String,
     onCollapse: () -> Unit,
+    isExpanded: Boolean,
+    currentMediaId: Long?,
+    rendererEnabled: Boolean,
+    previewData: OsuPreviewData?,
+    skin: OsuSkin?,
+    onRendererEnabledChange: (Boolean) -> Unit,
+    onDifficultySelected: (String) -> Unit,
     wideMode: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -316,10 +475,16 @@ private fun HorizontalPlayerLayout(
             // Collapse handle in the top-right corner so it doesn't consume info-column space.
 
 
-            CoverArt(
+            PlayerArtwork(
                 artworkUri = artworkUri,
-                modifier = Modifier
-                    .fillMaxHeight()
+                timeline = previewData?.timeline,
+                skin = skin,
+                musicController = musicController,
+                isExpanded = isExpanded,
+                isPlaying = isPlaying,
+                currentMediaId = currentMediaId,
+                landscape = true,
+                rendererEnabled = rendererEnabled
             )
             Column(
                 modifier = Modifier
@@ -346,7 +511,16 @@ private fun HorizontalPlayerLayout(
                     // Wide mode: the info block sits toward the bottom of the column with
                     // the progress bar pinned to the very bottom (aligned with the cover).
                     Spacer(Modifier.weight(1f))
-                    TrackInfo(title = title, artist = artist, titleMaxLines = 2)
+                    TrackInfo(
+                        title = title,
+                        artist = artist,
+                        titleMaxLines = 2,
+                        rendererEnabled = rendererEnabled,
+                        selectedDifficulty = previewData?.selectedDifficulty,
+                        difficulties = previewData?.catalog?.difficulties.orEmpty(),
+                        onRendererEnabledChange = onRendererEnabledChange,
+                        onDifficultySelected = onDifficultySelected
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     PlayerControls(
                         musicController = musicController,
@@ -361,7 +535,16 @@ private fun HorizontalPlayerLayout(
                     )
                 } else {
                     Spacer(Modifier.weight(H_INFO_TOP_WEIGHT))
-                    TrackInfo(title = title, artist = artist, titleMaxLines = 2)
+                    TrackInfo(
+                        title = title,
+                        artist = artist,
+                        titleMaxLines = 2,
+                        rendererEnabled = rendererEnabled,
+                        selectedDifficulty = previewData?.selectedDifficulty,
+                        difficulties = previewData?.catalog?.difficulties.orEmpty(),
+                        onRendererEnabledChange = onRendererEnabledChange,
+                        onDifficultySelected = onDifficultySelected
+                    )
                     Spacer(modifier = Modifier.height(20.dp))
                     PlayerControls(
                         musicController = musicController,
@@ -411,29 +594,211 @@ private fun CoverArt(
 }
 
 @Composable
+private fun PlayerArtwork(
+    artworkUri: Any?,
+    timeline: OsuRenderTimeline?,
+    skin: OsuSkin?,
+    musicController: MusicController,
+    isExpanded: Boolean,
+    isPlaying: Boolean,
+    currentMediaId: Long?,
+    landscape: Boolean,
+    rendererEnabled: Boolean
+) {
+    if (!rendererEnabled || timeline == null || skin == null) {
+        CoverArt(artworkUri = artworkUri)
+        return
+    }
+
+    var mapTimeMs by remember(timeline, currentMediaId) {
+        mutableDoubleStateOf(musicController.currentPositionMs().toDouble())
+    }
+    val playbackClock = remember { SmoothPlaybackClock() }
+    LaunchedEffect(isExpanded, isPlaying, timeline, currentMediaId) {
+        if (!isExpanded) return@LaunchedEffect
+        mapTimeMs = musicController.currentPositionMs().toDouble()
+        if (isPlaying) {
+            var firstFrame = true
+            while (isActive) {
+                withFrameNanos { frameNanos ->
+                    val reportedPositionMs = musicController.currentPositionMs()
+                    if (firstFrame) {
+                        playbackClock.reset(reportedPositionMs, frameNanos)
+                        mapTimeMs = reportedPositionMs.toDouble()
+                        firstFrame = false
+                    } else {
+                        mapTimeMs = playbackClock.update(
+                            frameNanos = frameNanos,
+                            reportedPositionMs = reportedPositionMs,
+                            playbackSpeed = musicController.currentPlaybackSpeed()
+                        )
+                    }
+                }
+            }
+        } else {
+            // Keep a paused seek responsive without running a frame loop.
+            musicController.currentPosition.collect { positionMs ->
+                mapTimeMs = positionMs.toDouble()
+            }
+        }
+    }
+
+    val renderer = remember(skin) { OsuRenderer(skin) }
+    val sizeModifier = if (landscape) {
+        Modifier
+            .fillMaxHeight()
+            .aspectRatio(PREVIEW_ASPECT_RATIO)
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(PREVIEW_ASPECT_RATIO)
+    }
+
+    Box(
+        modifier = sizeModifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF05050A))
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            renderer.draw(
+                canvas = drawContext.canvas.nativeCanvas,
+                timeline = timeline,
+                mapTimeMs = mapTimeMs,
+                playfieldSize = OsuPlayfieldSize(size.width, size.height),
+                edgeInsetPx = PreviewEdgeInset.toPx(),
+                borderWidthPx = PreviewBorderWidth.toPx()
+            )
+        }
+    }
+}
+
+@Composable
 private fun TrackInfo(
     title: String,
     artist: String,
+    rendererEnabled: Boolean,
+    selectedDifficulty: String?,
+    difficulties: List<OsuDifficultyMap>,
+    onRendererEnabledChange: (Boolean) -> Unit,
+    onDifficultySelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     titleMaxLines: Int = 1
 ) {
-    Column(
+    Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.Start
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            maxLines = titleMaxLines,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Text(
-            text = artist,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                maxLines = titleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = artist,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (difficulties.size > 1) {
+                DifficultySelector(
+                    selectedDifficulty = selectedDifficulty ?: difficulties.first().difficultyName,
+                    difficulties = difficulties,
+                    onDifficultySelected = onDifficultySelected
+                )
+            }
+            RendererToggle(
+                enabled = rendererEnabled,
+                onEnabledChange = onRendererEnabledChange
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DifficultySelector(
+    selectedDifficulty: String,
+    difficulties: List<OsuDifficultyMap>,
+    onDifficultySelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 156.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { expanded = true }
+                .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = selectedDifficulty,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.player_select_difficulty),
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            difficulties.forEach { difficulty ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = difficulty.difficultyName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        if (difficulty.difficultyName != selectedDifficulty) {
+                            onDifficultySelected(difficulty.difficultyName)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RendererToggle(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit
+) {
+    IconButton(
+        onClick = { onEnabledChange(!enabled) },
+        modifier = Modifier.size(34.dp)
+    ) {
+        Icon(
+            imageVector = if (enabled) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+            contentDescription = stringResource(
+                if (enabled) R.string.player_show_cover else R.string.player_show_renderer
+            ),
+            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+            modifier = Modifier.size(20.dp)
         )
     }
 }

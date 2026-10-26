@@ -16,6 +16,9 @@ interface BeatmapDao {
     @Query("SELECT * FROM beatmaps WHERE beatmapSetId = :setId")
     suspend fun getTracksForSet(setId: Long): List<BeatmapEntity>
 
+    @Query("SELECT * FROM beatmaps WHERE uid = :uid LIMIT 1")
+    suspend fun getBeatmapByUid(uid: Long): BeatmapEntity?
+
     @Query("SELECT DISTINCT beatmapSetId FROM beatmaps")
     suspend fun getDistinctSetIds(): List<Long>
 

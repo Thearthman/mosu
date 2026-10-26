@@ -27,13 +27,16 @@ class ZipExtractor(private val context: Context) {
             ZipFile(oszFile).use { zip ->
                 val entriesList = zip.entries().toList()
                 
-                // Extract .osu files to parse them
-                entriesList.filter { it.name.endsWith(".osu") }.forEach { entry ->
-                    val dest = File(outputDir, entry.name)
+                // Retain every .osu difficulty: metadata is derived from these files
+                // during download, and the Full Player renderer reads them later.
+                entriesList.filter {
+                    !it.isDirectory && it.name.endsWith(".osu", ignoreCase = true)
+                }.forEach { entry ->
+                    val dest = safeDestination(outputDir, entry.name)
                     zip.getInputStream(entry).use { input ->
                         FileOutputStream(dest).use { output -> input.copyTo(output) }
                     }
-                    osuFiles.add(entry.name)
+                    osuFiles.add(entry.name.replace("\\", "/"))
                 }
 
                 // 2. Parse each .osu file to find associations
@@ -158,8 +161,6 @@ class ZipExtractor(private val context: Context) {
                             }
                         }
                     }
-                    // Delete .osu file after parsing (optional, maybe keep for future)
-                    osuFile.delete()
                 }
             }
         } catch (e: Exception) {
@@ -176,6 +177,17 @@ class ZipExtractor(private val context: Context) {
         }
         
         return@withContext extractedTracks
+    }
+
+    private fun safeDestination(outputDir: File, entryName: String): File {
+        val destination = File(outputDir, entryName.replace("\\", "/"))
+        val outputRoot = outputDir.canonicalFile
+        val destinationFile = destination.canonicalFile
+        if (!destinationFile.path.startsWith(outputRoot.path + File.separator)) {
+            throw IOException("Unsafe zip entry path: $entryName")
+        }
+        destination.parentFile?.mkdirs()
+        return destination
     }
 
     private data class OsuMetadata(

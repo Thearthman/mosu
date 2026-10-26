@@ -30,10 +30,11 @@ class SettingsManager(private val context: Context) {
         private val ONLY_LEADERBOARD_KEY = booleanPreferencesKey("only_leaderboard_enabled")
         private val RECENT_PLAY_HISTORY_KEY = booleanPreferencesKey("recent_play_history_enabled")
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
+        private val RENDERER_ENABLED_KEY = booleanPreferencesKey("renderer_enabled")
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
         private val SCORE_MODE_FILTER_KEY = stringPreferencesKey("score_mode_filter") // "osu", "taiko", "fruits", "mania", "all"
-        private val PREFERRED_MIRROR_KEY = stringPreferencesKey("preferred_mirror") // "nerinyan" or "sayobot"
+        private val PREFERRED_MIRROR_KEY = stringPreferencesKey("preferred_mirror") // "nerinyan", "sayobot", or "catboy"
         private val API_SOURCE_KEY_OLD = stringPreferencesKey("api_source") // Deprecated
         private val REGION_CHECKED_KEY = booleanPreferencesKey("region_checked")
         private val DETECTED_REGION_KEY = stringPreferencesKey("detected_region")
@@ -137,6 +138,11 @@ class SettingsManager(private val context: Context) {
             preferences[INFO_COVER_KEY] ?: true
         }
 
+    val rendererEnabled: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[RENDERER_ENABLED_KEY] ?: true
+        }
+
     val shuffleModeEnabled: Flow<Boolean> = context.settingsDataStore.data
         .map { preferences ->
             preferences[SHUFFLE_MODE_KEY] ?: false
@@ -185,6 +191,12 @@ class SettingsManager(private val context: Context) {
     suspend fun saveInfoCoverEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[INFO_COVER_KEY] = enabled
+        }
+    }
+
+    suspend fun saveRendererEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[RENDERER_ENABLED_KEY] = enabled
         }
     }
 

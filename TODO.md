@@ -9,6 +9,7 @@
 - [ ] Add frosted glass fade to most of the components that involves scrolling. 
 - [ ] Fix the UI scaling issue.
 - [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
+- [ ] [v1.3] Reimagine the entire Landscape UI.
 
 ### Features
 
@@ -17,11 +18,21 @@
 - [ ] [v1.2] Implement Activity Heatmap from recent play data with week, month, and year views.
 - [ ] [v1.2] Implement song recommendations based on tags, genre, and related metadata.
 - [ ] [v1.3] Implement smart playlist generation based on how long the user stays on songs in random play mode.
-- [ ] [v1.2] Implement DJ mixing for smooth transition
+- [ ] [v1.4] Implement DJ mixing for smooth transition
+- [ ] [v1.2] Add the homepage widget
+- [ ] [v1.2] Implement beatmap viewing in Full Player, replacing the cover area.
+  - **Local assets:** Retain every `.osu` file extracted from every downloaded `.osz`; stop deleting them in `ZipExtractor`. Persist audio, cover, and all map files, but do not retain hit sounds, storyboards, or video. Backfill older downloads by re-fetching map files only.
+  - **Sayobot:** Use the original full-archive URL, `https://dl.sayobot.cn/beatmaps/download/full/{setId}`, and follow its redirects; do not hard-code the current `tc1.sayobot.cn` prefix/suffix destination. Tested `v2/beatmapinfo` `bid_data` exposes only `audio` and `bg`, so the direct-file path never downloads any `.osu`; map files must come from the full `.osz`.
+  - **No diff tables:** Do not add beatmap-difficulty or hit-object tables to Room. Room remains the playback/library catalog. At playback, resolve the current media id to its `BeatmapEntity`/`beatmapSetId`, scan the stored `.osu` headers, and parse only the selected map off the main thread. Keep parsed maps in a regenerable in-memory cache.
+  - **Diff selection:** Group stored maps by `.osu` `AudioFilename`. Show a selector only when more than one map shares the currently playing audio; sets with one map per audio need none. Do not infer this from `isAlbum` or “pack” naming. Validate each map's `BeatmapSetID`.
+  - **Parser:** Parse `[General]`, `[Metadata]`, `[Difficulty]`, `[TimingPoints]`, `[Colours]`, `[Events]`, and `[HitObjects]`, including slider curves/repeats, spinners, hold notes, and ruleset mode. Build an immutable render timeline. Star rating is not present in `.osu`; fetch/cache it optionally from the API and allow rendering without it. `.osu` `Creator` is the set host, not necessarily the guest difficulty mapper.
+  - **Renderer:** Render from precomputed map data as a stateless `f(t)` using a high-resolution playback clock. Do not perform file I/O, parsing, state mutation, or avoidable allocations in the frame path, and never block audio playback. Start with osu! standard and fall back to cover art for unsupported rulesets until their renderers exist.
+  - **Default skin:** Ship a built-in default skin and honor map `[Colours]` where supported. Imported-skin support remains the separate v1.3 task.
 
 #### Settings
 - [ ] [v1.4] Add a display toggle for native-language (Unicode) beatmap titles/artists. Both are already stored in the DB (`titleUnicode`/`artistUnicode`); romaji is shown for now as the osu! standard. (Stage 5 of the beatmap-metadata source-of-truth rework.)
-- [ ] Add a guidance/help page for getting osu! credentials in the credential setup flow. Display the guidance markdown file from the repo root, or ask for the file if it is missing.
+- [ ] [v1.2] Add a guidance/help page for getting osu! credentials in the credential setup flow. Display the guidance markdown file from the repo root, or ask for the file if it is missing.
+- [ ] [v1.2] Add a debug action in the Profile debug menu that scans the local library and downloads only missing `.osu` diff files for each affected beatmapset. It must not re-register tracks or replace existing audio/cover files, and it should report how many sets were repaired versus skipped.
 
 #### Security
 - [ ] Re-add account credential (OAuth client id/secret) export/import to the config backup, but encrypt the credentials before writing them. The manifest currently omits credentials entirely; storing them would require an encryption method (e.g. AES-GCM with a user-supplied passphrase) so the exported JSON never contains them in plaintext.
@@ -35,6 +46,7 @@
 - [ ] Implement a current playing playlist that tracks songs to be played and songs already played. In random/shuffle mode, generate a shuffled queue up front instead of picking each next song independently.
 - [ ] Implement a current playing playlist display.
 - [ ] [v1.2] Add ability to view beatmap comments.
+- [ ] [v1.3] Add beatmap skin import option.
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.

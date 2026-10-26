@@ -57,6 +57,25 @@ In landscape, the full player becomes a wide CarPlay-style standby screen with l
   <img src="icons/readme/all-player-horizontal.jpg" width="100%" alt="horizontal CarPlay-style standby player with wide cover artwork and playback controls">
 </p>
 
+## Renderer attribution
+
+The Full Player's osu!standard preview uses the bundled **vv_idke_trail** skin,
+version **2.4**, by **[Garin] + Aristia + Various**. It was obtained from
+[SkinHub](https://skinhub.com/); the supplied skin files are also available in
+[bontalor/lor-osu-skin](https://github.com/bontalor/lor-osu-skin).
+
+Rendering behavior and timing formulas were adapted from [ppy/osu](https://github.com/ppy/osu)
+at commit [`4e11ab19feb423c905cf98d9b8fa34700a8aeffa`](https://github.com/ppy/osu/tree/4e11ab19feb423c905cf98d9b8fa34700a8aeffa),
+with reference to:
+
+- `osu.Game.Rulesets.Osu/Objects/Slider.cs`
+- `osu.Game.Rulesets.Osu/Objects/Drawables/DrawableOsuHitObject.cs`
+- `osu.Game.Rulesets.Osu/Objects/Drawables/DrawableSlider.cs`
+- `osu.Game.Rulesets.Osu/Skinning/Default/SpinnerRotationTracker.cs`
+- `osu.Game/Rulesets/Objects/SliderPath.cs`
+- `osu.Game/Beatmaps/IBeatmapDifficultyInfo.cs`
+
+ppy/osu is distributed under the MIT license; see its `LICENCE` file.
 
 ## Setup Tutorial
 

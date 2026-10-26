@@ -591,6 +591,9 @@ fun MainScreen(
         ) {
             FullPlayer(
                 musicController = musicController,
+                settingsManager = settingsManager,
+                db = db,
+                isExpanded = isSheetOpen,
                 onCollapse = {
                     scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
                 }

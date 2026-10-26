@@ -2,6 +2,7 @@ package com.mosu.app.player
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -9,6 +10,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.mosu.app.data.db.BeatmapEntity
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
 
 class MusicController(
     context: Context,
@@ -55,10 +58,16 @@ class MusicController(
     private val _shuffleModeEnabled = MutableStateFlow(false)
     val shuffleModeEnabled = _shuffleModeEnabled.asStateFlow()
 
-    private val _playbackMod = MutableStateFlow(PlaybackMod.NONE)
+    private val _playbackMod = PlaybackModSession.selection
     val playbackMod = _playbackMod.asStateFlow()
 
-    private var pendingSeek: PendingSeek? = null
+    private var positionSamplingJob: Job? = null
+    private var positionRequestInFlight = false
+    private var positionRequestToken = 0L
+    private var playbackClockEpoch = 0L
+    private var playbackClockAnchor: PlaybackClockAnchor? = null
+    private var lastPositionSample: PositionSample? = null
+    private var awaitingClockAdvance = false
 
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -69,8 +78,13 @@ class MusicController(
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     _nowPlaying.value = mediaItem?.mediaMetadata
                     _currentMediaId.value = mediaItem?.mediaId?.toLongOrNull()
-                    pendingSeek = null
+                    playbackClockEpoch++
+                    playbackClockAnchor = null
+                    lastPositionSample = null
+                    awaitingClockAdvance = true
+                    _currentPosition.value = 0L
                     _duration.value = controller.duration.coerceAtLeast(0L)
+                    requestPositionSampleIfActive()
                 }
 
                 override fun onPositionDiscontinuity(
@@ -79,12 +93,28 @@ class MusicController(
                     reason: Int
                 ) {
                     val positionMs = newPosition.positionMs.coerceAtLeast(0L)
-                    pendingSeek = null
+                    playbackClockEpoch++
+                    lastPositionSample = null
+                    awaitingClockAdvance = true
+                    playbackClockAnchor = PlaybackClockAnchor(
+                        positionMs = positionMs.toDouble(),
+                        atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+                        speed = controller.playbackParameters.speed,
+                        isPlaying = false
+                    )
                     _currentPosition.value = positionMs
+                    requestPositionSampleIfActive()
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    playbackClockAnchor = PlaybackClockAnchor(
+                        positionMs = currentPositionMs().toDouble(),
+                        atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+                        speed = controller.playbackParameters.speed,
+                        isPlaying = isPlaying && !awaitingClockAdvance
+                    )
                     _isPlaying.value = isPlaying
+                    requestPositionSampleIfActive()
                 }
 
                 override fun onRepeatModeChanged(repeatMode: Int) {
@@ -99,6 +129,7 @@ class MusicController(
                     if (playbackState == Player.STATE_READY) {
                         _duration.value = controller.duration.coerceAtLeast(0L)
                     }
+                    requestPositionSampleIfActive()
                 }
             })
             // Initialize state
@@ -136,6 +167,119 @@ class MusicController(
                 delay(300) // changed back to 300ms for smoother look
             }
         }
+    }
+
+    /**
+     * Starts polling the player-side ExoPlayer clock while the renderer is visible.
+     *
+     * MediaController.currentPosition is only an estimate refreshed by the session every
+     * three seconds. Polling it from the frame loop therefore stalls and then jumps. The
+     * custom command reads ExoPlayer.currentPosition in the service, where the audio clock
+     * actually lives, and returns the service-side completion timestamp with it.
+     */
+    fun startPositionSampling() {
+        if (positionSamplingJob?.isActive == true) return
+        playbackClockEpoch++
+        positionRequestInFlight = false
+        positionRequestToken++
+        lastPositionSample = null
+        awaitingClockAdvance = false
+        positionSamplingJob = scope.launch {
+            while (isActive) {
+                requestPositionSample()
+                delay(POSITION_SAMPLE_INTERVAL_MS)
+            }
+        }
+    }
+
+    fun stopPositionSampling() {
+        positionSamplingJob?.cancel()
+        positionSamplingJob = null
+        positionRequestInFlight = false
+        positionRequestToken++
+        playbackClockEpoch++
+        lastPositionSample = null
+        awaitingClockAdvance = false
+    }
+
+    private fun requestPositionSampleIfActive() {
+        if (positionSamplingJob?.isActive == true) {
+            requestPositionSample()
+        }
+    }
+
+    private fun requestPositionSample() {
+        val controller = this.controller ?: return
+        if (positionRequestInFlight) return
+
+        val mediaId = _currentMediaId.value ?: return
+        val epoch = playbackClockEpoch
+        val token = ++positionRequestToken
+        positionRequestInFlight = true
+
+        val future = runCatching {
+            controller.sendCustomCommand(PlaybackPositionProtocol.COMMAND, Bundle.EMPTY)
+        }.getOrElse {
+            positionRequestInFlight = false
+            return
+        }
+
+        future.addListener({
+            val result = runCatching { future.get() }.getOrNull()
+            scope.launch {
+                if (token == positionRequestToken) {
+                    positionRequestInFlight = false
+                }
+                if (result != null) {
+                    applyPositionSample(result, epoch, mediaId)
+                }
+            }
+        }, MoreExecutors.directExecutor())
+    }
+
+    private fun applyPositionSample(
+        result: SessionResult,
+        requestedEpoch: Long,
+        requestedMediaId: Long
+    ) {
+        if (
+            result.resultCode != SessionResult.RESULT_SUCCESS ||
+            requestedEpoch != playbackClockEpoch ||
+            requestedMediaId != _currentMediaId.value
+        ) {
+            return
+        }
+
+        val sampleMediaId = result.extras
+            .getString(PlaybackPositionProtocol.KEY_MEDIA_ID)
+            ?.toLongOrNull()
+        if (sampleMediaId != requestedMediaId) return
+
+        val samplePositionMs = result.extras
+            .getLong(PlaybackPositionProtocol.KEY_POSITION_MS)
+            .coerceAtLeast(0L)
+        val sampleSpeed = result.extras
+            .getFloat(PlaybackPositionProtocol.KEY_SPEED, 1f)
+            .coerceAtLeast(0f)
+        val previousSample = lastPositionSample
+        val advancedSincePreviousSample = previousSample == null ||
+            previousSample.hasAdvancedTo(samplePositionMs, sampleSpeed, result.completionTimeMs)
+        // After a seek or while buffering, Media3 can report "playing" while
+        // ExoPlayer.currentPosition is still stationary. Do not extrapolate through
+        // that gap: the next real sample would pull the preview backward.
+        if (awaitingClockAdvance && previousSample != null && advancedSincePreviousSample) {
+            awaitingClockAdvance = false
+        }
+        lastPositionSample = PositionSample(samplePositionMs, result.completionTimeMs)
+
+        playbackClockAnchor = PlaybackClockAnchor(
+            positionMs = samplePositionMs.toDouble(),
+            atElapsedRealtimeMs = result.completionTimeMs.toDouble(),
+            speed = sampleSpeed,
+            isPlaying = result.extras.getBoolean(PlaybackPositionProtocol.KEY_IS_PLAYING) &&
+                !awaitingClockAdvance &&
+                advancedSincePreviousSample
+        )
     }
 
     fun playSong(selectedBeatmap: BeatmapEntity, playlist: List<BeatmapEntity> = listOf(selectedBeatmap)) {
@@ -186,14 +330,29 @@ class MusicController(
     fun togglePlayPause() {
         val controller = this.controller ?: return
         if (controller.isPlaying) {
-            controller.pause()
+            pause()
         } else {
+            playbackClockAnchor = PlaybackClockAnchor(
+                positionMs = currentPositionMs().toDouble(),
+                atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+                speed = controller.playbackParameters.speed,
+                isPlaying = !awaitingClockAdvance
+            )
             controller.play()
+            requestPositionSampleIfActive()
         }
     }
     
     fun pause() {
-        controller?.pause()
+        val controller = this.controller ?: return
+        playbackClockAnchor = PlaybackClockAnchor(
+            positionMs = currentPositionMs().toDouble(),
+            atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+            speed = controller.playbackParameters.speed,
+            isPlaying = false
+        )
+        controller.pause()
+        requestPositionSampleIfActive()
     }
     
     fun skipToNext() {
@@ -206,38 +365,40 @@ class MusicController(
     
     fun seekTo(positionMs: Long) {
         val targetMs = positionMs.coerceAtLeast(0L)
-        pendingSeek = PendingSeek(
-            mediaId = _currentMediaId.value,
-            positionMs = targetMs,
-            expiresAtMs = SystemClock.elapsedRealtime() + SEEK_SETTLE_TIMEOUT_MS
+        val controller = this.controller ?: return
+        playbackClockEpoch++
+        lastPositionSample = null
+        awaitingClockAdvance = true
+        playbackClockAnchor = PlaybackClockAnchor(
+            positionMs = targetMs.toDouble(),
+            atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+            speed = controller.playbackParameters.speed,
+            isPlaying = false
         )
         _currentPosition.value = targetMs
-        controller?.seekTo(targetMs)
+        controller.seekTo(targetMs)
+        requestPositionSampleIfActive()
     }
 
     /**
-     * High-resolution playback position for frame-driven views.
+     * Playback position for frame-driven views.
      *
-     * Media3 estimates this value continuously from its latest session sample,
-     * including the active playback speed. Consumers must use it verbatim:
-     * predicting or slowly correcting it introduces visible speed changes and
-     * play/pause discontinuities.
+     * Between service-side samples this advances from the most recent real ExoPlayer
+     * position using the monotonic clock. Each new sample rebases the projection, so
+     * seeks, buffering, pause/resume, and playback-speed changes are reflected without
+     * a delayed correction.
      */
     fun currentPositionMs(): Long {
-        val seek = pendingSeek
-        if (
-            seek != null &&
-            seek.mediaId == _currentMediaId.value &&
-            SystemClock.elapsedRealtime() <= seek.expiresAtMs
-        ) {
-            // Media3 can briefly keep returning the pre-seek position while
-            // the session processes the seek. Show the requested position
-            // immediately; the discontinuity callback clears this hold.
-            return seek.positionMs
-        }
-        if (seek != null) pendingSeek = null
-        return controller?.currentPosition?.coerceAtLeast(0L)
-            ?: _currentPosition.value
+        val anchor = playbackClockAnchor
+            ?: return controller?.currentPosition?.coerceAtLeast(0L)
+                ?: _currentPosition.value
+        val elapsedMs = (
+            SystemClock.elapsedRealtimeNanos() / NANOS_PER_MILLISECOND -
+                anchor.atElapsedRealtimeMs
+            )
+        val positionMs = anchor.positionMs +
+            if (anchor.isPlaying) elapsedMs * anchor.speed else 0.0
+        return positionMs.roundToLong().coerceAtLeast(0L)
     }
 
     fun toggleShuffleMode() {
@@ -286,22 +447,79 @@ class MusicController(
 
     private fun applyPlaybackMod(mod: PlaybackMod) {
         val controller = this.controller ?: return
+        playbackClockAnchor = PlaybackClockAnchor(
+            positionMs = currentPositionMs().toDouble(),
+            atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+            speed = mod.speed,
+            isPlaying = false
+        )
+        lastPositionSample = null
+        awaitingClockAdvance = true
         controller.playbackParameters = PlaybackParameters(mod.speed, mod.pitch)
+        requestPositionSampleIfActive()
     }
 
     fun release() {
+        stopPositionSampling()
         MediaController.releaseFuture(controllerFuture)
     }
 
     private companion object {
-        const val SEEK_SETTLE_TIMEOUT_MS = 1_000L
+        const val POSITION_SAMPLE_INTERVAL_MS = 50L
+        const val NANOS_PER_MILLISECOND = 1_000_000.0
     }
 
-    private data class PendingSeek(
-        val mediaId: Long?,
-        val positionMs: Long,
-        val expiresAtMs: Long
+    private data class PlaybackClockAnchor(
+        val positionMs: Double,
+        val atElapsedRealtimeMs: Double,
+        val speed: Float,
+        val isPlaying: Boolean
     )
+
+    private data class PositionSample(
+        val positionMs: Long,
+        val completionTimeMs: Long
+    ) {
+        fun hasAdvancedTo(
+            nextPositionMs: Long,
+            speed: Float,
+            nextCompletionTimeMs: Long
+        ): Boolean = hasPlaybackClockAdvanced(
+            previousPositionMs = positionMs,
+            previousCompletionTimeMs = completionTimeMs,
+            nextPositionMs = nextPositionMs,
+            nextCompletionTimeMs = nextCompletionTimeMs,
+            speed = speed
+        )
+    }
+}
+
+internal fun hasPlaybackClockAdvanced(
+    previousPositionMs: Long,
+    previousCompletionTimeMs: Long,
+    nextPositionMs: Long,
+    nextCompletionTimeMs: Long,
+    speed: Float
+): Boolean {
+    val elapsedMs = nextCompletionTimeMs - previousCompletionTimeMs
+    if (elapsedMs <= 0L) return false
+    val minimumProgressMs = maxOf(
+        MIN_CLOCK_PROGRESS_MS,
+        elapsedMs * speed * MIN_PROGRESS_FRACTION
+    )
+    return (nextPositionMs - previousPositionMs).toDouble() >= minimumProgressMs
+}
+
+private const val MIN_CLOCK_PROGRESS_MS = 4.0
+private const val MIN_PROGRESS_FRACTION = 0.25
+
+/**
+ * Process-lifetime playback-mod selection. It intentionally is not persisted to
+ * disk: reopening the player within the same app session keeps DT/NC selected,
+ * while a fresh process starts at No Mod.
+ */
+private object PlaybackModSession {
+    val selection = MutableStateFlow(PlaybackMod.NONE)
 }
 
 enum class PlaybackMod(val speed: Float, val pitch: Float, val label: String) {

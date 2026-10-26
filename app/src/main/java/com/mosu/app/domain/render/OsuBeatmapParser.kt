@@ -4,6 +4,7 @@ import java.io.File
 
 data class OsuMapHeader(
     val beatmapSetId: Long?,
+    val beatmapId: Long? = null,
     val mode: Int,
     val audioFilename: String,
     val difficultyName: String,
@@ -253,6 +254,7 @@ object OsuBeatmapParser {
         val approachRate = difficulty.floatValue("ApproachRate") ?: overallDifficulty
         return OsuMapHeader(
             beatmapSetId = metadata["BeatmapSetID"]?.trim()?.toLongOrNull(),
+            beatmapId = metadata["BeatmapID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
             mode = mode,
             audioFilename = normalizeAudioFilename(audioFilename),
             difficultyName = difficultyName,

@@ -11,7 +11,8 @@ data class OsuDifficultyMap(
     val path: String,
     val difficultyName: String,
     val beatmapSetId: Long,
-    val audioFilename: String
+    val audioFilename: String,
+    val beatmapId: Long? = null
 )
 
 data class OsuPreviewCatalog(
@@ -19,7 +20,18 @@ data class OsuPreviewCatalog(
     val audioFilename: String,
     val difficulties: List<OsuDifficultyMap>,
     val defaultDifficultyName: String
-)
+) {
+    /**
+     * Stable preference key for the playing song. The set id separates songs,
+     * while the normalized audio filename distinguishes multiple-audio albums.
+     */
+    val selectionKey: String
+        get() = "$beatmapSetId|$audioFilename"
+
+    fun resolveSavedDifficulty(savedDifficultyName: String?): String =
+        difficulties.firstOrNull { it.difficultyName == savedDifficultyName }?.difficultyName
+            ?: defaultDifficultyName
+}
 
 /**
  * Owns all renderer I/O. It is called from effects/background dispatchers only,
@@ -55,7 +67,8 @@ class OsuMapPreviewLoader(
                         path = canonicalPath,
                         difficultyName = header.difficultyName,
                         beatmapSetId = entity.beatmapSetId,
-                        audioFilename = header.audioFilename
+                        audioFilename = header.audioFilename,
+                        beatmapId = header.beatmapId
                     )
                 }
                 .toList()

@@ -33,6 +33,7 @@ class OsuBeatmapParserTest {
         )
 
         assertEquals(123L, header.beatmapSetId)
+        assertEquals(10L, header.beatmapId)
         assertEquals(0, header.mode)
         assertEquals("audio.mp3", header.audioFilename)
         assertEquals("Hard", header.difficultyName)
@@ -68,6 +69,26 @@ class OsuBeatmapParserTest {
                 """.trimIndent()
             )
         }
+    }
+
+    @Test
+    fun parsesPresentBlankAndAbsentBeatmapIdsAsNullable() {
+        assertEquals(10L, OsuBeatmapParser.parseHeader(mapText()).beatmapId)
+        assertNull(
+            OsuBeatmapParser.parseHeader(
+                mapText().replace("BeatmapID:10", "BeatmapID:")
+            ).beatmapId
+        )
+        assertNull(
+            OsuBeatmapParser.parseHeader(
+                mapText().replace("BeatmapID:10\n", "")
+            ).beatmapId
+        )
+        assertNull(
+            OsuBeatmapParser.parseHeader(
+                mapText().replace("BeatmapID:10", "BeatmapID:0")
+            ).beatmapId
+        )
     }
 
     @Test

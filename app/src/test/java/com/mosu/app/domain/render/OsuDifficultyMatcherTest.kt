@@ -99,15 +99,83 @@ class OsuDifficultyMatcherTest {
         assertTrue(catalog?.difficulties?.all { it.beatmapSetId == 42L } == true)
     }
 
+    @Test
+    fun savedDifficultyIsRestoredWhenItBelongsToTheCatalog() {
+        val catalog = requireNotNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("easy.osu", "Easy", "audio.mp3"),
+                    map("insane.osu", "Insane", "audio.mp3")
+                ),
+                beatmapSetId = 42,
+                defaultDifficultyName = "Easy"
+            )
+        )
+
+        assertEquals("Insane", catalog.resolveSavedDifficulty("Insane"))
+    }
+
+    @Test
+    fun unavailableSavedDifficultyFallsBackToTheEntityDifficulty() {
+        val catalog = requireNotNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("easy.osu", "Easy", "audio.mp3"),
+                    map("hard.osu", "Hard", "audio.mp3")
+                ),
+                beatmapSetId = 42,
+                defaultDifficultyName = "Hard"
+            )
+        )
+
+        assertEquals("Hard", catalog.resolveSavedDifficulty("Deleted difficulty"))
+        assertEquals("Hard", catalog.resolveSavedDifficulty(null))
+    }
+
+    @Test
+    fun selectionKeyDistinguishesAudioGroupsWithinTheSameSet() {
+        val first = catalog(audio = "a.mp3")
+        val second = catalog(audio = "b.mp3")
+
+        assertTrue(first.selectionKey != second.selectionKey)
+        assertEquals("42|a.mp3", first.selectionKey)
+    }
+
+    @Test
+    fun catalogSelectionKeepsPerDifficultyBeatmapId() {
+        val catalog = requireNotNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("easy.osu", "Easy", "audio.mp3", beatmapId = 101),
+                    map("hard.osu", "Hard", "audio.mp3", beatmapId = 102)
+                ),
+                beatmapSetId = 42,
+                defaultDifficultyName = "Easy"
+            )
+        )
+
+        assertEquals(listOf(101L, 102L), catalog.difficulties.map { it.beatmapId })
+    }
+
+    private fun catalog(audio: String): OsuPreviewCatalog = requireNotNull(
+        OsuDifficultyMatcher.selectCatalog(
+            maps = listOf(map("$audio.osu", "Hard", audio)),
+            beatmapSetId = 42,
+            defaultDifficultyName = "Hard"
+        )
+    )
+
     private fun map(
         path: String,
         difficulty: String,
         audio: String,
-        beatmapSetId: Long = 42
+        beatmapSetId: Long = 42,
+        beatmapId: Long? = null
     ) = OsuDifficultyMap(
         path = path,
         difficultyName = difficulty,
         beatmapSetId = beatmapSetId,
-        audioFilename = audio
+        audioFilename = audio,
+        beatmapId = beatmapId
     )
 }

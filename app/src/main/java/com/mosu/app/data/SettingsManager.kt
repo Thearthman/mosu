@@ -31,6 +31,7 @@ class SettingsManager(private val context: Context) {
         private val RECENT_PLAY_HISTORY_KEY = booleanPreferencesKey("recent_play_history_enabled")
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
         private val RENDERER_ENABLED_KEY = booleanPreferencesKey("renderer_enabled")
+        private const val RENDERER_DIFFICULTY_KEY_PREFIX = "renderer_difficulty_"
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
         private val SCORE_MODE_FILTER_KEY = stringPreferencesKey("score_mode_filter") // "osu", "taiko", "fruits", "mania", "all"
@@ -197,6 +198,21 @@ class SettingsManager(private val context: Context) {
     suspend fun saveRendererEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[RENDERER_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun getSelectedDifficulty(songKey: String): String? {
+        if (songKey.isBlank()) return null
+        return context.settingsDataStore.data.first()[
+            stringPreferencesKey(RENDERER_DIFFICULTY_KEY_PREFIX + songKey)
+        ]
+    }
+
+    suspend fun saveSelectedDifficulty(songKey: String, difficultyName: String) {
+        if (songKey.isBlank() || difficultyName.isBlank()) return
+        context.settingsDataStore.edit { preferences ->
+            preferences[stringPreferencesKey(RENDERER_DIFFICULTY_KEY_PREFIX + songKey)] =
+                difficultyName
         }
     }
 

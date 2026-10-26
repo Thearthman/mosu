@@ -455,6 +455,9 @@ fun MainScreen(
         val isSheetOpen by remember {
             derivedStateOf { sheetOffset.value < collapsedOffset }
         }
+        val isSheetFullyOpen by remember {
+            derivedStateOf { sheetOffset.value <= 0f }
+        }
         
         val nowPlaying by musicController.nowPlaying.collectAsState()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -699,7 +702,7 @@ fun MainScreen(
         }
 
         // 4. MiniPlayer (Top Layer) - Moves UP with Sheet
-        if (nowPlaying != null && currentRoute != "profile") {
+        if (nowPlaying != null && currentRoute != "profile" && !isSheetFullyOpen) {
             Box(
                 modifier = Modifier
                     .zIndex(3f)

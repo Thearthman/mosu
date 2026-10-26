@@ -15,6 +15,7 @@ import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.model.ExtractedTrack
 import com.mosu.app.domain.model.sortedByTotalBeatmapPlayCountDescending
+import com.mosu.app.domain.rating.BeatmapStarRatingService
 import kotlinx.coroutines.flow.collect
 
 sealed class UnifiedDownloadState {
@@ -216,11 +217,21 @@ class BeatmapDownloadService(
         fallbackCoverPath: String?
     ) {
         val mediaStore = MediaStoreFileService(context)
-        // Genre is beatmapset-level metadata that the .osu file format does not
-        // carry, so when the caller has no hint (e.g. Restore Downloads, which
-        // only knows the set id) resolve it from the API. A failed lookup is
-        // non-fatal: the track is still registered, just without a genre.
-        val resolvedGenreId = resolveGenreId(targetId, genreId)
+        // One official detail lookup supplies both set-level genre metadata and
+        // per-difficulty star ratings. Restore Downloads supplies no hints, so
+        // this is the only metadata request needed for those jobs.
+        val officialDetail = runCatching { repository.getBeatmapsetDetail(targetId) }
+            .onFailure {
+                Log.w("BeatmapDownloadService", "Set detail lookup failed for $targetId", it)
+            }
+            .getOrNull()
+        val resolvedGenreId = genreId ?: officialDetail?.genreId
+        runCatching {
+            BeatmapStarRatingService(db, repository)
+                .cacheRatingsForDownload(targetId, officialDetail)
+        }.onFailure {
+            Log.w("BeatmapDownloadService", "Star rating cache failed for set $targetId", it)
+        }
 
         tracks.forEach { track ->
             // Track-level metadata (title/artist/difficulty, incl. native-script
@@ -270,13 +281,6 @@ class BeatmapDownloadService(
 
         TrackService.updateTrackDownloadStatus(targetId, true, db)
         MosuBackupService.exportState(context, db)
-    }
-
-    private suspend fun resolveGenreId(setId: Long, hint: Int?): Int? {
-        if (hint != null) return hint
-        return runCatching { repository.getBeatmapsetDetail(setId).genreId }
-            .onFailure { Log.w("BeatmapDownloadService", "Genre lookup failed for set $setId", it) }
-            .getOrNull()
     }
 }
 

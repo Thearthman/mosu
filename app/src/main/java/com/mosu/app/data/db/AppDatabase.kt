@@ -20,9 +20,10 @@ import kotlinx.coroutines.withContext
         PlaylistTrackEntity::class,
         PreservedBeatmapSetIdEntity::class,
         SearchHistoryEntity::class,
-        DownloadTaskEntity::class
+        DownloadTaskEntity::class,
+        BeatmapStarRatingEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -34,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun preservedBeatmapSetIdDao(): PreservedBeatmapSetIdDao
     abstract fun searchHistoryDao(): SearchHistoryDao
     abstract fun downloadTaskDao(): DownloadTaskDao
+    abstract fun beatmapStarRatingDao(): BeatmapStarRatingDao
 
     companion object {
         @Volatile
@@ -374,6 +376,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 21 to 22: Cache per-difficulty star ratings.
+        private val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS beatmap_star_ratings (
+                        beatmapSetId INTEGER NOT NULL,
+                        beatmapId INTEGER NOT NULL,
+                        starRating REAL NOT NULL,
+                        PRIMARY KEY(beatmapSetId, beatmapId)
+                    )
+                """)
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -394,7 +410,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_17_18,
                     MIGRATION_18_19,
                     MIGRATION_19_20,
-                    MIGRATION_20_21
+                    MIGRATION_20_21,
+                    MIGRATION_21_22
                 )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()
@@ -419,6 +436,7 @@ abstract class AppDatabase : RoomDatabase() {
                 allBeatmaps.forEach { beatmap ->
                     db.beatmapDao().deleteBeatmap(beatmap)
                 }
+                db.beatmapStarRatingDao().deleteAll()
 
                 // Clean up files on disk (optional - could be done during restore instead)
                 // filePaths.forEach { paths ->

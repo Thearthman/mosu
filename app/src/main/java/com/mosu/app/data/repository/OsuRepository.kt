@@ -11,6 +11,7 @@ import com.mosu.app.data.api.model.OsuTokenResponse
 import com.mosu.app.data.api.model.OsuUserCompact
 import com.mosu.app.data.api.model.RecentScore
 import com.mosu.app.data.api.model.SearchResponse
+import com.mosu.app.data.api.model.SayobotDetailData
 import com.mosu.app.data.api.model.SayobotSearchResponse
 import com.mosu.app.data.db.SearchCacheDao
 import com.mosu.app.data.db.SearchCacheEntity
@@ -39,6 +40,10 @@ class OsuRepository(private val searchCacheDao: SearchCacheDao? = null) {
 
     suspend fun getBeatmapsetDetail(beatmapsetId: Long): com.mosu.app.data.api.model.BeatmapsetDetail {
         return RetrofitClient.api.getBeatmapsetDetail("", beatmapsetId)
+    }
+
+    suspend fun getSayobotBeatmapsetDetail(beatmapsetId: Long): SayobotDetailData {
+        return RetrofitClient.sayobotApi.getBeatmapInfo(beatmapsetId).data
     }
 
     suspend fun searchBeatmapsetsByTitleArtist(

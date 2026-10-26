@@ -59,6 +59,7 @@ class TrackService {
             val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
             if (remainingTracks.isEmpty()) {
                 db.preservedBeatmapSetIdDao().deletePreservedSetId(track.beatmapSetId)
+                db.beatmapStarRatingDao().deleteForSet(track.beatmapSetId)
 
                 // Also update SharedPreferences backup
                 val prefs = context.getSharedPreferences("preserved_beatmaps", Context.MODE_PRIVATE)

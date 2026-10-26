@@ -36,6 +36,13 @@ object RetrofitClient {
             .build()
             .create(OsuApi::class.java)
 
+    val sayobotApi: SayobotApi
+        get() = Retrofit.Builder()
+            .baseUrl(SAYOBOT_BASE_URL)
+            .client(baseClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(SayobotApi::class.java)
 
     val okHttpClient: OkHttpClient
         get() = authenticatedClient ?: baseClient

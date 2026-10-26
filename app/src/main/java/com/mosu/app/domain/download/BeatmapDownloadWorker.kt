@@ -17,6 +17,7 @@ import com.mosu.app.R
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 
 class BeatmapDownloadWorker(
@@ -33,6 +34,7 @@ class BeatmapDownloadWorker(
         val db = AppDatabase.getDatabase(applicationContext)
         val taskDao = db.downloadTaskDao()
         val task = taskDao.getTask(setId) ?: return Result.failure()
+        if (task.status == DownloadStatus.Paused.name) return Result.success()
 
         setForeground(createForegroundInfo(task.title, task.statusMessage, task.progress))
 
@@ -51,13 +53,15 @@ class BeatmapDownloadWorker(
         )
 
         return try {
-            taskDao.updateTaskState(
+            val started = taskDao.updateTaskStateUnlessPaused(
                 setId = setId,
                 status = DownloadStatus.Downloading.name,
                 progress = task.progress,
                 statusMessage = task.statusMessage.ifBlank { "Starting..." },
-                errorMessage = null
+                errorMessage = null,
+                pausedStatus = DownloadStatus.Paused.name
             )
+            if (started == 0) return Result.success()
 
             var failedMessage: String? = null
             downloadService.downloadBeatmap(
@@ -78,55 +82,64 @@ class BeatmapDownloadWorker(
                         } else {
                             DownloadStatus.Downloading
                         }
-                        taskDao.updateTaskState(
+                        val updated = taskDao.updateTaskStateUnlessPaused(
                             setId = setId,
                             status = status.name,
                             progress = state.progress,
                             statusMessage = state.status,
-                            errorMessage = null
+                            errorMessage = null,
+                            pausedStatus = DownloadStatus.Paused.name
                         )
-                        setForeground(createForegroundInfo(task.title, state.status, state.progress))
+                        if (updated > 0) {
+                            setForeground(createForegroundInfo(task.title, state.status, state.progress))
+                        }
                     }
                     is UnifiedDownloadState.Notification -> {
                         val current = taskDao.getTask(setId)
-                        taskDao.updateTaskState(
+                        taskDao.updateTaskStateUnlessPaused(
                             setId = setId,
                             status = current?.status ?: DownloadStatus.Downloading.name,
                             progress = current?.progress ?: 0,
                             statusMessage = state.message,
-                            errorMessage = null
+                            errorMessage = null,
+                            pausedStatus = DownloadStatus.Paused.name
                         )
                     }
                     is UnifiedDownloadState.Success -> {
-                        taskDao.updateTaskState(
+                        taskDao.updateTaskStateUnlessPaused(
                             setId = setId,
                             status = DownloadStatus.Success.name,
                             progress = 100,
                             statusMessage = "Done",
-                            errorMessage = null
+                            errorMessage = null,
+                            pausedStatus = DownloadStatus.Paused.name
                         )
                     }
                     is UnifiedDownloadState.Error -> {
                         failedMessage = state.message
-                        taskDao.updateTaskState(
+                        taskDao.updateTaskStateUnlessPaused(
                             setId = setId,
                             status = DownloadStatus.Error.name,
                             progress = taskDao.getTask(setId)?.progress ?: 0,
                             statusMessage = "Failed",
-                            errorMessage = state.message
+                            errorMessage = state.message,
+                            pausedStatus = DownloadStatus.Paused.name
                         )
                     }
                 }
             }
 
             if (failedMessage == null) Result.success() else Result.failure()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            taskDao.updateTaskState(
+            taskDao.updateTaskStateUnlessPaused(
                 setId = setId,
                 status = DownloadStatus.Error.name,
                 progress = taskDao.getTask(setId)?.progress ?: 0,
                 statusMessage = "Failed",
-                errorMessage = e.message ?: "Unknown error"
+                errorMessage = e.message ?: "Unknown error",
+                pausedStatus = DownloadStatus.Paused.name
             )
             Result.failure()
         }

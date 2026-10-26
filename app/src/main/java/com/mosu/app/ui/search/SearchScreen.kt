@@ -192,7 +192,8 @@ fun SearchScreen(
         downloadTasks.values.count { 
             it.status == com.mosu.app.domain.download.DownloadStatus.Downloading || 
             it.status == com.mosu.app.domain.download.DownloadStatus.Queued || 
-            it.status == com.mosu.app.domain.download.DownloadStatus.Extracting 
+            it.status == com.mosu.app.domain.download.DownloadStatus.Extracting ||
+            it.status == com.mosu.app.domain.download.DownloadStatus.Paused
         }
     }
 
@@ -490,6 +491,9 @@ fun SearchScreen(
                             tasks = downloadTasks,
                             onCancel = { downloadManager.cancel(it) },
                             onRetry = { downloadManager.retry(it, accessToken) },
+                            onPauseAll = { downloadManager.pauseAll() },
+                            onResumeAll = { downloadManager.resumeAll() },
+                            onResume = { downloadManager.resume(it) },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

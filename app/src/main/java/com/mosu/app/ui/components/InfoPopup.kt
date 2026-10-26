@@ -54,6 +54,7 @@ import com.mosu.app.domain.model.sortedByTotalBeatmapPlayCountDescending
 import com.mosu.app.domain.model.totalBeatmapPlayCount
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.animation.animateColorAsState
@@ -173,7 +174,8 @@ fun InfoPopup(
                             val url = sortedList.firstOrNull()?.url ?: "https://osu.ppy.sh/beatmapsets/$setId"
                             val author = beatmapset.creator
                             
-                            val isDownloaded = downloadedIds.contains(setId) || 
+                            val isDownloadedById = downloadedIds.contains(setId)
+                            val isDownloaded = isDownloadedById ||
                                               downloadedKeys.contains("${beatmapset.title.trim().lowercase()}|${beatmapset.artist.trim().lowercase()}")
 
                             Row(
@@ -387,7 +389,21 @@ fun InfoPopup(
                                     }
                                 }
                                 
-                                if (!isDownloaded && config.onDownloadClick != null) {
+                                if (isDownloadedById) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .padding(start = 2.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DownloadDone,
+                                            contentDescription = stringResource(id = R.string.search_cd_downloaded),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                } else if (!isDownloaded && config.onDownloadClick != null) {
                                     IconButton(
                                         onClick = {
                                             config.onDownloadClick.invoke(beatmapset)

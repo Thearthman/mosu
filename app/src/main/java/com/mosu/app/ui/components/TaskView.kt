@@ -6,6 +6,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -17,24 +19,51 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mosu.app.domain.download.DownloadStatus
 import com.mosu.app.domain.download.DownloadTask
+import com.mosu.app.domain.download.isActive
 
 @Composable
 fun TaskView(
     tasks: Map<Long, DownloadTask>,
     onCancel: (Long) -> Unit,
     onRetry: (Long) -> Unit,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onResume: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasActiveTasks = tasks.values.any { it.status.isActive }
+    val hasPausedTasks = tasks.values.any { it.status == DownloadStatus.Paused }
+
     Column(
         modifier = modifier
             .padding(12.dp)
             .width(296.dp) // Fixed width to help avoid intrinsic measurement issues in DropdownMenu
     ) {
-        Text(
-            text = "Download Tasks",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Download Tasks",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            if (hasActiveTasks || hasPausedTasks) {
+                IconButton(
+                    onClick = if (hasPausedTasks) onResumeAll else onPauseAll,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (hasPausedTasks) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (hasPausedTasks) "Resume all downloads" else "Pause all downloads",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
 
         if (tasks.isEmpty()) {
             Box(
@@ -70,7 +99,8 @@ fun TaskView(
                     TaskItem(
                         task = task,
                         onCancel = { onCancel(task.setId) },
-                        onRetry = { onRetry(task.setId) }
+                        onRetry = { onRetry(task.setId) },
+                        onResume = { onResume(task.setId) }
                     )
                 }
             }
@@ -82,7 +112,8 @@ fun TaskView(
 private fun TaskItem(
     task: DownloadTask,
     onCancel: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onResume: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -110,7 +141,10 @@ private fun TaskItem(
                     color = MaterialTheme.colorScheme.secondary
                 )
                 
-                if (task.status == DownloadStatus.Downloading || task.status == DownloadStatus.Extracting) {
+                if (task.status == DownloadStatus.Downloading ||
+                    task.status == DownloadStatus.Extracting ||
+                    task.status == DownloadStatus.Paused
+                ) {
                     Spacer(modifier = Modifier.height(4.dp))
                     if (task.progress >= 0) {
                         LinearProgressIndicator(
@@ -163,6 +197,19 @@ private fun TaskItem(
                         Icon(
                             Icons.Default.Refresh,
                             contentDescription = "Retry",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                DownloadStatus.Paused -> {
+                    IconButton(
+                        onClick = onResume,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Resume download",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )

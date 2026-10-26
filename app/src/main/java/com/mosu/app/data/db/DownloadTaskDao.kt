@@ -38,6 +38,41 @@ interface DownloadTaskDao {
         updatedAt: Long = System.currentTimeMillis()
     )
 
+    @Query("""
+        UPDATE download_tasks
+        SET status = :status,
+            progress = :progress,
+            statusMessage = :statusMessage,
+            errorMessage = :errorMessage,
+            updatedAt = :updatedAt
+        WHERE setId = :setId AND status != :pausedStatus
+    """)
+    suspend fun updateTaskStateUnlessPaused(
+        setId: Long,
+        status: String,
+        progress: Int,
+        statusMessage: String,
+        errorMessage: String?,
+        pausedStatus: String,
+        updatedAt: Long = System.currentTimeMillis()
+    ): Int
+
+    @Query("""
+        UPDATE download_tasks
+        SET status = :pausedStatus,
+            statusMessage = :statusMessage,
+            errorMessage = NULL,
+            updatedAt = :updatedAt
+        WHERE setId = :setId AND status IN (:activeStatuses)
+    """)
+    suspend fun pauseTask(
+        setId: Long,
+        pausedStatus: String,
+        statusMessage: String,
+        activeStatuses: List<String>,
+        updatedAt: Long = System.currentTimeMillis()
+    ): Int
+
     @Query("DELETE FROM download_tasks WHERE setId = :setId")
     suspend fun deleteTask(setId: Long)
 

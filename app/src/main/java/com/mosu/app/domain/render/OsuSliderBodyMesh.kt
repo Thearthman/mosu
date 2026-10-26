@@ -37,15 +37,15 @@ internal class OsuSliderBodyMesh {
         canvas: Canvas,
         paint: Paint,
         path: OsuSliderPath,
-        trackedLength: Float,
+        bodyRange: OsuSliderBodyRange,
         offset: RenderPoint,
         objectScale: Float,
         trackColour: Int,
         borderColour: Int,
         alpha: Float
     ): Boolean {
-        if (trackedLength <= PATH_EPSILON || objectScale <= 0f || alpha <= 0f) return false
-        if (!buildCentreline(path, trackedLength, offset)) return false
+        if (objectScale <= 0f || alpha <= 0f) return false
+        if (!buildCentreline(path, bodyRange, offset)) return false
 
         val radius = OsuRenderObject.OSU_OBJECT_RADIUS * objectScale
         val previousStyle = paint.style
@@ -120,16 +120,17 @@ internal class OsuSliderBodyMesh {
 
     private fun buildCentreline(
         path: OsuSliderPath,
-        trackedLength: Float,
+        bodyRange: OsuSliderBodyRange,
         offset: RenderPoint
     ): Boolean {
         centreline.reset()
         if (path.points.isEmpty() || path.length <= PATH_EPSILON) return false
 
-        val limit = trackedLength.coerceIn(0f, path.length)
-        if (limit <= PATH_EPSILON) return false
+        val startDistance = bodyRange.startFraction.coerceIn(0f, 1f) * path.length
+        val endDistance = bodyRange.endFraction.coerceIn(0f, 1f) * path.length
+        if (endDistance - startDistance <= PATH_EPSILON) return false
 
-        val first = path.points.first()
+        val first = path.positionAtDistance(startDistance)
         lastX = first.x + offset.x
         lastY = first.y + offset.y
         centreline.moveTo(lastX, lastY)
@@ -139,16 +140,28 @@ internal class OsuSliderBodyMesh {
         boundsBottom = lastY
 
         var pointCount = 1
-        for (index in 1 until path.points.size) {
-            if (path.distances[index] > limit) {
-                val end = path.positionAtDistance(limit)
-                if (appendPoint(end.x + offset.x, end.y + offset.y)) pointCount++
-                break
+        var low = 0
+        var high = path.distances.lastIndex
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (path.distances[mid] <= startDistance + PATH_EPSILON) {
+                low = mid + 1
+            } else {
+                high = mid
             }
+        }
 
+        var index = low
+        while (index < path.points.size) {
+            val distance = path.distances[index]
+            if (distance >= endDistance - PATH_EPSILON) break
             val point = path.points[index]
             if (appendPoint(point.x + offset.x, point.y + offset.y)) pointCount++
+            index++
         }
+
+        val last = path.positionAtDistance(endDistance)
+        if (appendPoint(last.x + offset.x, last.y + offset.y)) pointCount++
         return pointCount >= 2
     }
 

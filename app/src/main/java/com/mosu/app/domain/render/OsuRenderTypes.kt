@@ -171,6 +171,16 @@ data class OsuCircleObject(
     override val endTimeMs: Double get() = startTimeMs
 }
 
+/** The visible, normalized section of a slider path. */
+data class OsuSliderBodyRange(
+    val startFraction: Float,
+    val endFraction: Float
+) {
+    companion object {
+        val Empty = OsuSliderBodyRange(0f, 0f)
+    }
+}
+
 data class OsuSliderObject(
     override val startTimeMs: Double,
     override val endTimeMs: Double,
@@ -188,17 +198,50 @@ data class OsuSliderObject(
     val repeatCount: Int get() = (spanCount - 1).coerceAtLeast(0)
 
     /**
-     * Distance revealed behind the slider ball. Before activation only the
-     * slider head is visible; during the first slide the body grows to follow
-     * the ball. Repeats keep the path revealed after the ball has reached the
-     * far edge once.
+     * Returns the visible section of the path using lazer's
+     * `SnakingSliderBody.UpdateProgress()` rules.
+     *
+     * The body snakes in from the head during preempt. It remains fully visible
+     * through every span except the final one, where the section already passed
+     * by the ball is removed. Forward final spans retain `[ball, tail]`;
+     * reversed final spans retain `[head, ball]`.
      */
-    fun revealedPathLengthAt(timeMs: Double): Float {
-        if (timeMs <= startTimeMs || path.length <= 0f) return 0f
-        if (spanDurationMs <= 0.0) return path.length
-        val firstSpanProgress = ((timeMs - startTimeMs) / spanDurationMs)
-            .coerceIn(0.0, 1.0)
-        return path.length * firstSpanProgress.toFloat()
+    fun bodyRangeAt(timeMs: Double): OsuSliderBodyRange {
+        if (path.length <= 0f || spanCount <= 0 || spanDurationMs <= 0.0) {
+            return OsuSliderBodyRange.Empty
+        }
+
+        val snakeInEnd = if (preemptMs <= 0.0) {
+            1f
+        } else {
+            ((timeMs - activeStartMs) / (preemptMs / 3.0))
+                .coerceIn(0.0, 1.0)
+                .toFloat()
+        }
+
+        if (timeMs < startTimeMs) {
+            return OsuSliderBodyRange(0f, snakeInEnd)
+        }
+        if (timeMs >= endTimeMs) {
+            return if ((spanCount - 1) % 2 == 0) {
+                OsuSliderBodyRange(1f, 1f)
+            } else {
+                OsuSliderBodyRange.Empty
+            }
+        }
+
+        val rawSpan = (timeMs - startTimeMs) / spanDurationMs
+        val span = min(rawSpan.toInt(), spanCount - 1).coerceAtLeast(0)
+        val localSpanProgress = (rawSpan - span).coerceIn(0.0, 1.0).toFloat()
+        val pathProgress = if (span % 2 == 0) localSpanProgress else 1f - localSpanProgress
+        val finalSpan = spanCount - 1
+        if (span < finalSpan) return OsuSliderBodyRange(0f, 1f)
+
+        return if (span % 2 == 1) {
+            OsuSliderBodyRange(0f, pathProgress)
+        } else {
+            OsuSliderBodyRange(pathProgress, 1f)
+        }
     }
 
     /** The slider ball's gameplay path position at [timeMs], including repeats. */

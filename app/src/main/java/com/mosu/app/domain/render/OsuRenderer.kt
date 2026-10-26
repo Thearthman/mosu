@@ -135,17 +135,16 @@ class OsuRenderer(private val skin: OsuSkin) {
             val borderColour = timeline.sliderBorder
                 ?: skin.sliderBorder
                 ?: colour
+            val bodyRange = obj.bodyRangeAt(time)
             drawSliderTrack(
                 canvas = canvas,
                 slider = obj,
-                trackedLength = obj.revealedPathLengthAt(time),
+                bodyRange = bodyRange,
                 trackColour = trackColour,
                 borderColour = borderColour,
                 alpha = trackAlpha
             )
-            if (time >= obj.startTimeMs + obj.spanDurationMs) {
-                drawRepeatArrows(canvas, obj, colour, trackAlpha)
-            }
+            drawRepeatArrows(canvas, obj, bodyRange, colour, trackAlpha)
         }
 
         val headAlpha = fadeIn * postHitAlpha(obj.startTimeMs, time)
@@ -559,7 +558,7 @@ class OsuRenderer(private val skin: OsuSkin) {
     private fun drawSliderTrack(
         canvas: Canvas,
         slider: OsuSliderObject,
-        trackedLength: Float,
+        bodyRange: OsuSliderBodyRange,
         trackColour: Int,
         borderColour: Int,
         alpha: Float
@@ -568,7 +567,7 @@ class OsuRenderer(private val skin: OsuSkin) {
             canvas = canvas,
             paint = sliderBodyPaint,
             path = slider.path,
-            trackedLength = trackedLength,
+            bodyRange = bodyRange,
             offset = slider.stackedPosition - slider.position,
             objectScale = slider.objectScale,
             trackColour = trackColour,
@@ -631,10 +630,15 @@ class OsuRenderer(private val skin: OsuSkin) {
     private fun drawRepeatArrows(
         canvas: Canvas,
         slider: OsuSliderObject,
+        bodyRange: OsuSliderBodyRange,
         colour: Int,
         alpha: Float
     ) {
-        if (slider.repeatCount <= 0) return
+        if (slider.repeatCount <= 0 ||
+            bodyRange.endFraction - bodyRange.startFraction <= 0.0001f
+        ) {
+            return
+        }
         val arrowBitmap = skin.reverseArrow
         val textureScale = arrowBitmap?.let {
             OsuLegacySkinMetrics.textureFitScale(
@@ -646,11 +650,15 @@ class OsuRenderer(private val skin: OsuSkin) {
         val fallbackSize = OsuLegacySkinMetrics.OBJECT_DIMENSIONS * slider.objectScale
         for (repeat in 1..slider.repeatCount) {
             val forwardEndpoint = repeat % 2 == 1
-            val fraction = if (forwardEndpoint) 1f else 0f
+            val fraction = if (forwardEndpoint) {
+                bodyRange.endFraction
+            } else {
+                bodyRange.startFraction
+            }
             val point = slider.stackedPosition +
                 (slider.path.positionAtFraction(fraction) - slider.position)
             val tangent = slider.path.tangentAtDistance(
-                if (forwardEndpoint) slider.path.length else 0f
+                fraction * slider.path.length
             )
             val angle = (atan2(tangent.y.toDouble(), tangent.x.toDouble()) * 180.0 / PI).toFloat()
             if (arrowBitmap == null) {

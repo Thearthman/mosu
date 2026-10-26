@@ -76,15 +76,58 @@ class OsuRenderTypesTest {
     }
 
     @Test
-    fun sliderBodyRevealsBehindTheBallDuringItsFirstSpan() {
+    fun sliderBodySnakesInBeforeActivation() {
         val slider = slider(spanCount = 2, spanDurationMs = 1_000.0)
 
-        assertEquals(0f, slider.revealedPathLengthAt(-1.0), 0.0001f)
-        assertEquals(0f, slider.revealedPathLengthAt(0.0), 0.0001f)
-        assertEquals(25f, slider.revealedPathLengthAt(250.0), 0.0001f)
-        assertEquals(100f, slider.revealedPathLengthAt(1_000.0), 0.0001f)
-        assertEquals(100f, slider.revealedPathLengthAt(1_500.0), 0.0001f)
-        assertEquals(100f, slider.revealedPathLengthAt(2_000.0), 0.0001f)
+        assertEquals(OsuSliderBodyRange(0f, 0f), slider.bodyRangeAt(-600.0))
+        assertEquals(OsuSliderBodyRange(0f, 0.5f), slider.bodyRangeAt(-500.0))
+        assertEquals(OsuSliderBodyRange(0f, 1f), slider.bodyRangeAt(-400.0))
+        assertEquals(OsuSliderBodyRange(0f, 1f), slider.bodyRangeAt(0.0))
+    }
+
+    @Test
+    fun sliderBodyStaysFullUntilTheFinalSpan() {
+        val slider = slider(spanCount = 3, spanDurationMs = 1_000.0)
+
+        assertEquals(OsuSliderBodyRange(0f, 1f), slider.bodyRangeAt(1_000.0))
+        assertEquals(OsuSliderBodyRange(0f, 1f), slider.bodyRangeAt(1_999.0))
+    }
+
+    @Test
+    fun forwardFinalSpanRemovesTheAlreadySlidSection() {
+        val slider = slider(spanCount = 3, spanDurationMs = 1_000.0)
+
+        assertEquals(OsuSliderBodyRange(0.5f, 1f), slider.bodyRangeAt(2_500.0))
+        assertEquals(OsuSliderBodyRange(0.9f, 1f), slider.bodyRangeAt(2_900.0))
+    }
+
+    @Test
+    fun reversedFinalSpanRemovesTheAlreadySlidSection() {
+        val slider = slider(spanCount = 2, spanDurationMs = 1_000.0)
+
+        assertEquals(OsuSliderBodyRange(0f, 0.5f), slider.bodyRangeAt(1_500.0))
+        val nearCompletion = slider.bodyRangeAt(1_900.0)
+        assertEquals(0f, nearCompletion.startFraction, 0.0001f)
+        assertEquals(0.1f, nearCompletion.endFraction, 0.0001f)
+    }
+
+    @Test
+    fun singleSpanSliderSnakesOutFromItsHead() {
+        val slider = slider(spanCount = 1, spanDurationMs = 1_000.0)
+
+        assertEquals(OsuSliderBodyRange(0.25f, 1f), slider.bodyRangeAt(250.0))
+        assertEquals(OsuSliderBodyRange(0.75f, 1f), slider.bodyRangeAt(750.0))
+    }
+
+    @Test
+    fun sliderBodyRangeIsEmptyAtCompletion() {
+        val forward = slider(spanCount = 1, spanDurationMs = 1_000.0)
+        val reverse = slider(spanCount = 2, spanDurationMs = 1_000.0)
+
+        val forwardRange = forward.bodyRangeAt(1_000.0)
+        val reverseRange = reverse.bodyRangeAt(2_000.0)
+        assertEquals(forwardRange.startFraction, forwardRange.endFraction, 0.0001f)
+        assertEquals(reverseRange.startFraction, reverseRange.endFraction, 0.0001f)
     }
 
     @Test

@@ -14,7 +14,23 @@ import java.io.IOException
 import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
+
+enum class MissingOsuBackfillPhase {
+    Scanning,
+    Downloading,
+    Extracting,
+    Completed
+}
+
+data class MissingOsuBackfillProgress(
+    val phase: MissingOsuBackfillPhase,
+    val processed: Int,
+    val total: Int,
+    val currentSetId: Long? = null,
+    val downloadProgress: Int = -1
+)
 
 data class MissingOsuBackfillResult(
     val total: Int,
@@ -196,58 +212,114 @@ class MissingOsuBackfillService(
     private val context: Context,
     private val db: AppDatabase,
     private val settingsManager: SettingsManager,
-    private val archiveProvider: suspend (Long) -> File? = { beatmapSetId ->
+    private val archiveProvider: suspend (
+        beatmapSetId: Long,
+        onDownloadProgress: suspend (Int) -> Unit
+    ) -> File? = { beatmapSetId, onDownloadProgress ->
         val state = BeatmapDownloader(context, settingsManager)
             .downloadBeatmap(beatmapSetId)
+            .onEach { downloadState ->
+                if (downloadState is DownloadState.Downloading) {
+                    onDownloadProgress(downloadState.progress)
+                }
+            }
             .first { it is DownloadState.Downloaded || it is DownloadState.Error }
         (state as? DownloadState.Downloaded)?.file
     }
 ) {
     suspend fun repairAll(
-        onProgress: (processed: Int, total: Int) -> Unit = { _, _ -> }
+        onProgress: suspend (MissingOsuBackfillProgress) -> Unit = {}
     ): MissingOsuBackfillResult = withContext(Dispatchers.IO) {
-        val affected = db.beatmapDao().getDistinctSetIds().mapNotNull { setId ->
+        onProgress(
+            MissingOsuBackfillProgress(
+                phase = MissingOsuBackfillPhase.Scanning,
+                processed = 0,
+                total = 0
+            )
+        )
+        val setIds = db.beatmapDao().getDistinctSetIds()
+        onProgress(
+            MissingOsuBackfillProgress(
+                phase = MissingOsuBackfillPhase.Scanning,
+                processed = 0,
+                total = setIds.size
+            )
+        )
+        val affected = setIds.mapIndexedNotNull { index, setId ->
             val tracks = db.beatmapDao().getTracksForSet(setId)
             val validNames = validStoredDifficulties(setId)
             val missing = tracks.asSequence()
                 .map { it.difficultyName }
                 .filter { it.isNotBlank() && it !in validNames }
                 .toSet()
+            onProgress(
+                MissingOsuBackfillProgress(
+                    phase = MissingOsuBackfillPhase.Scanning,
+                    processed = index + 1,
+                    total = setIds.size,
+                    currentSetId = setId
+                )
+            )
             if (missing.isEmpty()) null else MissingSet(setId, missing)
         }
 
         var repaired = 0
         val failures = linkedMapOf<String, Int>()
         affected.forEachIndexed { index, missingSet ->
-            onProgress(index, affected.size)
+            onProgress(
+                MissingOsuBackfillProgress(
+                    phase = MissingOsuBackfillPhase.Downloading,
+                    processed = index,
+                    total = affected.size,
+                    currentSetId = missingSet.beatmapSetId
+                )
+            )
             var archive: File? = null
             try {
-                archive = archiveProvider(missingSet.beatmapSetId)
+                archive = archiveProvider(missingSet.beatmapSetId) { downloadProgress ->
+                    onProgress(
+                        MissingOsuBackfillProgress(
+                            phase = MissingOsuBackfillPhase.Downloading,
+                            processed = index,
+                            total = affected.size,
+                            currentSetId = missingSet.beatmapSetId,
+                            downloadProgress = downloadProgress
+                        )
+                    )
+                }
                 if (archive == null || !archive.isFile) {
                     recordFailure(failures, "download-failed")
-                    return@forEachIndexed
-                }
-                val directory = File(
-                    context.getExternalFilesDir(null),
-                    "beatmaps/${missingSet.beatmapSetId}"
-                )
-                val result = OsuArchiveBackfillExtractor.extractMissingMaps(
-                    archive = archive,
-                    outputRoot = directory,
-                    expectedBeatmapSetId = missingSet.beatmapSetId,
-                    missingDifficultyNames = missingSet.difficulties
-                )
-                result.failureReasons.forEach { (reason, count) ->
-                    repeat(count) { recordFailure(failures, reason) }
-                }
-                if (result.addedDifficulties.isNotEmpty()) {
-                    repaired++
-                    OsuRenderCache.invalidateSet(context, missingSet.beatmapSetId)
                 } else {
-                    recordFailure(
-                        failures,
-                        if (result.failureReasons.isEmpty()) "maps-not-found" else "no-usable-map"
+                    onProgress(
+                        MissingOsuBackfillProgress(
+                            phase = MissingOsuBackfillPhase.Extracting,
+                            processed = index,
+                            total = affected.size,
+                            currentSetId = missingSet.beatmapSetId
+                        )
                     )
+                    val directory = File(
+                        context.getExternalFilesDir(null),
+                        "beatmaps/${missingSet.beatmapSetId}"
+                    )
+                    val result = OsuArchiveBackfillExtractor.extractMissingMaps(
+                        archive = archive,
+                        outputRoot = directory,
+                        expectedBeatmapSetId = missingSet.beatmapSetId,
+                        missingDifficultyNames = missingSet.difficulties
+                    )
+                    result.failureReasons.forEach { (reason, count) ->
+                        repeat(count) { recordFailure(failures, reason) }
+                    }
+                    if (result.addedDifficulties.isNotEmpty()) {
+                        repaired++
+                        OsuRenderCache.invalidateSet(context, missingSet.beatmapSetId)
+                    } else {
+                        recordFailure(
+                            failures,
+                            if (result.failureReasons.isEmpty()) "maps-not-found" else "no-usable-map"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Missing .osu repair failed for set ${missingSet.beatmapSetId}", e)
@@ -258,8 +330,21 @@ class MissingOsuBackfillService(
                     File(context.cacheDir, "${missingSet.beatmapSetId}.osz").delete()
                 }
             }
+            onProgress(
+                MissingOsuBackfillProgress(
+                    phase = MissingOsuBackfillPhase.Downloading,
+                    processed = index + 1,
+                    total = affected.size
+                )
+            )
         }
-        onProgress(affected.size, affected.size)
+        onProgress(
+            MissingOsuBackfillProgress(
+                phase = MissingOsuBackfillPhase.Completed,
+                processed = affected.size,
+                total = affected.size
+            )
+        )
 
         MissingOsuBackfillResult(
             total = affected.size,

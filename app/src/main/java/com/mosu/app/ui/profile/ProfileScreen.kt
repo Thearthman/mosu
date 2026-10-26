@@ -49,7 +49,10 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.media.MosuBackupService
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.repair.BeatmapMetadataRepairService
-import com.mosu.app.domain.repair.MissingOsuBackfillService
+import com.mosu.app.domain.repair.MissingOsuBackfillManager
+import com.mosu.app.domain.repair.MissingOsuBackfillPhase
+import com.mosu.app.domain.repair.MissingOsuBackfillRunState
+import com.mosu.app.domain.repair.MissingOsuBackfillUiState
 import com.mosu.app.domain.restore.RestoreDownloadsService
 import com.mosu.app.utils.RegionUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -58,6 +61,155 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+@Composable
+private fun MissingOsuRepairProgress(state: MissingOsuBackfillUiState) {
+    val progress = state.progress
+    val phaseLabel = when (state.runState) {
+        MissingOsuBackfillRunState.Idle -> ""
+        MissingOsuBackfillRunState.Queued ->
+            stringResource(R.string.profile_debug_missing_osu_queued)
+        MissingOsuBackfillRunState.Failed ->
+            stringResource(R.string.profile_debug_missing_osu_failed)
+        MissingOsuBackfillRunState.Cancelled ->
+            stringResource(R.string.profile_debug_missing_osu_cancelled)
+        MissingOsuBackfillRunState.Running,
+        MissingOsuBackfillRunState.Completed -> when (progress?.phase) {
+            MissingOsuBackfillPhase.Downloading ->
+                stringResource(R.string.profile_debug_missing_osu_downloading)
+            MissingOsuBackfillPhase.Extracting ->
+                stringResource(R.string.profile_debug_missing_osu_extracting)
+            MissingOsuBackfillPhase.Completed ->
+                stringResource(R.string.profile_debug_missing_osu_completed)
+            MissingOsuBackfillPhase.Scanning,
+            null -> stringResource(R.string.profile_debug_missing_osu_scanning)
+        }
+    }
+    val fraction = if (progress != null && progress.total > 0) {
+        (progress.processed.toFloat() / progress.total).coerceIn(0f, 1f)
+    } else {
+        null
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (fraction != null) {
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+            )
+        } else {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = phaseLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        if (
+            progress != null &&
+            progress.phase == MissingOsuBackfillPhase.Scanning &&
+            state.runState == MissingOsuBackfillRunState.Running
+        ) {
+            if (progress.total > 0) {
+                Text(
+                    text = stringResource(
+                        R.string.profile_debug_missing_osu_scan_progress,
+                        progress.processed,
+                        progress.total
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else if (progress != null) {
+            Text(
+                text = stringResource(
+                    R.string.profile_debug_missing_osu_repair_total,
+                    progress.total
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (progress.total > 0) {
+                Text(
+                    text = stringResource(
+                        R.string.profile_debug_missing_osu_repair_progress,
+                        progress.processed,
+                        progress.total
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        progress?.currentSetId?.let { setId ->
+            Text(
+                text = stringResource(
+                    R.string.profile_debug_missing_osu_current_set,
+                    setId
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (
+            state.runState == MissingOsuBackfillRunState.Running &&
+            progress?.phase == MissingOsuBackfillPhase.Downloading &&
+            progress.downloadProgress >= 0
+        ) {
+            Text(
+                text = stringResource(
+                    R.string.profile_debug_missing_osu_download_progress,
+                    progress.downloadProgress
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        state.result?.let { result ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = when {
+                    result.total == 0 ->
+                        stringResource(R.string.profile_debug_missing_osu_none)
+                    result.skipped == 0 ->
+                        stringResource(
+                            R.string.profile_debug_missing_osu_clean,
+                            result.repaired,
+                            result.total
+                        )
+                    else -> {
+                        val reasons = result.failureReasons.entries
+                            .joinToString(", ") { "${it.key} ×${it.value}" }
+                        stringResource(
+                            R.string.profile_debug_missing_osu_result,
+                            result.repaired,
+                            result.total,
+                            result.skipped,
+                            reasons
+                        )
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        state.errorMessage?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class,ExperimentalMaterialApi::class)
 @Composable
@@ -120,10 +272,14 @@ fun ProfileScreen(
     // Debug tools state
     var debugMenuExpanded by remember { mutableStateOf(false) }
     var isRepairingMetadata by remember { mutableStateOf(false) }
-    var isRepairingOsu by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val missingOsuBackfillManager = remember(context.applicationContext) {
+        MissingOsuBackfillManager.getInstance(context)
+    }
+    val osuRepairState by missingOsuBackfillManager.state.collectAsState()
+    val isRepairingOsu = osuRepairState.isActive
 
     val exportConfigLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -781,36 +937,39 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(16.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.profile_debug_menu),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Box {
-                        OutlinedButton(
-                            onClick = { debugMenuExpanded = true },
-                            enabled = !isRepairingMetadata && !isRepairingOsu
-                        ) {
-                            if (isRepairingMetadata || isRepairingOsu) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.profile_debug_menu),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Box {
+                            OutlinedButton(
+                                onClick = { debugMenuExpanded = true },
+                                enabled = !isRepairingMetadata && !isRepairingOsu
+                            ) {
+                                if (isRepairingMetadata || isRepairingOsu) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                Text(stringResource(R.string.profile_debug_menu))
                             }
-                            Text(stringResource(R.string.profile_debug_menu))
-                        }
-                        DropdownMenu(
-                            expanded = debugMenuExpanded,
-                            onDismissRequest = { debugMenuExpanded = false }
-                        ) {
+                            DropdownMenu(
+                                expanded = debugMenuExpanded,
+                                onDismissRequest = { debugMenuExpanded = false }
+                            ) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.profile_debug_fix_metadata)) },
                                 onClick = {
@@ -868,60 +1027,18 @@ fun ProfileScreen(
                                 onClick = {
                                     debugMenuExpanded = false
                                     if (!isRepairingMetadata && !isRepairingOsu) {
-                                        isRepairingOsu = true
-                                        scope.launch {
-                                            try {
-                                                val result = MissingOsuBackfillService(
-                                                    context = context,
-                                                    db = db,
-                                                    settingsManager = settingsManager
-                                                ).repairAll()
-                                                val message = when {
-                                                    result.total == 0 ->
-                                                        context.getString(
-                                                            R.string.profile_debug_missing_osu_none
-                                                        )
-                                                    result.skipped == 0 ->
-                                                        context.getString(
-                                                            R.string.profile_debug_missing_osu_clean,
-                                                            result.repaired,
-                                                            result.total
-                                                        )
-                                                    else -> {
-                                                        val reasons = result.failureReasons.entries
-                                                            .joinToString(", ") {
-                                                                "${it.key} ×${it.value}"
-                                                            }
-                                                        context.getString(
-                                                            R.string.profile_debug_missing_osu_result,
-                                                            result.repaired,
-                                                            result.total,
-                                                            result.skipped,
-                                                            reasons
-                                                        )
-                                                    }
-                                                }
-                                                android.widget.Toast.makeText(
-                                                    context,
-                                                    message,
-                                                    android.widget.Toast.LENGTH_LONG
-                                                ).show()
-                                            } catch (e: Exception) {
-                                                android.widget.Toast.makeText(
-                                                    context,
-                                                    e.message ?: "Missing .osu repair failed",
-                                                    android.widget.Toast.LENGTH_LONG
-                                                ).show()
-                                            } finally {
-                                                isRepairingOsu = false
-                                            }
-                                        }
+                                        missingOsuBackfillManager.start()
                                     }
                                 }
                             )
                         }
                     }
                 }
+                if (osuRepairState.runState != MissingOsuBackfillRunState.Idle) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    MissingOsuRepairProgress(osuRepairState)
+                }
+            }
             }
 
     }

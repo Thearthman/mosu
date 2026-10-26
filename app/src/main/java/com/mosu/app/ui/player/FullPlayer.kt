@@ -601,6 +601,10 @@ private fun PlayerArtwork(
     landscape: Boolean,
     rendererEnabled: Boolean
 ) {
+    // FullPlayer stays composed behind the library so the sheet can animate,
+    // but nothing in its artwork slot should draw or drive frames while the
+    // sheet is fully collapsed.
+    if (!isExpanded) return
     if (!rendererEnabled || timeline == null || skin == null) {
         CoverArt(artworkUri = artworkUri)
         return

@@ -71,6 +71,8 @@ class MissingOsuBackfillManager private constructor(context: Context) {
     val state: StateFlow<MissingOsuBackfillUiState> = _state.asStateFlow()
 
     private var observationJob: Job? = null
+    @Volatile
+    private var cancellationRequested = false
 
     init {
         scope.launch {
@@ -83,6 +85,7 @@ class MissingOsuBackfillManager private constructor(context: Context) {
     fun start() {
         scope.launch {
             startMutex.withLock {
+                cancellationRequested = false
                 val existingWork = runCatching {
                     workManager.getWorkInfosForUniqueWork(
                         MissingOsuBackfillWorker.WORK_NAME
@@ -142,7 +145,43 @@ class MissingOsuBackfillManager private constructor(context: Context) {
         }
     }
 
+    fun cancel() {
+        scope.launch {
+            startMutex.withLock {
+                if (!_state.value.isActive) return@withLock
+                cancellationRequested = true
+                try {
+                    workManager.cancelUniqueWork(
+                        MissingOsuBackfillWorker.WORK_NAME
+                    ).await()
+                    val cancelled = _state.value.copy(
+                        runState = MissingOsuBackfillRunState.Cancelled,
+                        result = null,
+                        errorMessage = null
+                    )
+                    _state.value = cancelled
+                    stateStore.saveOutcome(
+                        runState = MissingOsuBackfillRunState.Cancelled,
+                        result = null,
+                        errorMessage = null
+                    )
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The observer remains active, so keep the current progress
+                    // and surface the cancellation failure without hiding a job
+                    // that may still be running.
+                    cancellationRequested = false
+                    _state.value = _state.value.copy(
+                        errorMessage = e.message ?: e::class.java.simpleName
+                    )
+                }
+            }
+        }
+    }
+
     private suspend fun restoreWork() {
+        cancellationRequested = false
         val savedWorkId = stateStore.loadWorkId()
         val existingWork = runCatching {
             workManager.getWorkInfosForUniqueWork(
@@ -164,7 +203,18 @@ class MissingOsuBackfillManager private constructor(context: Context) {
             try {
                 workManager.getWorkInfoByIdFlow(workId).collect { info ->
                     if (info == null) return@collect
-                    val uiState = info.toUiState(stateStore)
+                    val uiState = if (cancellationRequested && info.state.isActive) {
+                        // WorkManager needs a moment to publish CANCELLED. Keep
+                        // the user's cancellation visible during that window
+                        // instead of briefly reverting to Running.
+                        _state.value.copy(
+                            runState = MissingOsuBackfillRunState.Cancelled,
+                            result = null,
+                            errorMessage = null
+                        )
+                    } else {
+                        info.toUiState(stateStore)
+                    }
                     _state.value = uiState
                     if (!uiState.isActive) {
                         stateStore.saveOutcome(

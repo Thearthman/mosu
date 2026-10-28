@@ -94,12 +94,21 @@ fun ScoreScreen(
     accessToken: String?,
     repository: OsuRepository,
     db: AppDatabase,
-    settingsManager: SettingsManager
+    settingsManager: SettingsManager,
+    isLandscape: Boolean = false,
+    landscapeRefreshRequest: Int = 0,
+    onLandscapeRefreshRequestConsumed: () -> Unit = {}
 ) {
     var scores by remember { mutableStateOf<List<RecentPlayEntity>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshRequest by remember { mutableStateOf(0) }
+    LaunchedEffect(landscapeRefreshRequest) {
+        if (landscapeRefreshRequest > 0) {
+            refreshRequest++
+            onLandscapeRefreshRequestConsumed()
+        }
+    }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -189,30 +198,35 @@ fun ScoreScreen(
     ) {
         item {
             Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        stringResource(R.string.score_title),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 16.dp),
-                        style = MaterialTheme.typography.displayMedium
-                    )
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    } else {
-                        IconButton(
-                            onClick = {
-                                refreshRequest++
-                            },
-                            enabled = accessToken != null
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.score_cd_refresh)
+                if (!isLandscape) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            stringResource(R.string.score_title),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 16.dp),
+                            style = MaterialTheme.typography.displayMedium
+                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
                             )
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    refreshRequest++
+                                },
+                                enabled = accessToken != null
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = stringResource(R.string.score_cd_refresh)
+                                )
+                            }
                         }
                     }
                 }

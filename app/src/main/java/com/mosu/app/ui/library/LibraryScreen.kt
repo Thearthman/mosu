@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.isImeVisible
@@ -73,6 +74,7 @@ import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.BeatmapTrackData
 import com.mosu.app.ui.components.DownloadProgress
 import com.mosu.app.ui.components.GenreFilter
+import com.mosu.app.ui.components.GenreRail
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.PlaylistOption
@@ -96,7 +98,13 @@ fun LibraryScreen(
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {},
     snackbarHostState: SnackbarHostState? = null,
-    deferredActionViewModel: DeferredActionViewModel = viewModel()
+    deferredActionViewModel: DeferredActionViewModel = viewModel(),
+    isLandscape: Boolean = false,
+    genreBarEnabled: Boolean = true,
+    librarySearchQuery: String = "",
+    onLibrarySearchQueryChange: (String) -> Unit = {},
+    landscapeFindCurrentRequest: Int = 0,
+    onLandscapeFindCurrentRequestConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val downloadedMaps by remember { db.beatmapDao().getAllBeatmaps() }.collectAsState(initial = emptyList())
@@ -176,7 +184,10 @@ fun LibraryScreen(
     }
 
     // Genre Filter State
-    var selectedGenreId by remember { mutableStateOf<Int?>(null) }
+    var selectedGenreIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    LaunchedEffect(genreBarEnabled) {
+        if (!genreBarEnabled) selectedGenreIds = emptySet()
+    }
 
     // Deletion states from shared ViewModel
     val pendingDeletions by deferredActionViewModel.pendingLibraryTrackDeletions.collectAsState()
@@ -186,46 +197,48 @@ fun LibraryScreen(
     val downloadTasks by downloadManager.tasks.collectAsState()
 
     // Search State
-    var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val effectiveSearchQuery = librarySearchQuery
 
     // Monitor keyboard visibility - collapse when keyboard is hidden and no search text
     val isKeyboardVisible = WindowInsets.isImeVisible
 
-    LaunchedEffect(isKeyboardVisible, searchQuery) {
-        if (!isKeyboardVisible && searchQuery.isEmpty() && isSearchExpanded) {
+    LaunchedEffect(isKeyboardVisible, librarySearchQuery) {
+        if (!isLandscape && !isKeyboardVisible && librarySearchQuery.isEmpty() && isSearchExpanded) {
             isSearchExpanded = false
             focusManager.clearFocus()
         }
     }
 
     // Filter maps by selected genre and search query
-    val filteredMaps = remember(downloadedMaps, selectedGenreId, searchQuery, pendingDeletions, pendingSetDeletions) {
-        val genreFiltered = if (selectedGenreId != null) {
-            downloadedMaps.filter { 
+    val filteredMaps = remember(
+        downloadedMaps,
+        selectedGenreIds,
+        effectiveSearchQuery,
+        pendingDeletions,
+        pendingSetDeletions
+    ) {
+        val genreFiltered = downloadedMaps.filter {
+            val genreMatches = selectedGenreIds.isEmpty() || run {
                 val effectiveGenreId = when (it.genreId) {
                     null, 0, 1 -> 6 // Treat null, Any, or Unspecified as Other
                     else -> it.genreId
                 }
-                effectiveGenreId == selectedGenreId && 
-                it.uid !in pendingDeletions && 
-                it.beatmapSetId !in pendingSetDeletions 
+                effectiveGenreId in selectedGenreIds
             }
-        } else {
-            downloadedMaps.filter { 
-                it.uid !in pendingDeletions && 
-                it.beatmapSetId !in pendingSetDeletions 
-            }
+            genreMatches &&
+                it.uid !in pendingDeletions &&
+                it.beatmapSetId !in pendingSetDeletions
         }
 
-        if (searchQuery.isNotBlank()) {
+        if (effectiveSearchQuery.isNotBlank()) {
             genreFiltered.filter { map ->
-                map.title.contains(searchQuery, ignoreCase = true) ||
-                map.artist.contains(searchQuery, ignoreCase = true) ||
-                map.difficultyName.contains(searchQuery, ignoreCase = true) ||
-                map.creator.contains(searchQuery, ignoreCase = true)
+                map.title.contains(effectiveSearchQuery, ignoreCase = true) ||
+                map.artist.contains(effectiveSearchQuery, ignoreCase = true) ||
+                map.difficultyName.contains(effectiveSearchQuery, ignoreCase = true) ||
+                map.creator.contains(effectiveSearchQuery, ignoreCase = true)
             }
         } else {
             genreFiltered
@@ -374,8 +387,97 @@ fun LibraryScreen(
         )
     }
 
+    fun findCurrentlyPlaying() {
+        val match = filteredMaps.firstOrNull {
+            // Try matching by title first (for standalone songs)
+            it.title.trim().lowercase() == playingTitle ||
+                // Then try matching by difficulty name (for songs in beatmapsets)
+                it.difficultyName.trim().lowercase() == playingTitle
+        }
+        if (match != null) {
+            scope.launch {
+                // 1. If it's a track in an album, ensure album is expanded first
+                val isAlbumTrack = groupedMaps[match.beatmapSetId]?.any { it.isAlbum } == true
+                if (isAlbumTrack) {
+                    expandedBeatmapSets = expandedBeatmapSets + match.beatmapSetId
+                    highlightTrackId = match.uid
+                } else {
+                    highlightSetId = match.beatmapSetId
+                }
+
+                // 2. Wait for recomposition to ensure LazyColumn knows about new items
+                delay(50)
+
+                // 3. Calculate actual flattened index
+                val genreHeaderItemCount = if (!isLandscape && genreBarEnabled) 1 else 0
+                var flattenedIndex = genreHeaderItemCount
+                for (set in beatmapSets) {
+                    if (set.id == match.beatmapSetId) {
+                        if (isAlbumTrack) {
+                            val sortedSongs = set.tracks.sortedBy { it.difficultyName }
+                            val trackIndex = sortedSongs.indexOfFirst { it.id == match.uid }
+                            if (trackIndex != -1) {
+                                flattenedIndex += 1 + trackIndex // +1 for header
+                            }
+                        }
+                        break
+                    }
+                    flattenedIndex += 1 // Header
+                    if (expandedBeatmapSets.contains(set.id)) {
+                        flattenedIndex += set.tracks.size
+                    }
+                }
+
+                // 4. Scroll to item with offset to center it (roughly)
+                if (flattenedIndex >= 0) {
+                    listState.animateScrollToItem(flattenedIndex)
+                }
+
+                // 5. Highlight sequence
+                repeat(3) {
+                    delay(150)
+                    highlightTrackId = null
+                    highlightSetId = null
+                    delay(150)
+                    if (isAlbumTrack) {
+                        highlightTrackId = match.uid
+                    } else {
+                        highlightSetId = match.beatmapSetId
+                    }
+                }
+                highlightTrackId = null
+                highlightSetId = null
+            }
+        } else {
+            scope.launch {
+                repeat(3) {
+                    buttonBlink = true
+                    delay(150)
+                    buttonBlink = false
+                    delay(150)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(landscapeFindCurrentRequest) {
+        if (landscapeFindCurrentRequest > 0) {
+            findCurrentlyPlaying()
+            onLandscapeFindCurrentRequestConsumed()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isLandscape && genreBarEnabled) {
+                GenreRail(
+                    selectedGenreIds = selectedGenreIds,
+                    onGenreSelected = { selectedGenreIds = it },
+                    modifier = Modifier.fillMaxHeight()
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             val libraryTitle = stringResource(id = R.string.library_title)
             val titleStyle = MaterialTheme.typography.displayMedium
             val textMeasurer = rememberTextMeasurer()
@@ -383,16 +485,17 @@ fun LibraryScreen(
                 textMeasurer.measure(text = libraryTitle, style = titleStyle).size.width.toDp()
             }
 
-            // Header with title and search bar
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
+            // Portrait header. Landscape owns the title and search action in the app rails.
+            if (!isLandscape) {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                ) {
                 // Animated width for collapsible search bar
                 val expandedSearchBarWidth = (maxWidth - titleWidth).coerceAtLeast(50.dp)
                 val searchBarWidth by animateDpAsState(
-                    targetValue = if (isSearchExpanded || searchQuery.isNotEmpty()) {
+                    targetValue = if (isSearchExpanded || librarySearchQuery.isNotEmpty()) {
                         expandedSearchBarWidth
                     } else {
                         50.dp
@@ -413,8 +516,9 @@ fun LibraryScreen(
                             .padding(top = 16.dp, bottom = 16.dp)
                     )
 
-                    // Custom search field with dynamic text positioning
-                    Box(
+                    // In landscape the collapsed search action lives above the player rail.
+                    if (!isLandscape || isSearchExpanded || librarySearchQuery.isNotEmpty()) {
+                        Box(
                         modifier = Modifier
                             .width(searchBarWidth)
                             .height(50.dp)
@@ -428,7 +532,7 @@ fun LibraryScreen(
                                     isSearchExpanded = true
                                 }
                             }
-                    ) {
+                        ) {
                         // Search icon (fades/disappears based on width)
                         if (searchBarWidth < 120.dp) {
                             val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
@@ -455,9 +559,9 @@ fun LibraryScreen(
 
                         // Text field content with dynamic positioning
                         BasicTextField(
-                            value = searchQuery,
+                            value = librarySearchQuery,
                             onValueChange = {
-                                searchQuery = it
+                                onLibrarySearchQueryChange(it)
                                 // Keep expanded when there's text
                                 if (it.isNotEmpty()) {
                                     isSearchExpanded = true
@@ -485,7 +589,7 @@ fun LibraryScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
-                                    if (searchQuery.isEmpty() && searchBarWidth >= 125.dp) {
+                                    if (librarySearchQuery.isEmpty() && searchBarWidth >= 125.dp) {
                                         Text(
                                             text = stringResource(id = R.string.library_search_placeholder),
                                             style = MaterialTheme.typography.bodyMedium,
@@ -498,9 +602,9 @@ fun LibraryScreen(
                         )
 
                         // Clear button
-                        if (searchQuery.isNotEmpty()) {
+                        if (librarySearchQuery.isNotEmpty()) {
                             IconButton(
-                                onClick = { searchQuery = "" },
+                                onClick = { onLibrarySearchQueryChange("") },
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
                                     .padding(end = 10.dp)
@@ -513,8 +617,10 @@ fun LibraryScreen(
                                 )
                             }
                         }
+                        }
                     }
                 }
+            }
             }
 
             // BeatmapSet List
@@ -536,22 +642,27 @@ fun LibraryScreen(
                             expandedBeatmapSets - id
                         }
                     },
-                    header = {
-                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Text(
-                                text = stringResource(id = R.string.library_filter_genre),
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
-                            GenreFilter(
-                                selectedGenreId = selectedGenreId,
-                                onGenreSelected = { selectedGenreId = it },
-                                modifier = Modifier.padding(top = 4.dp, start = 16.dp, end = 16.dp)
-                            )
+                    header = if (!isLandscape && genreBarEnabled) {
+                        {
+                            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                                Text(
+                                    text = stringResource(id = R.string.library_filter_genre),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                                GenreFilter(
+                                    selectedGenreIds = selectedGenreIds,
+                                    onGenreSelected = { selectedGenreIds = it },
+                                    modifier = Modifier.padding(top = 4.dp, start = 16.dp, end = 16.dp)
+                                )
+                            }
                         }
+                    } else {
+                        null
                     }
                 )
             )
+        }
         }
 
         if (showPlaylistDialog && dialogTrack != null) {
@@ -580,83 +691,12 @@ fun LibraryScreen(
             )
         }
 
-        if (nowPlaying != null) {
+        if (nowPlaying != null && !isLandscape) {
             val isLight = androidx.compose.foundation.isSystemInDarkTheme().not()
             val flickerColor = if (isLight) MaterialTheme.colorScheme.onPrimary else Color(0xff300063)
             val buttonBg = if (buttonBlink) flickerColor.copy(alpha = 0.35f) else Color.Transparent
             IconButton(
-                onClick = {
-                    val keyList = groupedMaps.keys.toList()
-                    val match = filteredMaps.firstOrNull {
-                        // Try matching by title first (for standalone songs)
-                        it.title.trim().lowercase() == playingTitle ||
-                        // Then try matching by difficulty name (for songs in beatmapsets)
-                        it.difficultyName.trim().lowercase() == playingTitle
-                    }
-                    if (match != null) {
-                        scope.launch {
-                            // 1. If it's a track in an album, ensure album is expanded first
-                            val isAlbumTrack = groupedMaps[match.beatmapSetId]?.any { it.isAlbum } == true
-                            if (isAlbumTrack) {
-                                expandedBeatmapSets = expandedBeatmapSets + match.beatmapSetId
-                                highlightTrackId = match.uid
-                            } else {
-                                highlightSetId = match.beatmapSetId
-                            }
-
-                            // 2. Wait for recomposition to ensure LazyColumn knows about new items
-                            delay(50)
-
-                            // 3. Calculate actual flattened index
-                            var flattenedIndex = 1 // Start at 1 because of genre header
-                            for (set in beatmapSets) {
-                                if (set.id == match.beatmapSetId) {
-                                    if (isAlbumTrack) {
-                                        val sortedSongs = set.tracks.sortedBy { it.difficultyName }
-                                        val trackIndex = sortedSongs.indexOfFirst { it.id == match.uid }
-                                        if (trackIndex != -1) {
-                                            flattenedIndex += 1 + trackIndex // +1 for header
-                                        }
-                                    }
-                                    break
-                                }
-                                flattenedIndex += 1 // Header
-                                if (expandedBeatmapSets.contains(set.id)) {
-                                    flattenedIndex += set.tracks.size
-                                }
-                            }
-
-                            // 4. Scroll to item with offset to center it (roughly)
-                            if (flattenedIndex >= 0) {
-                                // Since all items are 60dp, we can use a precise offset if needed
-                                // but animateScrollToItem(flattenedIndex) is usually enough to bring it to top.
-                                // To center it: viewportHeight / 2 - 30dp
-                                listState.animateScrollToItem(flattenedIndex)
-                            }
-
-                            // 5. Highlight sequence
-                            repeat(3) {
-                                delay(150)
-                                highlightTrackId = null
-                                highlightSetId = null
-                                delay(150)
-                                if (isAlbumTrack) highlightTrackId = match.uid else highlightSetId = match.beatmapSetId
-                            }
-                            // Final clear
-                            highlightTrackId = null
-                            highlightSetId = null
-                        }
-                    } else {
-                        scope.launch {
-                            repeat(3) {
-                                buttonBlink = true
-                                delay(150)
-                                buttonBlink = false
-                                delay(150)
-                            }
-                        }
-                    }
-                },
+                onClick = { findCurrentlyPlaying() },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 12.dp, bottom = 14.dp)

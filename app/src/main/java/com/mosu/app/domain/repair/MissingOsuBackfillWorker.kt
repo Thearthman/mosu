@@ -86,6 +86,16 @@ class MissingOsuBackfillWorker(
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val cancelIntent = Intent(
+            applicationContext,
+            MissingOsuBackfillCancelReceiver::class.java
+        ).setAction(MissingOsuBackfillCancelReceiver.ACTION_CANCEL)
+        val cancelPendingIntent = PendingIntent.getBroadcast(
+            applicationContext,
+            1,
+            cancelIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.mosu_icon_foreground)
             .setContentTitle(
@@ -95,6 +105,11 @@ class MissingOsuBackfillWorker(
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
+            .addAction(
+                0,
+                applicationContext.getString(R.string.missing_osu_notification_cancel),
+                cancelPendingIntent
+            )
 
         val overallProgress = progress
             ?.takeIf {

@@ -9,7 +9,12 @@ object OsuTimelineCompiler {
     fun compile(parsed: ParsedOsuMap, expectedBeatmapSetId: Long): OsuRenderTimeline {
         val header = parsed.header
         require(header.mode == 0) { "Only osu!standard maps can be rendered" }
-        require(header.beatmapSetId == expectedBeatmapSetId) {
+        require(
+            OsuBeatmapParser.belongsToBeatmapSet(
+                header.beatmapSetId,
+                expectedBeatmapSetId
+            )
+        ) {
             "BeatmapSetID ${header.beatmapSetId} does not match $expectedBeatmapSetId"
         }
 

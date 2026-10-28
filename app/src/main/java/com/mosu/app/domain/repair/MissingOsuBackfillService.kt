@@ -7,12 +7,16 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.domain.download.DownloadState
 import com.mosu.app.domain.render.OsuBeatmapParser
+import com.mosu.app.domain.render.OsuMapHeader
 import com.mosu.app.domain.render.OsuRenderCache
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.util.zip.ZipFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
@@ -45,8 +49,9 @@ data class OsuArchiveExtractionResult(
 )
 
 /**
- * Writes only previously absent `.osu` files from an `.osz`. Existing files,
- * audio, covers, and every other archive entry are deliberately ignored.
+ * Writes every previously absent `.osu` file from an affected set's `.osz`.
+ * Existing valid maps, audio, covers, and every other archive entry are
+ * deliberately ignored.
  */
 object OsuArchiveBackfillExtractor {
     private const val MAX_OSU_BYTES = 4 * 1024 * 1024
@@ -55,13 +60,13 @@ object OsuArchiveBackfillExtractor {
         archive: File,
         outputRoot: File,
         expectedBeatmapSetId: Long,
-        missingDifficultyNames: Set<String>
+        checkCancelled: () -> Unit = {}
     ): OsuArchiveExtractionResult {
-        if (missingDifficultyNames.isEmpty() || !archive.isFile) {
+        if (!archive.isFile) {
             return OsuArchiveExtractionResult(emptySet())
         }
 
-        val remaining = missingDifficultyNames.toMutableSet()
+        val storedMaps = discoverStoredMaps(outputRoot, expectedBeatmapSetId)
         val added = linkedSetOf<String>()
         val failures = linkedMapOf<String, Int>()
         fun failure(reason: String) {
@@ -72,6 +77,7 @@ object OsuArchiveBackfillExtractor {
             ZipFile(archive).use { zip ->
                 val entries = zip.entries()
                 while (entries.hasMoreElements()) {
+                    checkCancelled()
                     val entry = entries.nextElement()
                     if (entry.isDirectory || !entry.name.endsWith(".osu", ignoreCase = true)) {
                         continue
@@ -103,15 +109,16 @@ object OsuArchiveBackfillExtractor {
                         failure("invalid-map")
                         continue
                     }
-                    if (header.mode != 0) {
-                        failure("unsupported-mode")
-                        continue
-                    }
-                    if (header.beatmapSetId != expectedBeatmapSetId) {
+                    if (
+                        !OsuBeatmapParser.belongsToBeatmapSet(
+                            header.beatmapSetId,
+                            expectedBeatmapSetId
+                        )
+                    ) {
                         failure("wrong-set-id")
                         continue
                     }
-                    if (header.difficultyName !in remaining) {
+                    if (storedMaps.any { it.matches(header) }) {
                         continue
                     }
 
@@ -126,9 +133,11 @@ object OsuArchiveBackfillExtractor {
                         continue
                     }
                     added += header.difficultyName
-                    remaining -= header.difficultyName
+                    storedMaps += StoredMap(header)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             failure("invalid-archive")
         }
@@ -144,11 +153,69 @@ object OsuArchiveBackfillExtractor {
         archive: File,
         outputRoot: File,
         expectedBeatmapSetId: Long,
-        missingDifficultyNames: Set<String>
+        checkCancelled: () -> Unit = {}
     ): OsuArchiveExtractionResult = try {
-        extractMissingMaps(archive, outputRoot, expectedBeatmapSetId, missingDifficultyNames)
+        extractMissingMaps(
+            archive,
+            outputRoot,
+            expectedBeatmapSetId,
+            checkCancelled
+        )
     } finally {
         archive.delete()
+    }
+
+    /**
+     * A library difficulty is already repaired when a structurally valid map
+     * with the same beatmap id (or legacy identity fields) is present anywhere
+     * in the set directory. This keeps repeated repairs idempotent.
+     */
+    private fun discoverStoredMaps(
+        outputRoot: File,
+        expectedBeatmapSetId: Long
+    ): MutableList<StoredMap> {
+        if (!outputRoot.isDirectory) return mutableListOf()
+        return outputRoot.walkTopDown()
+            .filter { it.isFile && it.extension.equals("osu", ignoreCase = true) }
+            .mapNotNull { file ->
+                val header = runCatching { OsuBeatmapParser.parseHeader(file) }
+                    .getOrNull()
+                    ?: return@mapNotNull null
+                if (
+                    !OsuBeatmapParser.belongsToBeatmapSet(
+                        header.beatmapSetId,
+                        expectedBeatmapSetId
+                    ) ||
+                    !runCatching { OsuBeatmapParser.hasHitObjects(file) }.getOrDefault(false)
+                ) {
+                    return@mapNotNull null
+                }
+                StoredMap(header)
+            }
+            .toMutableList()
+    }
+
+    private data class StoredMap(
+        val beatmapId: Long?,
+        val mode: Int,
+        val audioFilename: String,
+        val difficultyName: String
+    ) {
+        constructor(header: OsuMapHeader) : this(
+            beatmapId = header.beatmapId,
+            mode = header.mode,
+            audioFilename = OsuBeatmapParser.normalizeAudioFilename(header.audioFilename),
+            difficultyName = header.difficultyName
+        )
+
+        fun matches(header: OsuMapHeader): Boolean {
+            if (beatmapId != null && header.beatmapId != null) {
+                return beatmapId == header.beatmapId
+            }
+            return mode == header.mode &&
+                audioFilename == OsuBeatmapParser.normalizeAudioFilename(header.audioFilename) &&
+                difficultyName == header.difficultyName
+        }
     }
 
     private fun normalizedRelativePath(name: String): String? {
@@ -216,6 +283,8 @@ class MissingOsuBackfillService(
         beatmapSetId: Long,
         onDownloadProgress: suspend (Int) -> Unit
     ) -> File? = { beatmapSetId, onDownloadProgress ->
+        require(beatmapSetId > 0L) { "Invalid beatmapset id: $beatmapSetId" }
+        Log.d(TAG, "Downloading exact beatmapset archive for set $beatmapSetId")
         val state = BeatmapDownloader(context, settingsManager)
             .downloadBeatmap(beatmapSetId)
             .onEach { downloadState ->
@@ -224,6 +293,9 @@ class MissingOsuBackfillService(
                 }
             }
             .first { it is DownloadState.Downloaded || it is DownloadState.Error }
+        if (state is DownloadState.Error) {
+            Log.w(TAG, "Exact archive download failed for set $beatmapSetId: ${state.message}")
+        }
         (state as? DownloadState.Downloaded)?.file
     }
 ) {
@@ -246,6 +318,7 @@ class MissingOsuBackfillService(
             )
         )
         val affected = setIds.mapIndexedNotNull { index, setId ->
+            currentCoroutineContext().ensureActive()
             val tracks = db.beatmapDao().getTracksForSet(setId)
             val validNames = validStoredDifficulties(setId)
             val missing = tracks.asSequence()
@@ -260,29 +333,30 @@ class MissingOsuBackfillService(
                     currentSetId = setId
                 )
             )
-            if (missing.isEmpty()) null else MissingSet(setId, missing)
+            if (missing.isEmpty()) null else setId
         }
 
         var repaired = 0
         val failures = linkedMapOf<String, Int>()
-        affected.forEachIndexed { index, missingSet ->
+        affected.forEachIndexed { index, beatmapSetId ->
+            currentCoroutineContext().ensureActive()
             onProgress(
                 MissingOsuBackfillProgress(
                     phase = MissingOsuBackfillPhase.Downloading,
                     processed = index,
                     total = affected.size,
-                    currentSetId = missingSet.beatmapSetId
+                    currentSetId = beatmapSetId
                 )
             )
             var archive: File? = null
             try {
-                archive = archiveProvider(missingSet.beatmapSetId) { downloadProgress ->
+                archive = archiveProvider(beatmapSetId) { downloadProgress ->
                     onProgress(
                         MissingOsuBackfillProgress(
                             phase = MissingOsuBackfillPhase.Downloading,
                             processed = index,
                             total = affected.size,
-                            currentSetId = missingSet.beatmapSetId,
+                            currentSetId = beatmapSetId,
                             downloadProgress = downloadProgress
                         )
                     )
@@ -290,30 +364,34 @@ class MissingOsuBackfillService(
                 if (archive == null || !archive.isFile) {
                     recordFailure(failures, "download-failed")
                 } else {
+                    currentCoroutineContext().ensureActive()
                     onProgress(
                         MissingOsuBackfillProgress(
                             phase = MissingOsuBackfillPhase.Extracting,
                             processed = index,
                             total = affected.size,
-                            currentSetId = missingSet.beatmapSetId
+                            currentSetId = beatmapSetId
                         )
                     )
+                    val extractionContext = currentCoroutineContext()
                     val directory = File(
                         context.getExternalFilesDir(null),
-                        "beatmaps/${missingSet.beatmapSetId}"
+                        "beatmaps/$beatmapSetId"
                     )
                     val result = OsuArchiveBackfillExtractor.extractMissingMaps(
                         archive = archive,
                         outputRoot = directory,
-                        expectedBeatmapSetId = missingSet.beatmapSetId,
-                        missingDifficultyNames = missingSet.difficulties
+                        expectedBeatmapSetId = beatmapSetId,
+                        checkCancelled = {
+                            extractionContext.ensureActive()
+                        }
                     )
                     result.failureReasons.forEach { (reason, count) ->
                         repeat(count) { recordFailure(failures, reason) }
                     }
                     if (result.addedDifficulties.isNotEmpty()) {
                         repaired++
-                        OsuRenderCache.invalidateSet(context, missingSet.beatmapSetId)
+                        OsuRenderCache.invalidateSet(context, beatmapSetId)
                     } else {
                         recordFailure(
                             failures,
@@ -321,13 +399,15 @@ class MissingOsuBackfillService(
                         )
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Missing .osu repair failed for set ${missingSet.beatmapSetId}", e)
+                Log.w(TAG, "Missing .osu repair failed for set $beatmapSetId", e)
                 recordFailure(failures, e::class.java.simpleName)
             } finally {
                 runCatching { archive?.delete() }
                 runCatching {
-                    File(context.cacheDir, "${missingSet.beatmapSetId}.osz").delete()
+                    File(context.cacheDir, "$beatmapSetId.osz").delete()
                 }
             }
             onProgress(
@@ -364,11 +444,22 @@ class MissingOsuBackfillService(
             directory.walkTopDown()
                 .filter { it.isFile && it.extension.equals("osu", ignoreCase = true) }
                 .mapNotNull { file ->
-                    val parsed = OsuBeatmapParser.parseAndValidate(file, beatmapSetId)
+                    val header = runCatching { OsuBeatmapParser.parseHeader(file) }
+                        .getOrNull()
                         ?: return@mapNotNull null
-                    parsed.takeIf { it.hitObjects.isNotEmpty() }
-                        ?.header
-                        ?.difficultyName
+                    val hasHitObjects = runCatching {
+                        OsuBeatmapParser.hasHitObjects(file)
+                    }.getOrDefault(false)
+                    if (
+                        !OsuBeatmapParser.belongsToBeatmapSet(
+                            header.beatmapSetId,
+                            beatmapSetId
+                        ) ||
+                        !hasHitObjects
+                    ) {
+                        return@mapNotNull null
+                    }
+                    header.difficultyName
                 }
                 .toSet()
         } catch (_: Exception) {
@@ -379,11 +470,6 @@ class MissingOsuBackfillService(
     private fun recordFailure(reasons: MutableMap<String, Int>, reason: String) {
         reasons[reason] = (reasons[reason] ?: 0) + 1
     }
-
-    private data class MissingSet(
-        val beatmapSetId: Long,
-        val difficulties: Set<String>
-    )
 
     companion object {
         private const val TAG = "MissingOsuBackfill"

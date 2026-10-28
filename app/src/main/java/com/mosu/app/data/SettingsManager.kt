@@ -30,6 +30,7 @@ class SettingsManager(private val context: Context) {
         private val ONLY_LEADERBOARD_KEY = booleanPreferencesKey("only_leaderboard_enabled")
         private val RECENT_PLAY_HISTORY_KEY = booleanPreferencesKey("recent_play_history_enabled")
         private val INFO_COVER_KEY = booleanPreferencesKey("info_cover_enabled")
+        private val GENRE_BAR_ENABLED_KEY = booleanPreferencesKey("genre_bar_enabled")
         private val RENDERER_ENABLED_KEY = booleanPreferencesKey("renderer_enabled")
         private const val RENDERER_DIFFICULTY_KEY_PREFIX = "renderer_difficulty_"
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
@@ -139,6 +140,11 @@ class SettingsManager(private val context: Context) {
             preferences[INFO_COVER_KEY] ?: true
         }
 
+    val genreBarEnabled: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[GENRE_BAR_ENABLED_KEY] ?: true
+        }
+
     val rendererEnabled: Flow<Boolean> = context.settingsDataStore.data
         .map { preferences ->
             preferences[RENDERER_ENABLED_KEY] ?: true
@@ -192,6 +198,12 @@ class SettingsManager(private val context: Context) {
     suspend fun saveInfoCoverEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[INFO_COVER_KEY] = enabled
+        }
+    }
+
+    suspend fun saveGenreBarEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[GENRE_BAR_ENABLED_KEY] = enabled
         }
     }
 

@@ -11,11 +11,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 import com.mosu.app.R
-import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.model.ExtractedTrack
-import com.mosu.app.domain.model.sortedByTotalBeatmapPlayCountDescending
 import com.mosu.app.domain.rating.BeatmapStarRatingService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 
 sealed class UnifiedDownloadState {
@@ -47,7 +46,7 @@ class BeatmapDownloadService(
         // Restore-download callers only know the set id, so title may be blank.
         // Use a readable label in progress/error messages without persisting it.
         val displayTitle = title.ifBlank { "#$beatmapSetId" }
-        var selectedCandidate = DownloadCandidate(
+        val selectedCandidate = DownloadCandidate(
             id = beatmapSetId,
             title = title,
             artist = artist,
@@ -111,6 +110,8 @@ class BeatmapDownloadService(
                         else -> {}
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("BeatmapDownloadService", "Error during download attempt ${candidate.id}", e)
                 val isNoAudio = e.message?.contains("No audio tracks") == true
@@ -125,52 +126,11 @@ class BeatmapDownloadService(
         }
 
         try {
-            val preferredBeatmapset = findPreferredDownloadBeatmapset(title, artist)
-            if (preferredBeatmapset != null) {
-                selectedCandidate = preferredBeatmapset.toDownloadCandidate()
-                if (selectedCandidate.id != beatmapSetId) {
-                    Log.d(
-                        "BeatmapDownloadService",
-                        "Resolved download target $beatmapSetId to most-played matching set ${selectedCandidate.id} for $title - $artist"
-                    )
-                    emit(UnifiedDownloadState.Progress(0, "Selected beatmapset ${selectedCandidate.id}..."))
-                }
-            }
-
-            // 1. Try the most-played exact-title/artist match when metadata is available.
+            // The requested set ID is canonical. Never replace it with a
+            // title/artist match or register a different set under this job.
             downloadSuccessful = tryDownload(selectedCandidate)
-
-        // 2. If failed, try alternatives
-        if (!downloadSuccessful && title.isNotBlank() && artist.isNotBlank()) {
-            Log.d("BeatmapDownloadService", "Initial download failed for ${selectedCandidate.id}, checking alternatives for $title - $artist")
-            
-            val message = if (lastErrorMessage.isNotBlank() && !lastErrorMessage.startsWith("HTTP") && !lastErrorMessage.startsWith("Extraction") && !lastErrorMessage.startsWith("Registration") && !lastErrorMessage.startsWith("Download attempt")) {
-                lastErrorMessage
-            } else {
-                context.getString(R.string.download_trying_alternatives, title)
-            }
-            emit(UnifiedDownloadState.Notification(message))
-
-            val alternatives = try {
-                repository.searchBeatmapsetsByTitleArtist(title, artist)
-                    .filter { it.id != selectedCandidate.id }
-                    .sortedByTotalBeatmapPlayCountDescending()
-            } catch (e: Exception) {
-                Log.e("BeatmapDownloadService", "Error searching for alternatives", e)
-                emptyList()
-            }
-
-            if (alternatives.isNotEmpty()) {
-                for (alt in alternatives) {
-                        Log.d("BeatmapDownloadService", "Trying alternative: ${alt.id}")
-                        emit(UnifiedDownloadState.Progress(0, "Trying alternative ${alt.id}..."))
-                        if (tryDownload(alt.toDownloadCandidate())) {
-                            downloadSuccessful = true
-                            break
-                        }
-                    }
-                }
-            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("BeatmapDownloadService", "Fatal download service error", e)
             lastErrorMessage = e.message ?: "Fatal error"
@@ -179,33 +139,6 @@ class BeatmapDownloadService(
         if (!downloadSuccessful) {
             emit(UnifiedDownloadState.Error(lastErrorMessage.ifEmpty { "Download failed" }))
         }
-    }
-
-    private suspend fun findPreferredDownloadBeatmapset(
-        title: String,
-        artist: String
-    ): BeatmapsetCompact? {
-        if (!hasSearchableMetadata(title, artist)) return null
-        return runCatching { repository.findMostPlayedBeatmapsetByTitleArtist(title, artist) }
-            .onFailure { Log.e("BeatmapDownloadService", "Error resolving preferred download beatmapset", it) }
-            .getOrNull()
-            ?.takeIf { it.id > 0L }
-    }
-
-    private fun hasSearchableMetadata(title: String, artist: String): Boolean {
-        return title.isNotBlank() &&
-            artist.isNotBlank()
-    }
-
-    private fun BeatmapsetCompact.toDownloadCandidate(): DownloadCandidate {
-        return DownloadCandidate(
-            id = id,
-            title = title,
-            artist = artist,
-            creator = creator,
-            genreId = genreId,
-            coversListUrl = covers.listUrl
-        )
     }
 
     private suspend fun registerExtractedTracks(

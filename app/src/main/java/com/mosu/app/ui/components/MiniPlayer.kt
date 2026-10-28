@@ -5,6 +5,7 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,8 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -41,8 +44,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -131,6 +138,109 @@ fun MiniPlayer(
                     musicController = musicController,
                     duration = duration
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun LandscapeMiniPlayer(
+    musicController: MusicController,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val nowPlaying by musicController.nowPlaying.collectAsState()
+    val isPlaying by musicController.isPlaying.collectAsState()
+
+    if (nowPlaying != null) {
+        val title = nowPlaying?.title?.toString() ?: "Unknown Title"
+        val artist = nowPlaying?.artist?.toString() ?: "Unknown Artist"
+
+        Surface(
+            modifier = modifier
+                .semantics { contentDescription = "Mini player" }
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = "Open full player",
+                    onClick = onClick
+                ),
+            shape = AbsoluteRoundedCornerShape(
+                topLeft = 18.dp,
+                bottomLeft = 18.dp,
+                topRight = 0.dp,
+                bottomRight = 0.dp
+            ),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = nowPlaying?.artworkUri,
+                    contentDescription = "Cover art for $title",
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .requiredWidth(maxHeight)
+                                .rotate(90f),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = { musicController.skipToPrevious() }) {
+                        Icon(
+                            imageVector = Icons.Filled.SkipPrevious,
+                            contentDescription = "Previous track"
+                        )
+                    }
+                    IconButton(onClick = { musicController.togglePlayPause() }) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play"
+                        )
+                    }
+                    IconButton(onClick = { musicController.skipToNext() }) {
+                        Icon(
+                            imageVector = Icons.Filled.SkipNext,
+                            contentDescription = "Next track"
+                        )
+                    }
+                }
             }
         }
     }

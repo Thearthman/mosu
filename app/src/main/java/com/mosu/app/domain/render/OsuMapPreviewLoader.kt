@@ -12,7 +12,8 @@ data class OsuDifficultyMap(
     val difficultyName: String,
     val beatmapSetId: Long,
     val audioFilename: String,
-    val beatmapId: Long? = null
+    val beatmapId: Long? = null,
+    val mode: Int = 0
 )
 
 data class OsuPreviewCatalog(
@@ -49,39 +50,14 @@ class OsuMapPreviewLoader(
         )
         if (!directory.isDirectory) return@withContext null
 
-        val validMaps = try {
-            directory.walkTopDown()
-                .filter { it.isFile && it.extension.equals("osu", ignoreCase = true) }
-                .mapNotNull { file ->
-                    val canonicalPath = runCatching { file.canonicalPath }.getOrNull()
-                        ?: return@mapNotNull null
-                    val header = runCatching { OsuRenderCache.header(file) }.getOrNull()
-                        ?: return@mapNotNull null
-                    if (
-                        header.mode != 0 ||
-                        header.beatmapSetId != entity.beatmapSetId
-                    ) {
-                        return@mapNotNull null
-                    }
-                    OsuDifficultyMap(
-                        path = canonicalPath,
-                        difficultyName = header.difficultyName,
-                        beatmapSetId = entity.beatmapSetId,
-                        audioFilename = header.audioFilename,
-                        beatmapId = header.beatmapId
-                    )
-                }
-                .toList()
-        } catch (_: Exception) {
-            return@withContext null
-        }
-        if (validMaps.isEmpty()) return@withContext null
+        val maps = scanMaps(directory, entity.beatmapSetId)
+        if (maps.isEmpty()) return@withContext null
 
         val directAudioName = entity.audioPath
             .takeIf { it.isNotBlank() }
             ?.let { runCatching { Uri.parse(it).lastPathSegment }.getOrNull() }
         OsuDifficultyMatcher.selectCatalog(
-            maps = validMaps,
+            maps = maps,
             beatmapSetId = entity.beatmapSetId,
             defaultDifficultyName = entity.difficultyName,
             playedAudioFilename = directAudioName
@@ -100,5 +76,58 @@ class OsuMapPreviewLoader(
                 it.beatmapSetId == catalog.beatmapSetId &&
                     it.audioFilename == catalog.audioFilename
             }
+    }
+
+    /**
+     * Header discovery is intentionally ruleset-agnostic. Unsupported maps are
+     * still needed to map a playing library row back to its audio group when a
+     * mixed-mode set contains several audio files. [OsuDifficultyMatcher] then
+     * narrows the selected group to renderable osu!standard maps.
+     *
+     * Each file is handled independently so one malformed or unsupported map
+     * can never reject the rest of the set.
+     */
+    private fun scanMaps(directory: File, expectedBeatmapSetId: Long): List<OsuDifficultyMap> {
+        val maps = mutableListOf<OsuDifficultyMap>()
+        val pendingDirectories = ArrayDeque<File>()
+        pendingDirectories.add(directory)
+
+        while (pendingDirectories.isNotEmpty()) {
+            val currentDirectory = pendingDirectories.removeFirst()
+            val children = runCatching { currentDirectory.listFiles() }
+                .getOrNull()
+                .orEmpty()
+            children.forEach { file ->
+                when {
+                    file.isDirectory -> pendingDirectories.add(file)
+                    file.isFile && file.extension.equals("osu", ignoreCase = true) -> {
+                        val map = runCatching {
+                            val canonicalPath = file.canonicalPath
+                            val header = OsuRenderCache.header(file)
+                                ?: return@runCatching null
+                            if (
+                                !OsuBeatmapParser.belongsToBeatmapSet(
+                                    header.beatmapSetId,
+                                    expectedBeatmapSetId
+                                )
+                            ) {
+                                return@runCatching null
+                            }
+                            OsuDifficultyMap(
+                                path = canonicalPath,
+                                difficultyName = header.difficultyName,
+                                beatmapSetId = expectedBeatmapSetId,
+                                audioFilename = header.audioFilename,
+                                beatmapId = header.beatmapId,
+                                mode = header.mode
+                            )
+                        }.getOrNull()
+                        if (map != null) maps += map
+                    }
+                }
+            }
+        }
+
+        return maps.distinctBy { it.path }
     }
 }

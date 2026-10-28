@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -92,6 +93,25 @@ class OsuBeatmapParserTest {
     }
 
     @Test
+    fun parsesAbsentAndNonPositiveBeatmapSetIdsAsNullable() {
+        assertNull(
+            OsuBeatmapParser.parseHeader(
+                mapText().replace("BeatmapSetID:42\n", "")
+            ).beatmapSetId
+        )
+        assertNull(
+            OsuBeatmapParser.parseHeader(
+                mapText().replace("BeatmapSetID:42", "BeatmapSetID:0")
+            ).beatmapSetId
+        )
+        assertNull(
+            OsuBeatmapParser.parseHeader(
+                mapText().replace("BeatmapSetID:42", "BeatmapSetID:-1")
+            ).beatmapSetId
+        )
+    }
+
+    @Test
     fun parsesStandardCirclesSlidersAndSpinners() {
         val parsed = OsuBeatmapParser.parse(
             mapText(
@@ -142,6 +162,24 @@ class OsuBeatmapParserTest {
     }
 
     @Test
+    fun recognizesManiaHoldNotesAsValidStoredHitObjects() {
+        val maniaFile = writeMap(
+            "mania.osu",
+            mapText(
+                mode = 3,
+                hitObjects = "256,192,1000,128,0,1500:0:0:0:0:"
+            )
+        )
+        val emptyFile = writeMap(
+            "empty.osu",
+            mapText(hitObjects = "")
+        )
+
+        assertTrue(OsuBeatmapParser.hasHitObjects(maniaFile))
+        assertFalse(OsuBeatmapParser.hasHitObjects(emptyFile))
+    }
+
+    @Test
     fun rejectsUnsupportedSliderCurvesAndMalformedObjects() {
         assertThrows(OsuMapParseException::class.java) {
             OsuBeatmapParser.parse(
@@ -154,12 +192,17 @@ class OsuBeatmapParserTest {
     }
 
     @Test
-    fun parseAndValidateRequiresStandardModeAndMatchingSetId() {
+    fun parseAndValidateRequiresStandardModeAndCompatibleSetId() {
         val standardFile = writeMap("standard.osu", mapText(beatmapSetId = 42))
+        val legacyFile = writeMap(
+            "legacy.osu",
+            mapText().replace("BeatmapSetID:42\n", "")
+        )
         val taikoFile = writeMap("taiko.osu", mapText(beatmapSetId = 42, mode = 1))
         val wrongSetFile = writeMap("wrong.osu", mapText(beatmapSetId = 43))
 
         assertEquals(42L, OsuBeatmapParser.parseAndValidate(standardFile, 42)?.header?.beatmapSetId)
+        assertEquals("Hard", OsuBeatmapParser.parseAndValidate(legacyFile, 42)?.header?.difficultyName)
         assertNull(OsuBeatmapParser.parseAndValidate(taikoFile, 42))
         assertNull(OsuBeatmapParser.parseAndValidate(wrongSetFile, 42))
     }

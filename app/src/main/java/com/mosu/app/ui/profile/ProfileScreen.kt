@@ -63,7 +63,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun MissingOsuRepairProgress(state: MissingOsuBackfillUiState) {
+private fun MissingOsuRepairProgress(
+    state: MissingOsuBackfillUiState,
+    onCancel: () -> Unit
+) {
     val progress = state.progress
     val phaseLabel = when (state.runState) {
         MissingOsuBackfillRunState.Idle -> ""
@@ -208,6 +211,19 @@ private fun MissingOsuRepairProgress(state: MissingOsuBackfillUiState) {
                 color = MaterialTheme.colorScheme.error
             )
         }
+        if (state.isActive) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.profile_debug_missing_osu_cancel_action))
+            }
+        }
     }
 }
 
@@ -221,6 +237,7 @@ fun ProfileScreen(
     accountManager: AccountManager,
     settingsManager: SettingsManager,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
+    isLandscape: Boolean = false,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -255,6 +272,7 @@ fun ProfileScreen(
     val detectedRegion by settingsManager.detectedRegion.collectAsState(initial = null)
     val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
+    val genreBarEnabled by settingsManager.genreBarEnabled.collectAsState(initial = true)
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val languageOptions = listOf(
         "en" to stringResource(R.string.language_english),
@@ -445,11 +463,13 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = stringResource(R.string.profile_title),
-            style = MaterialTheme.typography.displayMedium,
-            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
-        )
+        if (!isLandscape) {
+            Text(
+                text = stringResource(R.string.profile_title),
+                style = MaterialTheme.typography.displayMedium,
+                modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
+            )
+        }
 
         // Account Info Card - Dynamic based on login state
         if (accessToken != null && userInfo != null) {
@@ -651,6 +671,11 @@ fun ProfileScreen(
             // Info Cover Toggle Card
             InfoCoverToggleCard(infoCoverEnabled = infoCoverEnabled) { checked ->
                 scope.launch { settingsManager.saveInfoCoverEnabled(checked) }
+            }
+
+            // Genre Bar Toggle Card
+            GenreBarToggleCard(genreBarEnabled = genreBarEnabled) { checked ->
+                scope.launch { settingsManager.saveGenreBarEnabled(checked) }
             }
 
 
@@ -1034,9 +1059,15 @@ fun ProfileScreen(
                         }
                     }
                 }
-                if (osuRepairState.runState != MissingOsuBackfillRunState.Idle) {
+                if (
+                    osuRepairState.runState != MissingOsuBackfillRunState.Idle &&
+                    osuRepairState.runState != MissingOsuBackfillRunState.Cancelled
+                ) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    MissingOsuRepairProgress(osuRepairState)
+                    MissingOsuRepairProgress(
+                        state = osuRepairState,
+                        onCancel = missingOsuBackfillManager::cancel
+                    )
                 }
             }
             }
@@ -1244,6 +1275,47 @@ private fun InfoCoverToggleCard(
         }
     }
 }
+
+@Composable
+private fun GenreBarToggleCard(
+    genreBarEnabled: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(0.7f)
+            ) {
+                Text(
+                    stringResource(id = R.string.genre_bar_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    stringResource(id = R.string.genre_bar_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Switch(
+                checked = genreBarEnabled,
+                onCheckedChange = onToggle
+            )
+        }
+    }
+}
+
 @Composable
 private fun MirrorSourceToggle(
     currentSource: String,

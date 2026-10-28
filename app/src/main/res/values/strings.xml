@@ -174,6 +174,7 @@
     <string name="search_download_extracting">Extracting…</string>
     <string name="search_download_done">Done ✓</string>
     <string name="search_download_failed">Failed</string>
+    <string name="search_download_target_resolve_failed">Couldn\'t find the most-played version of %1$s</string>
     <string name="download_trying_alternatives">Failed to find %1$s in mirror, trying other versions…</string>
     <string name="download_error_no_audio">Audio missing for %1$s, trying other versions…</string>
     <string name="profile_restore_downloads_title">Restore Downloads</string>
@@ -205,6 +206,7 @@
     <string name="profile_debug_missing_osu_queued">Queued — waiting for network or worker to start…</string>
     <string name="profile_debug_missing_osu_failed">.osu repair failed</string>
     <string name="profile_debug_missing_osu_cancelled">.osu repair was cancelled</string>
+    <string name="profile_debug_missing_osu_cancel_action">Cancel .osu repair</string>
     <string name="profile_debug_missing_osu_scan_progress">Scanned %1$d/%2$d beatmapsets</string>
     <string name="profile_debug_missing_osu_repair_total">Beatmapsets to repair: %1$d</string>
     <string name="profile_debug_missing_osu_repair_progress">Processed %1$d/%2$d beatmapsets</string>
@@ -213,6 +215,7 @@
     <string name="missing_osu_notification_channel">Beatmap maintenance</string>
     <string name="missing_osu_notification_title">Repairing missing .osu files</string>
     <string name="missing_osu_notification_starting">Preparing .osu repair…</string>
+    <string name="missing_osu_notification_cancel">Cancel</string>
     <string name="profile_config_backup_title">Config Backup</string>
     <string name="profile_config_backup_desc">Export or import the library, playlists, and played history.</string>
     <string name="profile_config_export">Export</string>
@@ -224,6 +227,8 @@
     <!-- Info Popup -->
     <string name="info_cover_title">Show cover in info popup</string>
     <string name="info_cover_desc">Toggle beatmap cover visibility in Search info dialog.</string>
+    <string name="genre_bar_title">Show Genre Bar</string>
+    <string name="genre_bar_desc">Show genre filters in Library and Search.</string>
     <string name="info_no_details">No difficulty details available.</string>
     <string name="info_diff_count">%1$d difficulties</string>
     <string name="search_info_load_error">Failed to load details</string>
@@ -249,6 +254,22 @@
     <string name="genre_jazz">Jazz</string>
     <string name="genre_novelty">Novelty</string>
     <string name="genre_other">Other</string>
+    <string name="genre_electronic_short">Elec</string>
+    <string name="genre_anime_short">Anime</string>
+    <string name="genre_rock_short">Rock</string>
+    <string name="genre_pop_short">Pop</string>
+    <string name="genre_game_short">Game</string>
+    <string name="genre_hiphop_short">Hip</string>
+    <string name="genre_metal_short">Metal</string>
+    <string name="genre_classical_short">Class</string>
+    <string name="genre_folk_short">Folk</string>
+    <string name="genre_jazz_short">Jazz</string>
+    <string name="genre_novelty_short">Novel</string>
+    <string name="genre_other_short">Other</string>
+    <string name="pill_menu_clear">Clear</string>
+    <string name="pill_menu_expanded">Expanded</string>
+    <string name="pill_menu_collapsed">Collapsed</string>
+    <string name="genre_filter_selected_count">%1$s, %2$d selected</string>
 
     <!-- Content Descriptions -->
     <string name="search_cd_search">Search</string>

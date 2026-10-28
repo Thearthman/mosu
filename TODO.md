@@ -3,37 +3,36 @@
 
 ### Bugs
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
-- [ ] A downloaded multi-ruleset osu!+catch beatmapset can retain all of its `.osu` files but expose no renderable difficulty in Full Player. `ZipExtractor` preserves every `.osu` regardless of `Mode`, while `OsuMapPreviewLoader` accepts only osu!standard (`Mode: 0`) maps with a matching `BeatmapSetID` and selected-audio group. Add diagnostics that report the extracted `.osu` count and rejection reason for each file (catch/unsupported mode, missing or mismatched set ID, parse failure, audio-group mismatch). Catch-only sets should continue falling back to cover art; if the reported mixed set does contain a valid standard `.osu`, fix the catalog selection path so it appears.
 - [ ] Debug .osu file backfill may stuck at "queued, waiting for network or background worker to start"
+- [ ] In landscape view, the full play's play control components will stretch to fill full width during the miliseconds it takes for renderer to show.
+- [ ] Current beatmapset data parsing structure struggle to handle when a beatmapset contains difficulties of different modes.
+- [x] Seeking forward in full-player will still have a chance of causing renderer poorly synced with audio. Look into the seek sync implementation, compare to pause and play because the later works fine. it might have something to do with how we implemented the audio side of the seek as well.
 
 ### UIUX
 - [ ] Add frosted glass fade to most of the components that involves scrolling. 
 - [ ] Fix the UI scaling issue.
 - [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
 - [ ] [v1.3] Reimagine the entire Landscape UI.
+- [ ] redesign how scores are presented on search page. Right now cover art takes up too much space and titles are clipped aggressively especially in topplay and recent play mode.
+- [x] Make genre bar a generic pill shaped slide out menu composable just like the osu mode switcher.
+- [ ] Make sliders for beatmapsetlists to the left for horizontal view.
 
 ### Features
 
 #### Core
 - [ ] Implement Equalizer.
-- [ ] [v1.2] Implement Activity Heatmap from recent play data with week, month, and year views.
-- [ ] [v1.2] Implement song recommendations based on tags, genre, and related metadata.
+- [ ] [v1.3] Implement Activity Heatmap from recent play data with week, month, and year views.
+- [ ] [v1.3] Implement song recommendations based on tags, genre, and related metadata.
 - [ ] [v1.3] Implement smart playlist generation based on how long the user stays on songs in random play mode.
 - [ ] [v1.4] Implement DJ mixing for smooth transition
 - [ ] [v1.2] Add the homepage widget
-- [ ] [v1.2] Implement beatmap viewing in Full Player, replacing the cover area.
-  - **Local assets:** Retain every `.osu` file extracted from every downloaded `.osz`; stop deleting them in `ZipExtractor`. Persist audio, cover, and all map files, but do not retain hit sounds, storyboards, or video. Backfill older downloads by re-fetching map files only.
-  - **Sayobot:** Use the original full-archive URL, `https://dl.sayobot.cn/beatmaps/download/full/{setId}`, and follow its redirects; do not hard-code the current `tc1.sayobot.cn` prefix/suffix destination. Tested `v2/beatmapinfo` `bid_data` exposes only `audio` and `bg`, so the direct-file path never downloads any `.osu`; map files must come from the full `.osz`.
-  - **No diff tables:** Do not add beatmap-difficulty or hit-object tables to Room. Room remains the playback/library catalog. At playback, resolve the current media id to its `BeatmapEntity`/`beatmapSetId`, scan the stored `.osu` headers, and parse only the selected map off the main thread. Keep parsed maps in a regenerable in-memory cache.
-  - **Diff selection:** Group stored maps by `.osu` `AudioFilename`. Show a selector only when more than one map shares the currently playing audio; sets with one map per audio need none. Do not infer this from `isAlbum` or “pack” naming. Validate each map's `BeatmapSetID`.
-  - **Parser:** Parse `[General]`, `[Metadata]`, `[Difficulty]`, `[TimingPoints]`, `[Colours]`, `[Events]`, and `[HitObjects]`, including slider curves/repeats, spinners, hold notes, and ruleset mode. Build an immutable render timeline. Star rating is not present in `.osu`; fetch/cache it optionally from the API and allow rendering without it. `.osu` `Creator` is the set host, not necessarily the guest difficulty mapper.
-  - **Renderer:** Render from precomputed map data as a stateless `f(t)` using a high-resolution playback clock. Do not perform file I/O, parsing, state mutation, or avoidable allocations in the frame path, and never block audio playback. Start with osu! standard and fall back to cover art for unsupported rulesets until their renderers exist.
-  - **Default skin:** Ship a built-in default skin and honor map `[Colours]` where supported. Imported-skin support remains the separate v1.3 task.
+- [ ] [v1.2] Add import to Mosu option for downloaded .osz file.
+- [ ] [v1.2] Add general offset tuning for hit-sound
+- [ ] [v1.2] albums that have only one diff left(through deletion of diffs) should be convered into songs.
 
 #### Settings
 - [ ] [v1.4] Add a display toggle for native-language (Unicode) beatmap titles/artists. Both are already stored in the DB (`titleUnicode`/`artistUnicode`); romaji is shown for now as the osu! standard. (Stage 5 of the beatmap-metadata source-of-truth rework.)
 - [ ] [v1.2] Add a guidance/help page for getting osu! credentials in the credential setup flow. Display the guidance markdown file from the repo root, or ask for the file if it is missing.
-- [ ] [v1.2] Add a debug action in the Profile debug menu that scans the local library and downloads only missing `.osu` diff files for each affected beatmapset. It must not re-register tracks or replace existing audio/cover files, and it should report how many sets were repaired versus skipped.
 
 #### Security
 - [ ] Re-add account credential (OAuth client id/secret) export/import to the config backup, but encrypt the credentials before writing them. The manifest currently omits credentials entirely; storing them would require an encryption method (e.g. AES-GCM with a user-supplied passphrase) so the exported JSON never contains them in plaintext.
@@ -48,6 +47,12 @@
 - [ ] Implement a current playing playlist display.
 - [ ] [v1.2] Add ability to view beatmap comments.
 - [ ] [v1.3] Add beatmap skin import option.
+- [ ] [v1.3] Add slider ticks and inter-object follow points to the Full Player renderer.
+- [ ] [v1.3] Add replay parsing and cursor rendering using the existing `ReplayInput` extension point.
+- [ ] [v1.2] Add support for other three modes in renderer
+- [ ] [v1.2] Add general/skin hit-sound support
+- [ ] [v1.2] Add beatmap hit-sound support
+- [ ] [v1.2] Add per beatmapid local hit-sound offset for individual diffs. Require persistent storage, maybe in a new table
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.
@@ -81,6 +86,32 @@
 - [x] Changed shuffle button cycling to `1 -> 2 -> 3 -> 1`.
 - [x] [v1.1] Added a landscape horizontal player layout (up to a 3:2 ratio): square cover art top-left, title/artist + transport controls top-right, and a full-width progress bar along the bottom.
 - [x] [v1.1] Added a wide horizontal player layout (ratio > 3:2, e.g. 16:9): the progress bar sits at the bottom of the text/controls column and the cover band takes the full height.
+
+#### Full Player Beatmap Renderer
+- [x] [v1.2] Replaced the Full Player cover area with an optional osu!standard autoplay preview, enabled by default; cover art remains the fallback when no valid map is available.
+- [x] Added read-only `.osu` discovery, header scanning, set/audio validation, background parsing, and immutable timeline caching without adding difficulty or hit-object tables to Room.
+- [x] Added circles, sliders, and spinners with combo colours/numbers, approach circles, hit fade/scale, repeat arrows, slider heads/tails, slider ball/follow circle, and deterministic spinner rotation; no cursor is drawn.
+- [x] Added linear, Bezier, perfect-circle, and Catmull slider geometry, including path normalization/trimming, repeat direction, and continuous slider outlines.
+- [x] Applied osu!'s 100% skin scaling, bundled the vv_idke_trail assets, and gave map `[Colours]` overrides precedence over skin defaults.
+- [x] Added a centered 4:3 playfield inside a 7:6 rounded, semi-transparent canvas with an outward directional shadow/feather that does not shrink the canvas.
+- [x] Drove rendering from the service-backed high-resolution playback clock, including smooth seek, pause/resume, and DT/NC speed synchronization.
+- [x] Suspended frame work when the Full Player is hidden, playback is paused, cover mode is selected, or no map is available.
+- [x] Added a persistent render/cover toggle and an empty loading state so renderer initialization does not flash cover art.
+- [x] Added the replay input API extension point; replay playback and rendering remain deferred.
+- [x] Added renderer tests for timing, geometry, stacking, parser validation, playback-clock behavior, and skin metrics.
+
+#### Beatmap Difficulty Data
+- [x] [v1.2] Grouped valid difficulties by normalized `AudioFilename` and showed the selector only when multiple maps share the playing audio.
+- [x] Persisted the selected difficulty per beatmapset and audio filename across player sessions.
+- [x] Cached per-difficulty standard star ratings in Room, using the official osu! API first and Sayobot as a fallback with retry backoff.
+
+#### Missing `.osu` Repair
+- [x] [v1.2] Added a Profile debug action that scans library difficulties and repairs only missing maps.
+- [x] Downloads each affected full `.osz` once through the ordered mirror path and safely extracts only absent `.osu` files into the set directory.
+- [x] Requests the stored `beatmapSetId` directly and never substitutes a title/artist match; the embedded `.osu` set ID must match before extraction. Repair accepts every ruleset mode because it restores missing map files, while rendering remains osu!standard-only.
+- [x] Validates embedded set IDs and difficulty names, rejects traversal, and avoids overwriting existing maps, audio, covers, or other files.
+- [x] Runs through WorkManager with foreground notifications, persisted progress/results, cancellation from the Profile UI or notification, and temporary-archive cleanup. Cancellation is checked between sets and between archive entries.
+- [x] Reports repaired and skipped sets with failure reasons in the Profile UI without re-registering tracks or changing beatmap rows.
 
 #### Playlist
 - [x] Implemented `single`/`loop`/`random` playback behavior across the active library/playlist scope.

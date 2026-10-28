@@ -157,6 +157,91 @@ class OsuDifficultyMatcherTest {
         assertEquals(listOf(101L, 102L), catalog.difficulties.map { it.beatmapId })
     }
 
+    @Test
+    fun mixedRulesetsStillExposeTheStandardDifficultiesForThePlayingAudio() {
+        val catalog = requireNotNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("catch.osu", "Overdose", "audio-a.mp3", mode = 2),
+                    map("standard-easy.osu", "Easy", "audio-a.mp3"),
+                    map("standard-hard.osu", "Hard", "audio-a.mp3"),
+                    map("standard-other-audio.osu", "Insane", "audio-b.mp3")
+                ),
+                beatmapSetId = 42,
+                defaultDifficultyName = "Overdose",
+                playedAudioFilename = "42_Overdose_song.mp3"
+            )
+        )
+
+        assertEquals("audio-a.mp3", catalog.audioFilename)
+        assertEquals(listOf("Easy", "Hard"), catalog.difficulties.map { it.difficultyName })
+        assertTrue(catalog.difficulties.all { it.mode == 0 })
+        assertEquals("Easy", catalog.defaultDifficultyName)
+    }
+
+    @Test
+    fun entityDifficultyAudioWinsOverMatchingStandardNameInAnotherAudioGroup() {
+        val catalog = requireNotNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("taiko.osu", "Muzukashii", "audio-a.mp3", mode = 1),
+                    map("standard-a.osu", "Easy", "audio-a.mp3"),
+                    map("standard-b.osu", "Oni", "audio-b.mp3"),
+                    map("standard-b-hard.osu", "Hard", "audio-b.mp3")
+                ),
+                beatmapSetId = 42,
+                defaultDifficultyName = "Muzukashii",
+                playedAudioFilename = "42_Oni_song.mp3"
+            )
+        )
+
+        assertEquals("audio-a.mp3", catalog.audioFilename)
+        assertEquals(listOf("Easy"), catalog.difficulties.map { it.difficultyName })
+    }
+
+    @Test
+    fun legacyFreestylerMapsExcludeTaikoAndCollapseDuplicateEasyFiles() {
+        val catalog = requireNotNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("maps/Easy.osu", "Easy", "freestyler.mp3", beatmapSetId = 35629),
+                    map("backup/Easy.osu", "Easy", "freestyler.mp3", beatmapSetId = 35629),
+                    map("maps/Easy-copy.osu", "easy", "freestyler.mp3", beatmapSetId = 35629),
+                    map("maps/Gladi's Hard.osu", "Gladi's Hard", "freestyler.mp3", beatmapSetId = 35629),
+                    map("maps/Insane.osu", "Insane", "freestyler.mp3", beatmapSetId = 35629),
+                    map("maps/Normal.osu", "Normal", "freestyler.mp3", beatmapSetId = 35629),
+                    map("maps/Sp3's Taiko.osu", "Sp3's Taiko", "freestyler.mp3", beatmapSetId = 35629, mode = 1)
+                ),
+                beatmapSetId = 35629,
+                defaultDifficultyName = "Easy"
+            )
+        )
+
+        assertEquals(
+            listOf("Easy", "Gladi's Hard", "Insane", "Normal"),
+            catalog.difficulties.map { it.difficultyName }
+        )
+        assertTrue(catalog.difficulties.all { it.mode == 0 })
+        assertEquals(
+            1,
+            catalog.difficulties.count { it.difficultyName.equals("Easy", ignoreCase = true) }
+        )
+    }
+
+    @Test
+    fun nonStandardOnlySetDoesNotProduceARenderCatalog() {
+        assertNull(
+            OsuDifficultyMatcher.selectCatalog(
+                maps = listOf(
+                    map("mania.osu", "4K", "audio.mp3", mode = 3),
+                    map("catch.osu", "Overdose", "audio.mp3", mode = 2)
+                ),
+                beatmapSetId = 42,
+                defaultDifficultyName = "Overdose"
+            )
+        )
+    }
+
     private fun catalog(audio: String): OsuPreviewCatalog = requireNotNull(
         OsuDifficultyMatcher.selectCatalog(
             maps = listOf(map("$audio.osu", "Hard", audio)),
@@ -170,12 +255,14 @@ class OsuDifficultyMatcherTest {
         difficulty: String,
         audio: String,
         beatmapSetId: Long = 42,
-        beatmapId: Long? = null
+        beatmapId: Long? = null,
+        mode: Int = 0
     ) = OsuDifficultyMap(
         path = path,
         difficultyName = difficulty,
         beatmapSetId = beatmapSetId,
         audioFilename = audio,
-        beatmapId = beatmapId
+        beatmapId = beatmapId,
+        mode = mode
     )
 }

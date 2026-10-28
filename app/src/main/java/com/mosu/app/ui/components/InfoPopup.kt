@@ -166,7 +166,7 @@ fun InfoPopup(
                         val sortedSets = sets.sortedByTotalBeatmapPlayCountDescending()
                         items(sortedSets) { beatmapset ->
                             val setId = beatmapset.id
-                            val list = beatmapset.beatmaps
+                            val list = beatmapset.beatmaps.orEmpty()
                             val sortedList = list.sortedByDescending { it.playCount }
                             val modes = sortedList.groupBy { it.mode }
                             val starMin = sortedList.minOfOrNull { it.difficultyRating } ?: 0f

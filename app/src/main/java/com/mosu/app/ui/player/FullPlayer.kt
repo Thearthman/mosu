@@ -30,12 +30,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -72,6 +75,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -86,7 +90,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.media3.common.Player
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
@@ -104,7 +110,9 @@ import com.mosu.app.domain.render.OsuRenderTimeline
 import com.mosu.app.domain.render.OsuRenderer
 import com.mosu.app.domain.render.OsuSkin
 import com.mosu.app.domain.render.OsuSkinLoader
+import com.mosu.app.domain.rating.BeatmapStarRatingCatalog
 import com.mosu.app.domain.rating.BeatmapStarRatingService
+import com.mosu.app.domain.rating.DifficultyRatingQuery
 import com.mosu.app.player.MusicController
 import com.mosu.app.player.PlaybackMod
 import com.mosu.app.ui.components.StarRatingBadge
@@ -138,6 +146,127 @@ private val ModeIconSize = 24.dp
 // Keeps the (centered) content column phone-sized on wider displays instead of
 // stretching edge to edge.
 private val MaxContentWidth = 480.dp
+
+data class LandscapePlayerMorph(
+    val progress: Float,
+    val compactSize: DpSize,
+    val fullscreenSize: DpSize
+)
+
+internal data class LandscapePlayerDragPosition(
+    val sheetOffsetPx: Float,
+    val expansionProgress: Float
+)
+
+internal data class LandscapePlayerMorphBounds(
+    val width: Dp,
+    val height: Dp,
+    val leftInset: Dp,
+    val topInset: Dp
+)
+
+/**
+ * Advances the two stages of the landscape player gesture from one pointer delta.
+ *
+ * Dragging left first opens the compact card, then expands it. Dragging right reverses
+ * that order exactly. The expansion is deliberately a little faster than the finger so
+ * the card reaches fullscreen without an excessive swipe, while every visual element
+ * still shares this single progress value.
+ */
+internal fun advanceLandscapePlayerDrag(
+    position: LandscapePlayerDragPosition,
+    deltaPx: Float,
+    collapsedOffsetPx: Float,
+    expansionDistancePx: Float,
+    expansionGain: Float
+): LandscapePlayerDragPosition {
+    val collapsedOffset = collapsedOffsetPx.coerceAtLeast(0f)
+    var sheetOffset = position.sheetOffsetPx.coerceIn(0f, collapsedOffset)
+    var progress = position.expansionProgress.coerceIn(0f, 1f)
+    if (!deltaPx.isFinite() || deltaPx == 0f) {
+        return LandscapePlayerDragPosition(sheetOffset, progress)
+    }
+
+    val distance = expansionDistancePx.coerceAtLeast(1f)
+    val gain = expansionGain.takeIf { it.isFinite() && it > 0f } ?: 1f
+    var remaining = deltaPx
+
+    if (remaining < 0f) {
+        if (sheetOffset > 0f) {
+            val consumed = remaining.coerceAtLeast(-sheetOffset)
+            sheetOffset += consumed
+            remaining -= consumed
+        }
+        if (remaining < 0f) {
+            progress = (
+                progress - remaining * gain / distance
+                ).coerceIn(0f, 1f)
+        }
+    } else {
+        if (progress > 0f) {
+            val dragDistanceForProgress = progress * distance / gain
+            val consumed = remaining.coerceAtMost(dragDistanceForProgress)
+            progress = (
+                progress - consumed * gain / distance
+                ).coerceIn(0f, 1f)
+            remaining -= consumed
+        }
+        if (remaining > 0f) {
+            sheetOffset = (sheetOffset + remaining).coerceIn(0f, collapsedOffset)
+        }
+    }
+
+    return LandscapePlayerDragPosition(sheetOffset, progress)
+}
+
+/**
+ * Returns the right-edge-aligned card bounds for the shared compact/fullscreen progress.
+ *
+ * Width and height use the same fraction. Because the card is vertically centered, the
+ * top and bottom insets therefore also advance by that same fraction, keeping the
+ * horizontal and vertical expansion visually synchronized.
+ */
+internal fun landscapePlayerMorphBounds(
+    compactSize: DpSize,
+    fullscreenSize: DpSize,
+    progress: Float
+): LandscapePlayerMorphBounds {
+    val fraction = progress.coerceIn(0f, 1f)
+    val width = lerp(compactSize.width, fullscreenSize.width, fraction)
+    val height = lerp(compactSize.height, fullscreenSize.height, fraction)
+    return LandscapePlayerMorphBounds(
+        width = width,
+        height = height,
+        leftInset = fullscreenSize.width - width,
+        topInset = (fullscreenSize.height - height) / 2f
+    )
+}
+
+internal data class LandscapeMorphRect(
+    val left: Dp,
+    val top: Dp,
+    val width: Dp,
+    val height: Dp
+) {
+    fun lerp(other: LandscapeMorphRect, fraction: Float): LandscapeMorphRect =
+        LandscapeMorphRect(
+            left = lerp(left, other.left, fraction),
+            top = lerp(top, other.top, fraction),
+            width = lerp(width, other.width, fraction),
+            height = lerp(height, other.height, fraction)
+        )
+}
+
+internal data class LandscapeMorphRects(
+    val artwork: LandscapeMorphRect,
+    val title: LandscapeMorphRect,
+    val difficulty: LandscapeMorphRect,
+    val rendererToggle: LandscapeMorphRect,
+    val controls: LandscapeMorphRect,
+    val progress: LandscapeMorphRect,
+    val collapse: LandscapeMorphRect,
+    val fullscreen: LandscapeMorphRect
+)
 // Horizontal/landscape layout: top band vs. bottom progress band shares of the height,
 // the info column's internal split, and a generous cap so tablets don't stretch edge to edge.
 private const val TOP_BAND_WEIGHT = 0.85f      // cover + info share of the height
@@ -154,6 +283,10 @@ private const val WIDE_HORIZONTAL_RATIO = 1.5f
 // of the cover art) rather than the row height, which balloons them on short/wide screens.
 private const val H_SIDE_BUTTON_WIDTH_FRACTION = 0.18f
 private const val H_PLAY_BUTTON_WIDTH_FRACTION = 0.20f
+// The compact fullscreen action fades out before its slot converges with the collapse
+// action. Removing its pointer node at that point prevents the two overlapping controls
+// from competing for the same taps during and after expansion.
+private const val FULLSCREEN_ACTION_FADE_END = 0.2f
 private const val PREVIEW_ASPECT_RATIO = 7f / 6f
 private val PreviewEdgeInset = 8.dp
 private val PreviewFeatherWidth = 60.dp
@@ -164,15 +297,25 @@ private const val PREVIEW_SHADOW_ALPHA = 0.50f
 private const val PREVIEW_SHADOW_RAMP_END = 0.78f
 private const val SHADOW_COLOR_SAMPLE_SIZE = 48
 private const val SHADOW_MAX_BRIGHTNESS = 0.34f
+private val DefaultPreviewShadowColor = Color(0xFF05050A)
 
 private data class OsuPreviewData(
     val mediaId: Long,
     val catalog: OsuPreviewCatalog,
     val selectedDifficulty: String,
-    val starRatings: Map<Long, Float> = emptyMap(),
+    val starRatings: BeatmapStarRatingCatalog = BeatmapStarRatingCatalog.Empty,
     val timeline: OsuRenderTimeline?,
     val timelineLoadAttempted: Boolean = false
 )
+
+private fun BeatmapStarRatingCatalog.ratingFor(difficulty: OsuDifficultyMap): Float? =
+    ratingFor(
+        DifficultyRatingQuery(
+            beatmapId = difficulty.beatmapId,
+            mode = difficulty.mode,
+            difficultyName = difficulty.difficultyName
+        )
+    )
 
 private suspend fun loadDominantShadowColor(
     context: Context,
@@ -247,7 +390,9 @@ fun FullPlayer(
     db: AppDatabase,
     isExpanded: Boolean,
     onCollapse: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    landscapeMorph: LandscapePlayerMorph? = null,
+    onEnterFullscreen: () -> Unit = {}
 ) {
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val isPlaying by musicController.isPlaying.collectAsState()
@@ -300,13 +445,17 @@ fun FullPlayer(
             timelineLoadAttempted = existing?.timelineLoadAttempted ?: false
         )
 
-        val requiredBeatmapIds = catalog.difficulties
-            .mapNotNull { it.beatmapId }
-            .toSet()
-        if (requiredBeatmapIds.any { it !in cachedRatings }) {
+        val requiredDifficulties = catalog.difficulties.map { difficulty ->
+            DifficultyRatingQuery(
+                beatmapId = difficulty.beatmapId,
+                mode = difficulty.mode,
+                difficultyName = difficulty.difficultyName
+            )
+        }
+        if (requiredDifficulties.any { !cachedRatings.hasRatingFor(it) }) {
             val refreshed = ratingService.refreshMissingRatings(
                 beatmapSetId = catalog.beatmapSetId,
-                requiredBeatmapIds = requiredBeatmapIds
+                requiredDifficulties = requiredDifficulties
             )
             val latest = previewData
             if (
@@ -388,9 +537,13 @@ fun FullPlayer(
                 .consumeUnhandledTaps(isExpanded),
             contentAlignment = Alignment.TopCenter
         ) {
-            val isHorizontal = maxWidth.value > (maxHeight.value * 1.2f)
+            val isLandscapeMorph = landscapeMorph != null
+            val isHorizontal =
+                !isLandscapeMorph && maxWidth.value > (maxHeight.value * 1.2f)
             val isWideHorizontal =
-                isHorizontal && maxWidth.value > maxHeight.value * WIDE_HORIZONTAL_RATIO
+                isHorizontal && (
+                    maxWidth.value > maxHeight.value * WIDE_HORIZONTAL_RATIO
+                )
 
             // Blurred Background (Simulated with zoomed image and overlay)
             AsyncImage(
@@ -406,24 +559,50 @@ fun FullPlayer(
                     ),
                 contentScale = ContentScale.Crop
             )
+            val compactWeight = 1f -
+                (landscapeMorph?.progress ?: 1f).coerceIn(0f, 1f)
+            val backgroundColor = MaterialTheme.colorScheme.background
+            fun scrimAlpha(compactAlpha: Float, fullscreenAlpha: Float) =
+                fullscreenAlpha + (compactAlpha - fullscreenAlpha) * compactWeight
+            val backgroundScrim = Brush.verticalGradient(
+                colors = listOf(
+                    backgroundColor.copy(alpha = scrimAlpha(0.45f, 0.5f)),
+                    backgroundColor.copy(alpha = scrimAlpha(0.6f, 0.9f)),
+                    backgroundColor.copy(alpha = scrimAlpha(0.75f, 1f))
+                )
+            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.9f),
-                                MaterialTheme.colorScheme.background
-                            )
-                        )
-                    )
+                    .background(backgroundScrim)
             )
 
             val artworkUri = nowPlaying?.artworkUri
             val title = nowPlaying?.title?.toString() ?: "Unknown Title"
             val artist = nowPlaying?.artist?.toString() ?: "Unknown Artist"
-            if (isHorizontal) {
+            if (landscapeMorph != null) {
+                MorphingLandscapePlayerLayout(
+                    musicController = musicController,
+                    isPlaying = isPlaying,
+                    playbackMod = playbackMod,
+                    duration = duration,
+                    artworkUri = artworkUri,
+                    title = title,
+                    artist = artist,
+                    onCollapse = onCollapse,
+                    onEnterFullscreen = onEnterFullscreen,
+                    isExpanded = isExpanded,
+                    currentMediaId = currentMediaId,
+                    rendererEnabled = rendererEnabled,
+                    previewUnavailable = previewUnavailable,
+                    previewData = activePreview,
+                    skin = skin,
+                    onRendererEnabledChange = onRendererEnabledChange,
+                    onDifficultySelected = onDifficultySelected,
+                    morph = landscapeMorph,
+                    modifier = Modifier
+                )
+            } else if (isHorizontal) {
                 HorizontalPlayerLayout(
                     musicController = musicController,
                     isPlaying = isPlaying,
@@ -433,6 +612,7 @@ fun FullPlayer(
                     title = title,
                     artist = artist,
                     onCollapse = onCollapse,
+                    collapseDescription = "Collapse",
                     isExpanded = isExpanded,
                     currentMediaId = currentMediaId,
                     rendererEnabled = rendererEnabled,
@@ -561,7 +741,7 @@ private fun VerticalPlayerLayout(
             rendererEnabled = rendererEnabled,
             selectedDifficulty = previewData?.selectedDifficulty,
             difficulties = previewData?.catalog?.difficulties.orEmpty(),
-            starRatings = previewData?.starRatings.orEmpty(),
+            starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
             onRendererEnabledChange = onRendererEnabledChange,
             onDifficultySelected = onDifficultySelected
         )
@@ -587,6 +767,501 @@ private fun VerticalPlayerLayout(
 
         Spacer(Modifier.weight(BOTTOM_GAP_WEIGHT))
     }
+}
+
+/**
+ * One landscape player composable for the whole compact-to-fullscreen gesture.
+ *
+ * Both endpoint layouts are reduced to rectangles in the card's coordinate space. Every
+ * element then uses the same normalized progress, so the card border and its contents
+ * expand together instead of one layout being cross-faded into another.
+ */
+@Composable
+private fun MorphingLandscapePlayerLayout(
+    musicController: MusicController,
+    isPlaying: Boolean,
+    playbackMod: PlaybackMod,
+    duration: Long,
+    artworkUri: Any?,
+    title: String,
+    artist: String,
+    onCollapse: () -> Unit,
+    onEnterFullscreen: () -> Unit,
+    isExpanded: Boolean,
+    currentMediaId: Long?,
+    rendererEnabled: Boolean,
+    previewUnavailable: Boolean,
+    previewData: OsuPreviewData?,
+    skin: OsuSkin?,
+    onRendererEnabledChange: (Boolean) -> Unit,
+    onDifficultySelected: (String) -> Unit,
+    morph: LandscapePlayerMorph,
+    modifier: Modifier = Modifier
+) {
+    val progress = morph.progress.coerceIn(0f, 1f)
+    val compactSize = morph.compactSize
+    val fullscreenSize = morph.fullscreenSize
+    val showDifficultySelector =
+        rendererEnabled && previewData?.catalog?.difficulties.orEmpty().size > 1
+    val wideMode =
+        fullscreenSize.width.value > fullscreenSize.height.value * WIDE_HORIZONTAL_RATIO
+
+    val compactRects = remember(compactSize, showDifficultySelector) {
+        compactLandscapeMorphRects(
+            compactSize = compactSize,
+            showDifficultySelector = showDifficultySelector
+        )
+    }
+    val fullscreenRects = remember(fullscreenSize, wideMode, rendererEnabled, previewUnavailable) {
+        fullscreenLandscapeMorphRects(
+            size = fullscreenSize,
+            wideMode = wideMode,
+            artworkAspectRatio = if (rendererEnabled && !previewUnavailable) {
+                PREVIEW_ASPECT_RATIO
+            } else {
+                1f
+            }
+        )
+    }
+    val rects = LandscapeMorphRects(
+        artwork = compactRects.artwork.lerp(fullscreenRects.artwork, progress),
+        title = compactRects.title.lerp(fullscreenRects.title, progress),
+        difficulty = compactRects.difficulty.lerp(fullscreenRects.difficulty, progress),
+        rendererToggle = compactRects.rendererToggle.lerp(
+            fullscreenRects.rendererToggle,
+            progress
+        ),
+        controls = compactRects.controls.lerp(fullscreenRects.controls, progress),
+        progress = compactRects.progress.lerp(fullscreenRects.progress, progress),
+        collapse = compactRects.collapse.lerp(fullscreenRects.collapse, progress),
+        fullscreen = compactRects.fullscreen.lerp(fullscreenRects.fullscreen, progress)
+    )
+    val selectedDifficulty = previewData?.selectedDifficulty
+        ?: previewData?.catalog?.difficulties?.firstOrNull()?.difficultyName
+
+    Box(modifier = modifier.fillMaxSize()) {
+        MorphSlot(rects.artwork) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                PlayerArtwork(
+                    artworkUri = artworkUri,
+                    timeline = previewData?.timeline,
+                    skin = skin,
+                    musicController = musicController,
+                    isExpanded = isExpanded,
+                    currentMediaId = currentMediaId,
+                    landscape = true,
+                    rendererEnabled = rendererEnabled,
+                    previewUnavailable = previewUnavailable,
+                    fillSlot = true
+                )
+            }
+        }
+
+        MorphSlot(rects.title) {
+            MorphingTrackMetadata(
+                title = title,
+                artist = artist,
+                progress = progress
+            )
+        }
+
+        MorphSlot(rects.difficulty) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (showDifficultySelector && selectedDifficulty != null) {
+                    DifficultySelector(
+                        selectedDifficulty = selectedDifficulty,
+                        difficulties = previewData?.catalog?.difficulties.orEmpty(),
+                        starRatings = previewData?.starRatings
+                            ?: BeatmapStarRatingCatalog.Empty,
+                        onDifficultySelected = onDifficultySelected,
+                        compact = rects.difficulty.width < 96.dp
+                    )
+                }
+            }
+        }
+
+        MorphSlot(rects.rendererToggle) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                RendererToggle(
+                    enabled = rendererEnabled,
+                    onEnabledChange = onRendererEnabledChange
+                )
+            }
+        }
+
+        MorphSlot(rects.controls) {
+            PlayerControls(
+                musicController = musicController,
+                isPlaying = isPlaying,
+                playbackMod = playbackMod,
+                sizeByWidth = false,
+                morphProgress = progress,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        MorphSlot(rects.progress) {
+            PlayerProgressBar(
+                musicController = musicController,
+                duration = duration,
+                sliderHeight = lerp(26.dp, 36.dp, progress)
+            )
+        }
+
+        // Compose the fullscreen action first and remove it before the slots overlap.
+        // The collapse action is drawn and hit-tested last throughout the morph, so it
+        // always owns the shared endpoint.
+        if (progress < FULLSCREEN_ACTION_FADE_END) {
+            val visibility = 1f - progress / FULLSCREEN_ACTION_FADE_END
+            MorphSlot(rects.fullscreen) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = visibility
+                            scaleX = 0.65f + visibility * 0.35f
+                            scaleY = 0.65f + visibility * 0.35f
+                        }
+                ) {
+                    IconButton(
+                        onClick = onEnterFullscreen,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Enter fullscreen",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        MorphSlot(rects.collapse) {
+            IconButton(
+                onClick = onCollapse,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = if (progress >= 0.5f) {
+                        "Exit fullscreen"
+                    } else {
+                        "Collapse player"
+                    },
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .rotate(progress * 90f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MorphSlot(
+    rect: LandscapeMorphRect,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .offset(x = rect.left, y = rect.top)
+            .size(
+                width = rect.width.coerceAtLeast(1.dp),
+                height = rect.height.coerceAtLeast(1.dp)
+            )
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun MorphingTrackMetadata(
+    title: String,
+    artist: String,
+    progress: Float
+) {
+    val compactTitleStyle = MaterialTheme.typography.titleMedium.copy(
+        fontWeight = FontWeight.Bold
+    )
+    val fullscreenTitleStyle = MaterialTheme.typography.headlineMedium.copy(
+        fontWeight = FontWeight.Bold
+    )
+    val compactArtistStyle = MaterialTheme.typography.bodySmall
+    val fullscreenArtistStyle = MaterialTheme.typography.titleMedium
+    val titleStyle = lerpTextStyle(compactTitleStyle, fullscreenTitleStyle, progress)
+    val artistStyle = lerpTextStyle(compactArtistStyle, fullscreenArtistStyle, progress)
+
+    Column(horizontalAlignment = Alignment.Start) {
+        Text(
+            text = title,
+            style = titleStyle,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            text = artist,
+            style = artistStyle,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+        )
+    }
+}
+
+private fun lerpTextStyle(
+    start: androidx.compose.ui.text.TextStyle,
+    stop: androidx.compose.ui.text.TextStyle,
+    fraction: Float
+): androidx.compose.ui.text.TextStyle = start.copy(
+    fontSize = lerp(start.fontSize, stop.fontSize, fraction),
+    lineHeight = lerp(start.lineHeight, stop.lineHeight, fraction),
+    letterSpacing = lerp(start.letterSpacing, stop.letterSpacing, fraction)
+)
+
+internal fun compactLandscapeMorphRects(
+    compactSize: DpSize,
+    showDifficultySelector: Boolean
+): LandscapeMorphRects {
+    val horizontalPadding = 8.dp
+    val verticalPadding = 6.dp
+    val actionSize = 36.dp
+    val headerHeight = 36.dp
+    val headerGap = 2.dp
+    val artworkGap = 4.dp
+    val metadataHeight = 42.dp
+    val sectionGap = 2.dp
+    val progressHeight = 42.dp
+    val controlsGap = 4.dp
+    val controlsHeight = 44.dp
+    val selectorHeight = 28.dp
+    val selectorGap = 4.dp
+    val toggleSize = 34.dp
+    val contentWidth = (compactSize.width - horizontalPadding * 2f).coerceAtLeast(1.dp)
+    val contentLeft = horizontalPadding
+    val contentRight = contentLeft + contentWidth
+    val contentTop = verticalPadding
+    val contentBottom = (compactSize.height - verticalPadding).coerceAtLeast(1.dp)
+
+    // Follow the vertical player from top to bottom: collapse control, artwork,
+    // metadata, progress, then transport. The fixed rows are sized for the compact
+    // card, while artwork takes all remaining height and keeps the renderer aspect
+    // ratio instead of being squeezed to a single-digit-height slot.
+    val controlsTop = (contentBottom - controlsHeight).coerceAtLeast(contentTop + 1.dp)
+    val progressTop = (
+        controlsTop - controlsGap - progressHeight
+        ).coerceAtLeast(contentTop + 1.dp)
+    val trackTop = (
+        progressTop - sectionGap - metadataHeight
+        ).coerceAtLeast(contentTop + headerHeight + headerGap + 1.dp)
+    val artworkSlotTop = contentTop + headerHeight + headerGap
+    val artworkSlotBottom = (trackTop - artworkGap).coerceAtLeast(artworkSlotTop)
+    val artworkSlotHeight = artworkSlotBottom - artworkSlotTop
+    val artworkWidth = (
+        artworkSlotHeight * PREVIEW_ASPECT_RATIO
+        ).coerceAtMost(contentWidth).coerceAtLeast(1.dp)
+    val artworkHeight = artworkWidth / PREVIEW_ASPECT_RATIO
+    val artworkLeft = (compactSize.width - artworkWidth) / 2f
+    val artworkTop = artworkSlotTop + (artworkSlotHeight - artworkHeight) / 2f
+
+    val selectorWidth = if (showDifficultySelector) {
+        (contentWidth * 0.34f).coerceIn(54.dp, 76.dp)
+    } else {
+        0.dp
+    }
+    val difficultyRight = contentRight - toggleSize - selectorGap
+    val difficultyLeft = (difficultyRight - selectorWidth).coerceAtLeast(contentLeft)
+    val titleWidth = (
+        (
+            if (showDifficultySelector) difficultyLeft - selectorGap
+            else contentRight - toggleSize - selectorGap
+            ) - contentLeft
+        ).coerceAtLeast(1.dp)
+    val collapseLeft = (compactSize.width - actionSize) / 2f
+
+    return LandscapeMorphRects(
+        artwork = LandscapeMorphRect(
+            left = artworkLeft,
+            top = artworkTop,
+            width = artworkWidth,
+            height = artworkHeight
+        ),
+        title = LandscapeMorphRect(
+            left = contentLeft,
+            top = trackTop,
+            width = titleWidth,
+            height = metadataHeight
+        ),
+        difficulty = LandscapeMorphRect(
+            left = difficultyLeft,
+            top = trackTop + (metadataHeight - selectorHeight) / 2f,
+            width = selectorWidth,
+            height = selectorHeight
+        ),
+        rendererToggle = LandscapeMorphRect(
+            left = contentRight - toggleSize,
+            top = trackTop + (metadataHeight - toggleSize) / 2f,
+            width = toggleSize,
+            height = toggleSize
+        ),
+        controls = LandscapeMorphRect(
+            left = contentLeft,
+            top = controlsTop,
+            width = contentWidth,
+            height = controlsHeight
+        ),
+        progress = LandscapeMorphRect(
+            left = contentLeft,
+            top = progressTop,
+            width = contentWidth,
+            height = progressHeight
+        ),
+        collapse = LandscapeMorphRect(
+            left = collapseLeft,
+            top = contentTop,
+            width = actionSize,
+            height = actionSize
+        ),
+        fullscreen = LandscapeMorphRect(
+            left = contentRight - actionSize,
+            top = contentTop,
+            width = actionSize,
+            height = actionSize
+        )
+    )
+}
+
+private fun fullscreenLandscapeMorphRects(
+    size: DpSize,
+    wideMode: Boolean,
+    artworkAspectRatio: Float
+): LandscapeMorphRects {
+    val contentWidth = size.width.coerceAtMost(HorizontalMaxContentWidth)
+    val contentLeft = (size.width - contentWidth) / 2f
+    val innerLeft = contentLeft + 24.dp
+    val innerRight = contentLeft + contentWidth - 24.dp
+    val innerWidth = (innerRight - innerLeft).coerceAtLeast(1.dp)
+    val innerTop = 12.dp
+    val innerHeight = (size.height - 24.dp).coerceAtLeast(1.dp)
+    val spacerWeightHeight = innerHeight * (H_CENTER_SPACER_WEIGHT / 1.1f)
+    val rowTop = innerTop + spacerWeightHeight
+    val rowHeight = if (wideMode) {
+        innerHeight * (1f / 1.1f)
+    } else {
+        innerHeight * (TOP_BAND_WEIGHT / 1.1f)
+    }
+    val rowBottom = rowTop + rowHeight
+    val calculatedArtworkWidth = rowHeight * artworkAspectRatio
+    val artworkWidth = calculatedArtworkWidth.coerceAtMost(innerWidth)
+    val artworkHeight = artworkWidth / artworkAspectRatio
+    val artworkTop = rowTop + (rowHeight - artworkHeight) / 2f
+    val artwork = LandscapeMorphRect(
+        left = innerLeft,
+        top = artworkTop,
+        width = artworkWidth,
+        height = artworkHeight
+    )
+    val infoLeft = artwork.left + artwork.width + 24.dp
+    val infoWidth = (innerRight - infoLeft).coerceAtLeast(1.dp)
+    val infoRight = infoLeft + infoWidth
+    val controlsHeight = (infoWidth * H_PLAY_BUTTON_WIDTH_FRACTION).coerceAtLeast(1.dp)
+    val trackHeight = 132.dp
+    val metadataTopOffset = 36.dp
+    val metadataHeight = 96.dp
+    val progressHeight = 52.dp
+    val collapseSize = 48.dp
+    val collapse = LandscapeMorphRect(
+        left = infoLeft + (infoWidth - collapseSize) / 2f,
+        top = rowTop,
+        width = collapseSize,
+        height = collapseSize
+    )
+
+    val controls: LandscapeMorphRect
+    val progress: LandscapeMorphRect
+    val track: LandscapeMorphRect
+    if (wideMode) {
+        progress = LandscapeMorphRect(
+            left = infoLeft,
+            top = rowBottom - progressHeight,
+            width = infoWidth,
+            height = progressHeight
+        )
+        controls = LandscapeMorphRect(
+            left = infoLeft,
+            top = progress.top - 20.dp - controlsHeight,
+            width = infoWidth,
+            height = controlsHeight
+        )
+        track = LandscapeMorphRect(
+            left = infoLeft,
+            top = controls.top - 16.dp - trackHeight,
+            width = infoWidth,
+            height = trackHeight
+        )
+    } else {
+        controls = LandscapeMorphRect(
+            left = infoLeft,
+            top = rowBottom - controlsHeight,
+            width = infoWidth,
+            height = controlsHeight
+        )
+        track = LandscapeMorphRect(
+            left = infoLeft,
+            top = controls.top - 20.dp - trackHeight,
+            width = infoWidth,
+            height = trackHeight
+        )
+        val progressBandHeight = innerHeight * (PROGRESS_BAND_WEIGHT / 1.1f)
+        progress = LandscapeMorphRect(
+            left = innerLeft,
+            top = rowBottom + progressBandHeight - progressHeight,
+            width = innerWidth,
+            height = progressHeight
+        )
+    }
+
+    val selectorWidth = (infoWidth * 0.62f).coerceIn(120.dp, 196.dp)
+    val toggleWidth = 34.dp
+    val metadataTop = track.top + metadataTopOffset
+    val metadataWidth = (infoWidth - toggleWidth - 12.dp).coerceAtLeast(1.dp)
+    return LandscapeMorphRects(
+        artwork = artwork,
+        title = LandscapeMorphRect(
+            left = infoLeft,
+            top = metadataTop,
+            width = metadataWidth,
+            height = metadataHeight
+        ),
+        difficulty = LandscapeMorphRect(
+            left = infoRight - selectorWidth,
+            top = track.top + 2.dp,
+            width = selectorWidth,
+            height = 32.dp
+        ),
+        rendererToggle = LandscapeMorphRect(
+            left = infoRight - toggleWidth,
+            top = metadataTop + (metadataHeight - toggleWidth) / 2f,
+            width = toggleWidth,
+            height = toggleWidth
+        ),
+        controls = controls,
+        progress = progress,
+        collapse = collapse,
+        fullscreen = collapse
+    )
 }
 
 /**
@@ -620,7 +1295,8 @@ private fun HorizontalPlayerLayout(
     onRendererEnabledChange: (Boolean) -> Unit,
     onDifficultySelected: (String) -> Unit,
     wideMode: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    collapseDescription: String = "Collapse"
 ) {
     Column(
         modifier = Modifier
@@ -647,17 +1323,32 @@ private fun HorizontalPlayerLayout(
             // Collapse handle in the top-right corner so it doesn't consume info-column space.
 
 
-            PlayerArtwork(
-                artworkUri = artworkUri,
-                timeline = previewData?.timeline,
-                skin = skin,
-                musicController = musicController,
-                isExpanded = isExpanded,
-                currentMediaId = currentMediaId,
-                landscape = true,
-                rendererEnabled = rendererEnabled,
-                previewUnavailable = previewUnavailable
-            )
+            // Keep the artwork slot measured independently of its content so renderer
+            // loading cannot stretch the controls. Album view remains square, while the
+            // renderer preview uses its wider playfield aspect ratio.
+            val artworkAspectRatio = if (rendererEnabled && !previewUnavailable) {
+                PREVIEW_ASPECT_RATIO
+            } else {
+                1f
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(artworkAspectRatio),
+                contentAlignment = Alignment.Center
+            ) {
+                PlayerArtwork(
+                    artworkUri = artworkUri,
+                    timeline = previewData?.timeline,
+                    skin = skin,
+                    musicController = musicController,
+                    isExpanded = isExpanded,
+                    currentMediaId = currentMediaId,
+                    landscape = true,
+                    rendererEnabled = rendererEnabled,
+                    previewUnavailable = previewUnavailable
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -674,7 +1365,7 @@ private fun HorizontalPlayerLayout(
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Collapse",
+                        contentDescription = collapseDescription,
                         tint = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.size(28.dp)
                     )
@@ -690,7 +1381,7 @@ private fun HorizontalPlayerLayout(
                         rendererEnabled = rendererEnabled,
                         selectedDifficulty = previewData?.selectedDifficulty,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
-                        starRatings = previewData?.starRatings.orEmpty(),
+                        starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
                         onRendererEnabledChange = onRendererEnabledChange,
                         onDifficultySelected = onDifficultySelected,
                         selectorAboveTitle = true
@@ -716,7 +1407,7 @@ private fun HorizontalPlayerLayout(
                         rendererEnabled = rendererEnabled,
                         selectedDifficulty = previewData?.selectedDifficulty,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
-                        starRatings = previewData?.starRatings.orEmpty(),
+                        starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
                         onRendererEnabledChange = onRendererEnabledChange,
                         onDifficultySelected = onDifficultySelected,
                         selectorAboveTitle = true
@@ -779,29 +1470,54 @@ private fun PlayerArtwork(
     currentMediaId: Long?,
     landscape: Boolean,
     rendererEnabled: Boolean,
-    previewUnavailable: Boolean
+    previewUnavailable: Boolean,
+    fillSlot: Boolean = false
 ) {
     // FullPlayer stays composed behind the library so the sheet can animate,
     // but nothing in its artwork slot should draw or drive frames while the
     // sheet is fully collapsed.
     if (!isExpanded) return
     if (previewUnavailable) {
-        CoverArt(artworkUri = artworkUri)
+        CoverArt(
+            artworkUri = artworkUri,
+            modifier = if (landscape) Modifier.fillMaxHeight() else Modifier
+        )
         return
     }
-    // While the renderer is loading, leave the artwork slot empty. Falling back
-    // to the cover here would flash artwork for a fraction of a second before
-    // the beatmap preview becomes available.
-    if (!rendererEnabled || timeline == null || skin == null) return
 
     val context = LocalContext.current
+    // A nullable sentinel distinguishes "not sampled yet" from a genuine fallback.
+    // The outer layout already reserves the slot, so it can stay visually empty until
+    // the real shadow colour is ready instead of popping from dark to sampled.
     var shadowColor by remember(artworkUri) {
-        mutableStateOf(Color(0xFF05050A))
+        mutableStateOf<Color?>(null)
     }
     LaunchedEffect(artworkUri) {
-        if (artworkUri != null) {
-            loadDominantShadowColor(context, artworkUri)?.let { shadowColor = it }
+        shadowColor = if (artworkUri == null) {
+            DefaultPreviewShadowColor
+        } else {
+            loadDominantShadowColor(context, artworkUri) ?: DefaultPreviewShadowColor
         }
+    }
+
+    val sizeModifier = when {
+        fillSlot -> Modifier.fillMaxSize()
+        landscape -> Modifier
+            .fillMaxHeight()
+            .aspectRatio(PREVIEW_ASPECT_RATIO)
+        else -> Modifier
+            .fillMaxWidth()
+            .aspectRatio(PREVIEW_ASPECT_RATIO)
+    }
+    val sampledShadowColor = shadowColor ?: return
+
+    val readyTimeline = timeline
+    val readySkin = skin
+    if (!rendererEnabled || readyTimeline == null || readySkin == null) {
+        // The raised renderer surface is a stable loading placeholder. It deliberately
+        // contains no artwork, avoiding the old cover flash without making the row reflow.
+        Box(modifier = sizeModifier.rendererPreviewFrame(sampledShadowColor))
+        return
     }
 
     DisposableEffect(musicController) {
@@ -811,10 +1527,10 @@ private fun PlayerArtwork(
         }
     }
 
-    var mapTimeMs by remember(timeline, currentMediaId) {
+    var mapTimeMs by remember(readyTimeline, currentMediaId) {
         mutableDoubleStateOf(musicController.currentPositionMs().toDouble())
     }
-    LaunchedEffect(isExpanded, timeline, currentMediaId) {
+    LaunchedEffect(isExpanded, readyTimeline, currentMediaId) {
         if (!isExpanded) return@LaunchedEffect
         while (isActive) {
             withFrameNanos {
@@ -826,107 +1542,15 @@ private fun PlayerArtwork(
         }
     }
 
-    val renderer = remember(skin) { OsuRenderer(skin) }
-    val sizeModifier = if (landscape) {
-        Modifier
-            .fillMaxHeight()
-            .aspectRatio(PREVIEW_ASPECT_RATIO)
-    } else {
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(PREVIEW_ASPECT_RATIO)
-    }
+    val renderer = remember(readySkin) { OsuRenderer(readySkin) }
 
     Box(
-        modifier = sizeModifier
-            .drawWithCache {
-                // Keep the canvas at its original size and paint a directional shadow
-                // outside it. The shadow is offset down and fades in from the top, so
-                // the canvas reads as raised by light coming from above the phone.
-                // The software bitmap is important: BlurMaskFilter is not reliably
-                // honored by the hardware canvas used by the renderer.
-                val coreWidth = size.width.toInt().coerceAtLeast(1)
-                val coreHeight = size.height.toInt().coerceAtLeast(1)
-                val featherPx = PreviewFeatherWidth.toPx()
-                val blurRadiusPx = featherPx / 2f
-                val shadowOffsetYPx = PreviewShadowOffsetY.toPx()
-                val haloWidth = coreWidth + (featherPx * 2f).toInt()
-                val haloHeight = coreHeight +
-                    (featherPx * 2f + shadowOffsetYPx).toInt()
-                val coreBounds = RectF(
-                    featherPx - blurRadiusPx,
-                    featherPx + shadowOffsetYPx - blurRadiusPx,
-                    featherPx + coreWidth + blurRadiusPx,
-                    featherPx + coreHeight + shadowOffsetYPx + blurRadiusPx
-                )
-                val haloBitmap = Bitmap.createBitmap(
-                    haloWidth,
-                    haloHeight,
-                    Bitmap.Config.ARGB_8888
-                )
-                android.graphics.Canvas(haloBitmap).drawRoundRect(
-                    coreBounds,
-                    PreviewCornerRadius.toPx() + blurRadiusPx,
-                    PreviewCornerRadius.toPx() + blurRadiusPx,
-                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = shadowColor.toArgb()
-                        maskFilter = BlurMaskFilter(
-                            blurRadiusPx,
-                            BlurMaskFilter.Blur.NORMAL
-                        )
-                    }
-                )
-                // Suppress the shadow above the canvas, then strengthen it toward the
-                // bottom. Reaching full strength before the bottom edge lets the
-                // directional feather begin higher up the sides instead of appearing
-                // only at the final few pixels. DST_IN keeps the blurred silhouette
-                // while applying this vertical opacity ramp.
-                val shadowRampStartYPx = featherPx
-                val shadowRampEndYPx =
-                    featherPx + coreHeight * PREVIEW_SHADOW_RAMP_END
-                android.graphics.Canvas(haloBitmap).drawRect(
-                    0f,
-                    0f,
-                    haloWidth.toFloat(),
-                    haloHeight.toFloat(),
-                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        shader = LinearGradient(
-                            0f,
-                            shadowRampStartYPx,
-                            0f,
-                            shadowRampEndYPx,
-                            intArrayOf(
-                                android.graphics.Color.TRANSPARENT,
-                                android.graphics.Color.argb(115, 0, 0, 0),
-                                android.graphics.Color.BLACK
-                            ),
-                            floatArrayOf(0f, 0.38f, 1f),
-                            Shader.TileMode.CLAMP
-                        )
-                        xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-                    }
-                )
-                val halo = haloBitmap.asImageBitmap()
-                val haloOffset = Offset(-featherPx, -featherPx)
-                onDrawBehind {
-                    drawImage(
-                        image = halo,
-                        topLeft = haloOffset,
-                        alpha = PREVIEW_SHADOW_ALPHA
-                    )
-                }
-            }
-            .graphicsLayer {
-                alpha = PREVIEW_CANVAS_ALPHA
-                compositingStrategy = CompositingStrategy.Offscreen
-            }
-            .clip(RoundedCornerShape(PreviewCornerRadius))
-            .background(Color(0xFF05050A))
+        modifier = sizeModifier.rendererPreviewFrame(sampledShadowColor)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             renderer.draw(
                 canvas = drawContext.canvas.nativeCanvas,
-                timeline = timeline,
+                timeline = readyTimeline,
                 mapTimeMs = mapTimeMs,
                 playfieldSize = OsuPlayfieldSize(size.width, size.height),
                 edgeInsetPx = PreviewEdgeInset.toPx()
@@ -935,6 +1559,89 @@ private fun PlayerArtwork(
     }
 }
 
+private fun Modifier.rendererPreviewFrame(shadowColor: Color): Modifier = this
+    .drawWithCache {
+        // Keep the canvas at its original size and paint a directional shadow
+        // outside it. The shadow is offset down and fades in from the top, so
+        // the canvas reads as raised by light coming from above the phone.
+        // The software bitmap is important: BlurMaskFilter is not reliably
+        // honored by the hardware canvas used by the renderer.
+        val coreWidth = size.width.toInt().coerceAtLeast(1)
+        val coreHeight = size.height.toInt().coerceAtLeast(1)
+        val featherPx = PreviewFeatherWidth.toPx()
+        val blurRadiusPx = featherPx / 2f
+        val shadowOffsetYPx = PreviewShadowOffsetY.toPx()
+        val haloWidth = coreWidth + (featherPx * 2f).toInt()
+        val haloHeight = coreHeight + (featherPx * 2f + shadowOffsetYPx).toInt()
+        val coreBounds = RectF(
+            featherPx - blurRadiusPx,
+            featherPx + shadowOffsetYPx - blurRadiusPx,
+            featherPx + coreWidth + blurRadiusPx,
+            featherPx + coreHeight + shadowOffsetYPx + blurRadiusPx
+        )
+        val haloBitmap = Bitmap.createBitmap(
+            haloWidth,
+            haloHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        android.graphics.Canvas(haloBitmap).drawRoundRect(
+            coreBounds,
+            PreviewCornerRadius.toPx() + blurRadiusPx,
+            PreviewCornerRadius.toPx() + blurRadiusPx,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = shadowColor.toArgb()
+                maskFilter = BlurMaskFilter(
+                    blurRadiusPx,
+                    BlurMaskFilter.Blur.NORMAL
+                )
+            }
+        )
+        // Suppress the shadow above the canvas, then strengthen it toward the
+        // bottom. Reaching full strength before the bottom edge lets the
+        // directional feather begin higher up the sides instead of appearing
+        // only at the final few pixels. DST_IN keeps the blurred silhouette
+        // while applying this vertical opacity ramp.
+        val shadowRampStartYPx = featherPx
+        val shadowRampEndYPx = featherPx + coreHeight * PREVIEW_SHADOW_RAMP_END
+        android.graphics.Canvas(haloBitmap).drawRect(
+            0f,
+            0f,
+            haloWidth.toFloat(),
+            haloHeight.toFloat(),
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    0f,
+                    shadowRampStartYPx,
+                    0f,
+                    shadowRampEndYPx,
+                    intArrayOf(
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.argb(115, 0, 0, 0),
+                        android.graphics.Color.BLACK
+                    ),
+                    floatArrayOf(0f, 0.38f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            }
+        )
+        val halo = haloBitmap.asImageBitmap()
+        val haloOffset = Offset(-featherPx, -featherPx)
+        onDrawBehind {
+            drawImage(
+                image = halo,
+                topLeft = haloOffset,
+                alpha = PREVIEW_SHADOW_ALPHA
+            )
+        }
+    }
+    .graphicsLayer {
+        alpha = PREVIEW_CANVAS_ALPHA
+        compositingStrategy = CompositingStrategy.Offscreen
+    }
+    .clip(RoundedCornerShape(PreviewCornerRadius))
+    .background(DefaultPreviewShadowColor)
+
 @Composable
 private fun TrackInfo(
     title: String,
@@ -942,12 +1649,13 @@ private fun TrackInfo(
     rendererEnabled: Boolean,
     selectedDifficulty: String?,
     difficulties: List<OsuDifficultyMap>,
-    starRatings: Map<Long, Float>,
+    starRatings: BeatmapStarRatingCatalog,
     onRendererEnabledChange: (Boolean) -> Unit,
     onDifficultySelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     titleMaxLines: Int = 1,
-    selectorAboveTitle: Boolean = false
+    selectorAboveTitle: Boolean = false,
+    compact: Boolean = false
 ) {
     val showDifficultySelector = rendererEnabled && difficulties.size > 1
     val selectedDifficultyName = selectedDifficulty ?: difficulties.firstOrNull()?.difficultyName
@@ -978,6 +1686,7 @@ private fun TrackInfo(
                     title = title,
                     artist = artist,
                     titleMaxLines = titleMaxLines,
+                    compact = compact,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(12.dp))
@@ -996,6 +1705,7 @@ private fun TrackInfo(
                 title = title,
                 artist = artist,
                 titleMaxLines = titleMaxLines,
+                compact = compact,
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(12.dp))
@@ -1025,6 +1735,7 @@ private fun TrackMetadata(
     title: String,
     artist: String,
     titleMaxLines: Int,
+    compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -1033,14 +1744,16 @@ private fun TrackMetadata(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            style = (if (compact) MaterialTheme.typography.titleMedium
+                else MaterialTheme.typography.headlineMedium).copy(fontWeight = FontWeight.Bold),
             maxLines = titleMaxLines,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
             text = artist,
-            style = MaterialTheme.typography.titleMedium,
+            style = if (compact) MaterialTheme.typography.bodySmall
+                else MaterialTheme.typography.titleMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
@@ -1053,15 +1766,16 @@ private fun TrackMetadata(
 private fun DifficultySelector(
     selectedDifficulty: String,
     difficulties: List<OsuDifficultyMap>,
-    starRatings: Map<Long, Float>,
-    onDifficultySelected: (String) -> Unit
+    starRatings: BeatmapStarRatingCatalog,
+    onDifficultySelected: (String) -> Unit,
+    compact: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     val sortedDifficulties = remember(difficulties, starRatings) {
         difficulties.sortedWith(
             compareBy<OsuDifficultyMap> { difficulty ->
-                difficulty.beatmapId
-                    ?.let(starRatings::get)
+                starRatings
+                    .ratingFor(difficulty)
                     ?.takeIf(Float::isFinite)
                     ?: Float.POSITIVE_INFINITY
             }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.difficultyName }
@@ -1069,32 +1783,40 @@ private fun DifficultySelector(
     }
     val selectedRating = difficulties
         .firstOrNull { it.difficultyName == selectedDifficulty }
-        ?.beatmapId
-        ?.let(starRatings::get)
+        ?.let { difficulty -> starRatings.ratingFor(difficulty) }
     Box {
         Row(
             modifier = Modifier
                 .widthIn(max = 196.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .clickable { expanded = true }
-                .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
+                .padding(
+                    start = if (compact) 2.dp else 8.dp,
+                    end = if (compact) 0.dp else 2.dp,
+                    top = 5.dp,
+                    bottom = 5.dp
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             StarRatingBadge(selectedRating)
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = selectedDifficulty,
-                modifier = Modifier.weight(1f, fill = false),
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-            )
+            if (compact) {
+                Spacer(Modifier.width(2.dp))
+            } else {
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = selectedDifficulty,
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                )
+            }
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = stringResource(R.string.player_select_difficulty),
                 tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(if (compact) 12.dp else 20.dp)
             )
         }
         DropdownMenu(
@@ -1109,7 +1831,7 @@ private fun DifficultySelector(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             StarRatingBadge(
-                                difficulty.beatmapId?.let(starRatings::get)
+                                starRatings.ratingFor(difficulty)
                             )
                             Text(
                                 text = difficulty.difficultyName,
@@ -1157,7 +1879,8 @@ private fun PlayerControls(
     isPlaying: Boolean,
     playbackMod: PlaybackMod,
     sizeByWidth: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    morphProgress: Float? = null
 ) {
     val repeatMode by musicController.repeatMode.collectAsState()
     val shuffleModeEnabled by musicController.shuffleModeEnabled.collectAsState()
@@ -1170,12 +1893,24 @@ private fun PlayerControls(
         // Vertical mode sizes buttons off the row height; horizontal modes size them off the
         // info column's width (the space left of the cover art) so they stay proportional
         // even when the row is short and wide.
-        val sideButtonSize = if (sizeByWidth) {
+        val sideButtonSize = if (morphProgress != null) {
+            lerp(
+                maxHeight * SIDE_BUTTON_HEIGHT_FRACTION,
+                maxWidth * H_SIDE_BUTTON_WIDTH_FRACTION,
+                morphProgress.coerceIn(0f, 1f)
+            )
+        } else if (sizeByWidth) {
             maxWidth * H_SIDE_BUTTON_WIDTH_FRACTION
         } else {
             maxHeight * SIDE_BUTTON_HEIGHT_FRACTION
         }
-        val playButtonSize = if (sizeByWidth) {
+        val playButtonSize = if (morphProgress != null) {
+            lerp(
+                maxHeight * PLAY_BUTTON_HEIGHT_FRACTION,
+                maxWidth * H_PLAY_BUTTON_WIDTH_FRACTION,
+                morphProgress.coerceIn(0f, 1f)
+            )
+        } else if (sizeByWidth) {
             maxWidth * H_PLAY_BUTTON_WIDTH_FRACTION
         } else {
             maxHeight * PLAY_BUTTON_HEIGHT_FRACTION
@@ -1473,7 +2208,8 @@ private fun ModeButton(
 @Composable
 private fun PlayerProgressBar(
     musicController: MusicController,
-    duration: Long
+    duration: Long,
+    sliderHeight: Dp = 36.dp
 ) {
     val currentPosition by musicController.currentPosition.collectAsState()
     var isDragging by remember { mutableStateOf(false) }
@@ -1511,7 +2247,7 @@ private fun PlayerProgressBar(
         val inactiveTrackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
 
         Slider(
-            modifier = Modifier.height(36.dp),
+            modifier = Modifier.height(sliderHeight),
             value = sliderValue,
             onValueChange = { newValue ->
                 isDragging = true
@@ -1525,7 +2261,7 @@ private fun PlayerProgressBar(
             interactionSource = sliderInteraction,
             colors = sliderColors,
             thumb = {
-                Box(modifier = Modifier.size(28.dp))
+                Box(modifier = Modifier.size(sliderHeight * (28f / 36f)))
             },
             track = { sliderState ->
                 val fraction = if (sliderRange.endInclusive > 0) {

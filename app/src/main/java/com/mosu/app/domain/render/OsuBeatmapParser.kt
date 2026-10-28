@@ -128,6 +128,32 @@ object OsuBeatmapParser {
 
     fun parseHeader(text: String): OsuMapHeader = parseHeaderText(text.removePrefix("\uFEFF"))
 
+    /**
+     * Checks whether an `.osu` file contains at least one structurally valid hit
+     * object, regardless of ruleset. This deliberately does not build render
+     * objects: osu!mania hold notes are valid stored maps but are unsupported by
+     * the osu!standard renderer.
+     */
+    fun hasHitObjects(file: File): Boolean {
+        try {
+            file.bufferedReader(Charsets.UTF_8).use { reader ->
+                var inHitObjects = false
+                while (true) {
+                    val line = reader.readLine()?.trim() ?: break
+                    if (line.isEmpty() || line.startsWith("//")) continue
+                    if (line.startsWith("[") && line.endsWith("]")) {
+                        inHitObjects = line.substring(1, line.length - 1) == "HitObjects"
+                        continue
+                    }
+                    if (inHitObjects && looksLikeHitObject(line)) return true
+                }
+            }
+        } catch (e: Exception) {
+            throw OsuMapParseException("Unable to read ${file.name}", e)
+        }
+        return false
+    }
+
     fun parse(file: File): ParsedOsuMap {
         val text = try {
             file.readText(Charsets.UTF_8)
@@ -199,18 +225,30 @@ object OsuBeatmapParser {
 
     /**
      * Validates the fields that make a map safe to associate with a downloaded
-     * standard beatmap. Unsupported rulesets and mismatched set IDs are rejected.
+     * standard beatmap. Unsupported rulesets and explicitly mismatched set IDs
+     * are rejected; legacy maps without an embedded set ID are accepted.
      */
     fun parseAndValidate(file: File, expectedBeatmapSetId: Long): ParsedOsuMap? {
         return try {
             val parsed = parse(file)
             parsed.takeIf {
-                it.header.mode == 0 && it.header.beatmapSetId == expectedBeatmapSetId
+                it.header.mode == 0 &&
+                    belongsToBeatmapSet(it.header.beatmapSetId, expectedBeatmapSetId)
             }
         } catch (_: Exception) {
             null
         }
     }
+
+    /**
+     * Old `.osu` formats predate BeatmapSetID and therefore omit it. The
+     * containing `beatmaps/{setId}` directory supplies that identity, while an
+     * explicitly different embedded id remains invalid.
+     */
+    fun belongsToBeatmapSet(
+        embeddedBeatmapSetId: Long?,
+        expectedBeatmapSetId: Long
+    ): Boolean = embeddedBeatmapSetId == null || embeddedBeatmapSetId == expectedBeatmapSetId
 
     fun normalizeAudioFilename(value: String): String =
         value.trim()
@@ -253,7 +291,7 @@ object OsuBeatmapParser {
         val overallDifficulty = difficulty.floatValue("OverallDifficulty") ?: 5f
         val approachRate = difficulty.floatValue("ApproachRate") ?: overallDifficulty
         return OsuMapHeader(
-            beatmapSetId = metadata["BeatmapSetID"]?.trim()?.toLongOrNull(),
+            beatmapSetId = metadata["BeatmapSetID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
             beatmapId = metadata["BeatmapID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
             mode = mode,
             audioFilename = normalizeAudioFilename(audioFilename),
@@ -271,6 +309,15 @@ object OsuBeatmapParser {
         val separator = line.indexOf(':')
         if (separator <= 0) return null
         return line.substring(0, separator).trim() to line.substring(separator + 1).trim()
+    }
+
+    private fun looksLikeHitObject(line: String): Boolean {
+        val parts = line.split(',')
+        if (parts.size < 5) return false
+        return parts[0].trim().toFloatOrNull() != null &&
+            parts[1].trim().toFloatOrNull() != null &&
+            parts[2].trim().toDoubleOrNull() != null &&
+            parts[3].trim().toIntOrNull() != null
     }
 
     private fun Map<String, String>.floatValue(key: String): Float? =

@@ -134,7 +134,12 @@ fun PlaylistScreen(
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     accessToken: String? = null,
     snackbarHostState: SnackbarHostState? = null,
-    deferredActionViewModel: DeferredActionViewModel = viewModel()
+    deferredActionViewModel: DeferredActionViewModel = viewModel(),
+    isLandscape: Boolean = false,
+    landscapeCreateRequest: Int = 0,
+    onLandscapeCreateRequestConsumed: () -> Unit = {},
+    landscapeImportRequest: Int = 0,
+    onLandscapeImportRequestConsumed: () -> Unit = {}
 ) {
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
@@ -178,11 +183,24 @@ fun PlaylistScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    LaunchedEffect(landscapeCreateRequest) {
+        if (landscapeCreateRequest > 0) {
+            showCreateDialog = true
+            onLandscapeCreateRequestConsumed()
+        }
+    }
     var pendingExportText by remember { mutableStateOf<String?>(null) }
 
     // Import / export text interfaces (also used for clipboard transfer).
     var showImportDialog by remember { mutableStateOf(false) }
     var importText by remember { mutableStateOf("") }
+    LaunchedEffect(landscapeImportRequest) {
+        if (landscapeImportRequest > 0) {
+            importText = ""
+            showImportDialog = true
+            onLandscapeImportRequestConsumed()
+        }
+    }
     var showExportDialog by remember { mutableStateOf(false) }
     var exportText by remember { mutableStateOf("") }
     var exportName by remember { mutableStateOf("") }
@@ -661,28 +679,30 @@ fun PlaylistScreen(
     ) {
         if (selectedPlaylistId == null) {
             // Grid view of albums
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(id = R.string.playlist_title),
-                    style = MaterialTheme.typography.displayMedium,
-                    modifier = Modifier.padding(vertical=16.dp)
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = {
-                        importText = ""
-                        showImportDialog = true
-                    }) {
-                        Icon(
-                            Icons.Default.FileDownload,
-                            contentDescription = stringResource(id = R.string.playlist_cd_import_playlist)
-                        )
-                    }
-                    IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_create_playlist))
+            if (!isLandscape) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.playlist_title),
+                        style = MaterialTheme.typography.displayMedium,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = {
+                            importText = ""
+                            showImportDialog = true
+                        }) {
+                            Icon(
+                                Icons.Default.FileDownload,
+                                contentDescription = stringResource(id = R.string.playlist_cd_import_playlist)
+                            )
+                        }
+                        IconButton(onClick = { showCreateDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_create_playlist))
+                        }
                     }
                 }
             }

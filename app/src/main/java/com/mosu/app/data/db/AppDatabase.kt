@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
         DownloadTaskEntity::class,
         BeatmapStarRatingEntity::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -390,6 +390,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 22 to 23: Retain the metadata needed to match
+        // legacy maps that do not embed a BeatmapID.
+        private val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                fun addColumnIfMissing(name: String, definition: String) {
+                    val cursor = db.query("PRAGMA table_info(beatmap_star_ratings)")
+                    var exists = false
+                    cursor.use {
+                        while (it.moveToNext()) {
+                            if (it.getString(it.getColumnIndex("name")) == name) {
+                                exists = true
+                                break
+                            }
+                        }
+                    }
+                    if (!exists) {
+                        db.execSQL(
+                            "ALTER TABLE beatmap_star_ratings ADD COLUMN $definition"
+                        )
+                    }
+                }
+
+                addColumnIfMissing("difficultyName", "difficultyName TEXT")
+                addColumnIfMissing("mode", "mode INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -411,7 +438,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_18_19,
                     MIGRATION_19_20,
                     MIGRATION_20_21,
-                    MIGRATION_21_22
+                    MIGRATION_21_22,
+                    MIGRATION_22_23
                 )
                 .fallbackToDestructiveMigration() // Only as last resort for major schema incompatibilities
                 .build()

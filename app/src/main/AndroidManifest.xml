@@ -60,6 +60,10 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <receiver
+            android:name=".domain.repair.MissingOsuBackfillCancelReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

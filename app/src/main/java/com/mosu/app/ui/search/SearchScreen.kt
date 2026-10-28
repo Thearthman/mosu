@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -48,6 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -71,6 +74,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.mosu.app.R
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.Covers
@@ -84,6 +89,8 @@ import com.mosu.app.ui.components.BeatmapSetList
 import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
+import com.mosu.app.ui.components.GenreFilter
+import com.mosu.app.ui.components.GenreRail
 import com.mosu.app.ui.components.BeatmapSetSwipeActions
 import com.mosu.app.ui.components.BeatmapSetSwipeItem
 import com.mosu.app.ui.components.PlaylistOption
@@ -94,12 +101,44 @@ import com.mosu.app.ui.components.toBeatmapSetData
 import com.mosu.app.ui.components.toBeatmapSetScoreData
 import com.mosu.app.data.db.BeatmapEntity
 import com.mosu.app.data.services.TrackService
+import com.mosu.app.domain.download.DownloadTask
+import com.mosu.app.domain.search.usesFilterProvidedBeatmapset
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewModelScope
 import com.mosu.app.ui.DeferredActionViewModel
+
+private fun Map<Long, DownloadTask>.forSong(
+    setId: Long,
+    title: String,
+    artist: String
+): DownloadTask? {
+    return this[setId] ?: values.firstOrNull {
+        it.title.equals(title, ignoreCase = true) &&
+            it.artist.equals(artist, ignoreCase = true)
+    }
+}
+
+@Composable
+private fun DownloadTasksContent(
+    downloadManager: com.mosu.app.domain.download.DownloadManager,
+    tasks: Map<Long, DownloadTask>,
+    accessToken: String?,
+    modifier: Modifier = Modifier
+) {
+    com.mosu.app.ui.components.TaskView(
+        tasks = tasks,
+        onCancel = { downloadManager.cancel(it) },
+        onRetry = { downloadManager.retry(it, accessToken) },
+        onPauseAll = { downloadManager.pauseAll() },
+        onResumeAll = { downloadManager.resumeAll() },
+        onResume = { downloadManager.resume(it) },
+        modifier = modifier
+    )
+}
 
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -113,9 +152,16 @@ fun SearchScreen(
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     scrollToTop: Boolean = false,
     onScrolledToTop: () -> Unit = {},
-    snackbarHostState: SnackbarHostState? = null
+    snackbarHostState: SnackbarHostState? = null,
+    isLandscape: Boolean = false,
+    genreBarEnabled: Boolean = true,
+    landscapeTaskViewRequest: Int = 0,
+    onLandscapeTaskViewRequestConsumed: () -> Unit = {}
 ) {
     val vm = viewModel
+    LaunchedEffect(genreBarEnabled) {
+        if (!genreBarEnabled) vm.selectedGenreIds = emptySet()
+    }
 
     // Played filter mode from settings
     val defaultSearchView by settingsManager.defaultSearchView.collectAsState(initial = "played")
@@ -203,61 +249,105 @@ fun SearchScreen(
         .mapValues { entry -> entry.value.map { "${it.beatmapSetId}|${it.difficultyName}" }.toSet() }
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var showTaskView by remember { mutableStateOf(false) }
+    LaunchedEffect(landscapeTaskViewRequest) {
+        if (landscapeTaskViewRequest > 0) {
+            showTaskView = true
+            onLandscapeTaskViewRequestConsumed()
+        }
+    }
     var dialogTrack by remember { mutableStateOf<BeatmapEntity?>(null) }
     var dialogSelection by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
-    fun runSearch(query: String, recordHistory: Boolean = true, forceRefresh: Boolean = false) {
-        scope.launch {
-            val token = accessToken ?: return@launch
-            val normalizedQuery = query.replace(Regex("[\\p{Cntrl}]"), "")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-            val shouldForceRefresh = forceRefresh
-            try {
-                vm.currentCursor = null
-                if (recordHistory && normalizedQuery.isNotEmpty()) {
-                    vm.recordSearchHistory(normalizedQuery)
-                }
-                if (vm.filterMode == "recent") {
-                    val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(
-                        token,
-                        vm.userId,
-                        normalizedQuery,
-                        vm.selectedGenreId,
-                        vm.scoreModeFilter,
-                        showPlayHistory = recentPlayHistoryEnabled
-                    )
-                    vm.mergeGroups = mergeGroupsResult
-                    vm.recentGroupedResults = groupedItems
-                    vm.searchResults = emptyList()
-                    vm.searchResultsMetadata = emptyMap()
-                    vm.searchScoreResults = emptyMap()
-                    vm.recentTimestamps = timestamps
-                } else {
-                    val result = vm.repository.getPlayedBeatmaps(
-                        accessToken = token,
-                        genreId = vm.selectedGenreId,
-                        cursorString = null,
-                        searchQuery = normalizedQuery.ifEmpty { null },
-                        filterMode = vm.filterMode,
-                        playedFilterMode = playedFilterMode,
-                        userId = vm.userId,
-                        isSupporter = vm.isSupporter,
-                        searchAny = !onlyLeaderboardEnabled,
-                        forceRefresh = shouldForceRefresh,
-                        scoreMode = vm.scoreModeFilter
-                    )
-                    val deduped = vm.searchService.dedupeByTitle(result.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
-                    vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
-                    vm.searchResults = deduped
-                    vm.currentCursor = result.cursor
-                    vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
-                    vm.searchScoreResults = result.scoreResults
-                }
-            } catch (e: Exception) {
-                Log.e("SearchScreen", "Search failed", e)
+    suspend fun runSearch(query: String, recordHistory: Boolean = true, forceRefresh: Boolean = false) {
+        val token = accessToken ?: return
+        val normalizedQuery = query.replace(Regex("[\\p{Cntrl}]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val shouldForceRefresh = forceRefresh
+        val requestMode = vm.filterMode
+        val requestScoreMode = vm.scoreModeFilter
+        val requestUserId = vm.userId
+        val requestOnlyLeaderboard = onlyLeaderboardEnabled
+        val requestPlayedMode = playedFilterMode
+        val requestShowPlayHistory = recentPlayHistoryEnabled
+        val requestGenreIds = vm.selectedGenreIds
+        val requestLoadKey = vm.initialLoadKey(
+            accessToken = token,
+            mode = requestMode,
+            scoreMode = requestScoreMode,
+            uid = requestUserId,
+            onlyLeaderboard = requestOnlyLeaderboard,
+            playedMode = requestPlayedMode,
+            searchAny = !requestOnlyLeaderboard,
+            showPlayHistory = requestShowPlayHistory,
+            genreIds = requestGenreIds
+        )
+        try {
+            vm.cancelInitialLoad()
+            vm.currentCursor = null
+            if (recordHistory && normalizedQuery.isNotEmpty()) {
+                vm.recordSearchHistory(normalizedQuery)
             }
+            if (requestMode == "recent") {
+                val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(
+                    token,
+                    requestUserId,
+                    normalizedQuery,
+                    requestGenreIds,
+                    requestScoreMode,
+                    showPlayHistory = requestShowPlayHistory
+                )
+                vm.mergeGroups = mergeGroupsResult
+                vm.recentGroupedResults = groupedItems
+                vm.searchResults = emptyList()
+                vm.searchResultsMetadata = emptyMap()
+                vm.searchScoreResults = emptyMap()
+                vm.recentTimestamps = timestamps
+            } else {
+                val result = vm.repository.getPlayedBeatmaps(
+                    accessToken = token,
+                    genreIds = requestGenreIds,
+                    cursorString = null,
+                    searchQuery = normalizedQuery.ifEmpty { null },
+                    filterMode = requestMode,
+                    playedFilterMode = requestPlayedMode,
+                    userId = requestUserId,
+                    isSupporter = vm.isSupporter,
+                    searchAny = !requestOnlyLeaderboard,
+                    forceRefresh = shouldForceRefresh,
+                    scoreMode = requestScoreMode
+                )
+                val deduped = vm.searchService.dedupeSearchResultsForMode(
+                    list = result.beatmaps,
+                    downloadedBeatmapSetIds = vm.downloadedBeatmapSetIds,
+                    filterMode = requestMode
+                )
+                vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
+                vm.searchResults = deduped
+                vm.currentCursor = result.cursor
+                vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
+                vm.searchScoreResults = result.scoreResults
+            }
+            vm.markInitialLoadHandled(requestLoadKey)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("SearchScreen", "Search failed", e)
         }
+    }
+
+    var appliedGenreIds by remember { mutableStateOf(vm.selectedGenreIds) }
+
+    fun applyGenreSelection(genreIds: Set<Int>) {
+        if (vm.selectedGenreIds == genreIds) return
+        vm.selectedGenreIds = genreIds
+        vm.currentCursor = null
+    }
+
+    LaunchedEffect(vm.selectedGenreIds) {
+        if (vm.selectedGenreIds == appliedGenreIds) return@LaunchedEffect
+        appliedGenreIds = vm.selectedGenreIds
+        runSearch(vm.searchQuery, recordHistory = false, forceRefresh = true)
     }
 
     fun openPlaylistDialog(set: BeatmapSetData) {
@@ -296,26 +386,15 @@ fun SearchScreen(
         }
     }
 
-    val genres = vm.searchService.genres.map { (id, name) ->
-        id to stringResource(id = when (name) {
-            "Electronic" -> R.string.genre_electronic
-            "Anime" -> R.string.genre_anime
-            "Rock" -> R.string.genre_rock
-            "Pop" -> R.string.genre_pop
-            "Game" -> R.string.genre_game
-            "Hip Hop" -> R.string.genre_hiphop
-            "Metal" -> R.string.genre_metal
-            "Classical" -> R.string.genre_classical
-            "Folk" -> R.string.genre_folk
-            "Jazz" -> R.string.genre_jazz
-            "Novelty" -> R.string.genre_novelty
-            "Other" -> R.string.genre_other
-            else -> R.string.genre_other
-        })
-    }
-
     // Define Unified Actions
-    val actions = remember(accessToken, vm.downloadedBeatmapSetIds, vm.downloadedKeys, snackbarHostState) {
+    val actions = remember(
+        accessToken,
+        vm.downloadedBeatmapSetIds,
+        vm.downloadedKeys,
+        vm.scoreModeFilter,
+        vm.filterMode,
+        snackbarHostState
+    ) {
         BeatmapSetActions(
             onClick = { set ->
                 if (set.isDownloaded) {
@@ -355,15 +434,56 @@ fun SearchScreen(
             },
             onSecondaryAction = { set ->
                 if (!set.isDownloaded && set.downloadProgress == null) {
-                    downloadManager.enqueue(
-                        setId = set.id,
-                        title = set.title,
-                        artist = set.artist,
-                        creator = set.creator ?: "",
-                        accessToken = accessToken,
-                        genreId = set.genreId,
-                        coverUrl = set.coverUrl
-                    )
+                    if (vm.filterMode.usesFilterProvidedBeatmapset()) {
+                        downloadManager.enqueue(
+                            setId = set.id,
+                            title = set.title,
+                            artist = set.artist,
+                            creator = set.creator ?: "",
+                            accessToken = accessToken,
+                            genreId = set.genreId,
+                            coverUrl = set.coverUrl
+                        )
+                    } else {
+                        scope.launch {
+                            val target = try {
+                                vm.repository.findMostPlayedBeatmapsetByTitleArtist(
+                                    title = set.title,
+                                    artist = set.artist,
+                                    scoreMode = vm.scoreModeFilter
+                                )
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Log.e(
+                                    "SearchScreen",
+                                    "Failed to resolve most-played download target for ${set.title}",
+                                    e
+                                )
+                                null
+                            }
+
+                            if (target == null) {
+                                snackbarHostState?.showSnackbar(
+                                    context.getString(
+                                        R.string.search_download_target_resolve_failed,
+                                        set.title
+                                    )
+                                )
+                                return@launch
+                            }
+
+                            downloadManager.enqueue(
+                                setId = target.id,
+                                title = target.title,
+                                artist = target.artist,
+                                creator = target.creator,
+                                accessToken = accessToken,
+                                genreId = target.genreId,
+                                coverUrl = target.covers.listUrl
+                            )
+                        }
+                    }
                 }
             },
             onSwipeLeft = { set ->
@@ -420,14 +540,26 @@ fun SearchScreen(
         vm.downloadedBeatmapSetIds,
         vm.downloadedKeys,
         previewManager.previewingId,
-        pendingDeletions
+        pendingDeletions,
+        vm.filterMode
     ) {
         sortedResults
             .map { map ->
                 val metadata = vm.searchResultsMetadata[map.id]
-                val task = downloadTasks[map.id]
+                val suppliedByFilter = vm.filterMode.usesFilterProvidedBeatmapset()
+                val task = if (suppliedByFilter) {
+                    downloadTasks[map.id]
+                } else {
+                    downloadTasks.forSong(map.id, map.title, map.artist)
+                }
                 val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
-                val isDownloaded = (vm.downloadedBeatmapSetIds.contains(map.id) || vm.downloadedKeys.contains(mapKey)) && map.id !in pendingDeletions
+                val isActuallyDownloaded = if (suppliedByFilter) {
+                    vm.downloadedBeatmapSetIds.contains(map.id)
+                } else {
+                    vm.downloadedBeatmapSetIds.contains(map.id) ||
+                        vm.downloadedKeys.contains(mapKey)
+                }
+                val isDownloaded = isActuallyDownloaded && map.id !in pendingDeletions
                 
                 val showProgress = task != null && 
                     (task.status == com.mosu.app.domain.download.DownloadStatus.Downloading || 
@@ -451,49 +583,79 @@ fun SearchScreen(
             }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(end = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(id = R.string.search_title),
-                style = MaterialTheme.typography.displayMedium,
-                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (isLandscape && genreBarEnabled) {
+            GenreRail(
+                selectedGenreIds = vm.selectedGenreIds,
+                onGenreSelected = ::applyGenreSelection,
+                modifier = Modifier.fillMaxHeight()
             )
-            
-            Box {
-                IconButton(onClick = { showTaskView = true }) {
-                    BadgedBox(
-                        badge = {
-                            if (activeDownloadCount > 0) {
-                                Badge {
-                                    Text(activeDownloadCount.toString())
+        }
+
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        if (!isLandscape) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(end = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(id = R.string.search_title),
+                    style = MaterialTheme.typography.displayMedium,
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
+                )
+
+                Box {
+                    IconButton(onClick = { showTaskView = true }) {
+                        BadgedBox(
+                            badge = {
+                                if (activeDownloadCount > 0) {
+                                    Badge {
+                                        Text(activeDownloadCount.toString())
+                                    }
                                 }
                             }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Task View"
+                            )
                         }
+                    }
+
+                    DropdownMenu(
+                        expanded = showTaskView,
+                        onDismissRequest = { showTaskView = false },
+                        modifier = Modifier.width(320.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Task View"
-                        )
+                        Box(modifier = Modifier.heightIn(max = 400.dp)) {
+                            DownloadTasksContent(
+                                downloadManager = downloadManager,
+                                tasks = downloadTasks,
+                                accessToken = accessToken,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
+            }
+        }
 
-                DropdownMenu(
-                    expanded = showTaskView,
-                    onDismissRequest = { showTaskView = false },
-                    modifier = Modifier.width(320.dp)
+        if (isLandscape && showTaskView) {
+            Dialog(
+                onDismissRequest = { showTaskView = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier.widthIn(min = 320.dp, max = 400.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    tonalElevation = 6.dp
                 ) {
-                    Box(modifier = Modifier.heightIn(max = 400.dp)) {
-                        com.mosu.app.ui.components.TaskView(
+                    Box(modifier = Modifier.heightIn(max = 480.dp)) {
+                        DownloadTasksContent(
+                            downloadManager = downloadManager,
                             tasks = downloadTasks,
-                            onCancel = { downloadManager.cancel(it) },
-                            onRetry = { downloadManager.retry(it, accessToken) },
-                            onPauseAll = { downloadManager.pauseAll() },
-                            onResumeAll = { downloadManager.resumeAll() },
-                            onResume = { downloadManager.resume(it) },
+                            accessToken = accessToken,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -543,7 +705,7 @@ fun SearchScreen(
                                     accessToken,
                                     vm.userId,
                                     vm.searchQuery,
-                                    vm.selectedGenreId,
+                                    vm.selectedGenreIds,
                                     vm.scoreModeFilter,
                                     showPlayHistory = recentPlayHistoryEnabled
                                 )
@@ -557,7 +719,7 @@ fun SearchScreen(
                             } else {
                                 val result = vm.repository.getPlayedBeatmaps(
                                     accessToken = accessToken,
-                                    genreId = vm.selectedGenreId,
+                                    genreIds = vm.selectedGenreIds,
                                     cursorString = null,
                                     searchQuery = vm.searchQuery.trim().ifEmpty { null },
                                     filterMode = vm.filterMode,
@@ -568,7 +730,11 @@ fun SearchScreen(
                                     forceRefresh = true,
                                     scoreMode = vm.scoreModeFilter
                                 )
-                                val incoming = vm.searchService.dedupeByTitle(result.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
+                                val incoming = vm.searchService.dedupeSearchResultsForMode(
+                                    list = result.beatmaps,
+                                    downloadedBeatmapSetIds = vm.downloadedBeatmapSetIds,
+                                    filterMode = vm.filterMode
+                                )
                                 vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
                                 vm.searchResults = incoming
                                 vm.currentCursor = result.cursor
@@ -641,7 +807,9 @@ fun SearchScreen(
                                                 if (vm.searchQuery.isNotEmpty()) {
                                                     IconButton(onClick = {
                                                         vm.searchQuery = ""
-                                                        runSearch("", recordHistory = false, forceRefresh = true)
+                                                        scope.launch {
+                                                            runSearch("", recordHistory = false, forceRefresh = true)
+                                                        }
                                                     }) {
                                                         Icon(
                                                             Icons.Default.Clear,
@@ -649,6 +817,21 @@ fun SearchScreen(
                                                         )
                                                     }
                                                 }
+
+                                                ScoreModeFilterIcons(
+                                                    selectedMode = vm.scoreModeFilter,
+                                                    onModeSelected = { mode ->
+                                                        if (vm.scoreModeFilter != mode) {
+                                                            vm.scoreModeFilter = mode
+                                                            scope.launch {
+                                                                settingsManager.saveScoreModeFilter(mode)
+                                                            }
+                                                        }
+                                                    },
+                                                    minimised = isLandscape ||
+                                                        LocalConfiguration.current.screenWidthDp <= 380,
+                                                    modifier = Modifier.padding(end = 4.dp)
+                                                )
 
                                                 var filterMenuExpanded by remember { mutableStateOf(false) }
                                                 val isSupporterAllowed = vm.isSupporter
@@ -720,7 +903,7 @@ fun SearchScreen(
                                                                             accessToken,
                                                                             vm.userId,
                                                                             vm.searchQuery,
-                                                                            vm.selectedGenreId,
+                                                                            vm.selectedGenreIds,
                                                                             vm.scoreModeFilter,
                                                                             showPlayHistory = recentPlayHistoryEnabled
                                                                         )
@@ -732,12 +915,16 @@ fun SearchScreen(
                                                                         vm.recentTimestamps = timestamps
                                                                     } else {
                                                                         val result = vm.repository.getPlayedBeatmaps(
-                                                                            accessToken, vm.selectedGenreId, null,
+                                                                            accessToken, vm.selectedGenreIds, null,
                                                                             vm.searchQuery.trim().ifEmpty { null },
                                                                             mode, playedFilterMode, vm.userId, vm.isSupporter, !onlyLeaderboardEnabled,
                                                                             scoreMode = vm.scoreModeFilter
                                                                         )
-                                                                        val deduped = vm.searchService.dedupeByTitle(result.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
+                                                                        val deduped = vm.searchService.dedupeSearchResultsForMode(
+                                                                            list = result.beatmaps,
+                                                                            downloadedBeatmapSetIds = vm.downloadedBeatmapSetIds,
+                                                                            filterMode = vm.filterMode
+                                                                        )
                                                                         vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
                                                                         vm.searchResults = deduped
                                                                         vm.currentCursor = result.cursor
@@ -745,7 +932,7 @@ fun SearchScreen(
                                                                         vm.searchScoreResults = result.scoreResults
                                                                     }
                                                                     // Update load key so initial LaunchedEffect doesn't duplicate
-                                                                    vm.lastInitialLoadKey = "$accessToken|${vm.filterMode}|${vm.scoreModeFilter}|${vm.userId}|$onlyLeaderboardEnabled|$playedFilterMode|${!onlyLeaderboardEnabled}|${vm.selectedGenreId}|$recentPlayHistoryEnabled"
+                                                                    vm.lastInitialLoadKey = "$accessToken|${vm.filterMode}|${vm.scoreModeFilter}|${vm.userId}|$onlyLeaderboardEnabled|$playedFilterMode|${!onlyLeaderboardEnabled}|${vm.selectedGenreIds.sorted().joinToString(",")}|$recentPlayHistoryEnabled"
                                                                 }
                                                             }
                                                         )
@@ -757,7 +944,7 @@ fun SearchScreen(
                                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                         keyboardActions = KeyboardActions(
                                             onSearch = {
-                                                runSearch(vm.searchQuery)
+                                                scope.launch { runSearch(vm.searchQuery) }
                                             }
                                         ),
                                         colors = TextFieldDefaults.colors(
@@ -794,7 +981,7 @@ fun SearchScreen(
                                                 AssistChip(
                                                     onClick = {
                                                         vm.searchQuery = history.query
-                                                        runSearch(history.query)
+                                                        scope.launch { runSearch(history.query) }
                                                     },
                                                     label = {
                                                         Text(
@@ -835,79 +1022,15 @@ fun SearchScreen(
                                     }
                                 }
 
-                                // Item 2: Genre bar with ruleset selector on the right
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(60.dp)
-                                        .padding(horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    LazyRow(modifier = Modifier.weight(1f)) {
-                                        items(genres) { (id, name) ->
-                                            Button(
-                                                onClick = {
-                                                    vm.selectedGenreId = if (vm.selectedGenreId == id) null else id
-                                                    vm.currentCursor = null
-                                                    scope.launch {
-                                                        try {
-                                                            if (vm.filterMode == "recent") {
-                                                                val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(
-                                                                    accessToken,
-                                                                    vm.userId,
-                                                                    vm.searchQuery,
-                                                                    vm.selectedGenreId,
-                                                                    vm.scoreModeFilter,
-                                                                    showPlayHistory = recentPlayHistoryEnabled
-                                                                )
-                                                                vm.mergeGroups = mergeGroupsResult
-                                                                vm.recentGroupedResults = groupedItems
-                                                                vm.searchResults = emptyList()
-                                                                vm.searchResultsMetadata = emptyMap()
-                                                                vm.searchScoreResults = emptyMap()
-                                                                vm.recentTimestamps = timestamps
-                                                            } else {
-                                                                val result = vm.repository.getPlayedBeatmaps(
-                                                                    accessToken, vm.selectedGenreId, null,
-                                                                    vm.searchQuery.trim().ifEmpty { null },
-                                                                    vm.filterMode, playedFilterMode, vm.userId, vm.isSupporter, !onlyLeaderboardEnabled,
-                                                                    scoreMode = vm.scoreModeFilter
-                                                                )
-                                                                val deduped = vm.searchService.dedupeByTitle(result.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
-                                                                vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
-                                                                vm.searchResults = deduped
-                                                                vm.currentCursor = result.cursor
-                                                                vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
-                                                                vm.searchScoreResults = result.scoreResults
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            Log.e("SearchScreen", "Genre filter failed", e)
-                                                        }
-                                                    }
-                                                },
-                                                modifier = Modifier.padding(end = 8.dp).height(40.dp),
-                                                contentPadding = PaddingValues(horizontal = 8.dp),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (vm.selectedGenreId == id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-                                                    contentColor = if (vm.selectedGenreId == id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                                                )
-                                            ) {
-                                                Text(name, style = MaterialTheme.typography.labelSmall)
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    ScoreModeFilterIcons(
-                                        selectedMode = vm.scoreModeFilter,
-                                        onModeSelected = { mode ->
-                                            if (vm.scoreModeFilter != mode) {
-                                                vm.scoreModeFilter = mode
-                                                scope.launch {
-                                                    settingsManager.saveScoreModeFilter(mode)
-                                                }
-                                            }
-                                        },
-                                        minimised = LocalConfiguration.current.screenWidthDp <= 380
+                                // Portrait uses the same pill menu as Library; landscape uses the rail.
+                                if (!isLandscape && genreBarEnabled) {
+                                    GenreFilter(
+                                        selectedGenreIds = vm.selectedGenreIds,
+                                        onGenreSelected = ::applyGenreSelection,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp)
+                                            .padding(horizontal = 16.dp)
                                     )
                                 }
                             }
@@ -953,15 +1076,35 @@ fun SearchScreen(
                                 }
                                 is RecentItem.Song -> {
                                     val map = item.beatmapset
-                                    val task = downloadTasks[map.id]
-                                    val mapKey = "${map.title.trim().lowercase()}|${map.artist.trim().lowercase()}"
-                                    val isActuallyDownloaded = vm.downloadedBeatmapSetIds.contains(map.id) || vm.downloadedKeys.contains(mapKey)
-                                    val isDownloaded = isActuallyDownloaded && map.id !in pendingDeletions
-                                    val highlight = previewManager.previewingId == map.id
+                                    val playedSetId = item.play.beatmapSetId
+                                    val task = downloadTasks[playedSetId]
+                                    val isActuallyDownloaded =
+                                        vm.downloadedBeatmapSetIds.contains(playedSetId)
+                                    val isDownloaded =
+                                        isActuallyDownloaded && playedSetId !in pendingDeletions
+                                    val highlight = previewManager.previewingId == playedSetId
                                     val showProgress = task != null &&
                                         (task.status == com.mosu.app.domain.download.DownloadStatus.Downloading ||
                                             task.status == com.mosu.app.domain.download.DownloadStatus.Queued ||
                                             task.status == com.mosu.app.domain.download.DownloadStatus.Extracting)
+
+                                    // Recent cards represent a specific play, so download that exact
+                                    // beatmapset rather than resolving another set with the same title.
+                                    val recentActions = actions.copy(
+                                        onSecondaryAction = { set ->
+                                            if (!set.isDownloaded && set.downloadProgress == null) {
+                                                downloadManager.enqueue(
+                                                    setId = playedSetId,
+                                                    title = item.play.title,
+                                                    artist = item.play.artist,
+                                                    creator = item.play.creator,
+                                                    accessToken = accessToken,
+                                                    genreId = item.play.genreId,
+                                                    coverUrl = item.play.coverUrl ?: map.covers.listUrl
+                                                )
+                                            }
+                                        }
+                                    )
 
                                     val setData = item.play.toBeatmapSetData().copy(
                                         coverUrl = item.play.coverUrl ?: map.covers.listUrl,
@@ -984,22 +1127,20 @@ fun SearchScreen(
                                         BeatmapSetSwipeItem(
                                             swipeActions = BeatmapSetSwipeActions(
                                                 onDelete = {
-                                                    deferredActionViewModel.addPendingLibrarySet(map.id)
+                                                    deferredActionViewModel.addPendingLibrarySet(playedSetId)
                                                 },
                                                 onDeleteRevert = {
-                                                    deferredActionViewModel.removePendingLibrarySet(map.id)
+                                                    deferredActionViewModel.removePendingLibrarySet(playedSetId)
                                                 },
                                                 onDeleteConfirmed = {
                                                     // Actual deletion after timeout (already running in viewModelScope from BeatmapSetSwipeItem)
                                                     val tracksToDelete = withContext(Dispatchers.IO) {
-                                                        val tracks = vm.db.beatmapDao().getTracksForSet(map.id)
-                                                        if (tracks.isEmpty()) vm.db.beatmapDao().getTracksByTitleArtist(map.title, map.artist)
-                                                        else tracks
+                                                        vm.db.beatmapDao().getTracksForSet(playedSetId)
                                                     }
                                                     tracksToDelete.forEach { track ->
                                                         TrackService.deleteTrack(track, vm.db, context)
                                                     }
-                                                    deferredActionViewModel.removePendingLibrarySet(map.id)
+                                                    deferredActionViewModel.removePendingLibrarySet(playedSetId)
                                                 },
                                                 onDeleteMessage = context.getString(R.string.snackbar_removed_from_library, map.title),
                                                 onSwipeRight = { openPlaylistDialog(setData) }
@@ -1013,7 +1154,7 @@ fun SearchScreen(
                                         ) {
                                             BeatmapSetItem(
                                                 set = setData,
-                                                actions = actions,
+                                                actions = recentActions,
                                                 highlight = highlight,
                                                 backgroundBrush = previewBrush,
                                                 backgroundColor = Color.Transparent
@@ -1022,7 +1163,7 @@ fun SearchScreen(
                                     } else {
                                         BeatmapSetItem(
                                             set = setData,
-                                            actions = actions,
+                                            actions = recentActions,
                                             highlight = highlight,
                                             backgroundBrush = previewBrush,
                                             backgroundColor = Color.Transparent
@@ -1063,7 +1204,7 @@ fun SearchScreen(
                     }
 
                     // Pagination / Load More
-                    if (vm.filterMode != "recent" && vm.searchResults.isNotEmpty() && vm.currentCursor != null) {
+                    if (vm.filterMode != "recent" && vm.currentCursor != null) {
                         item {
                             Button(
                                 onClick = {
@@ -1072,7 +1213,7 @@ fun SearchScreen(
                                         try {
                                             val result = vm.repository.getPlayedBeatmaps(
                                                 accessToken,
-                                                vm.selectedGenreId,
+                                                vm.selectedGenreIds,
                                                 vm.currentCursor,
                                                 vm.searchQuery.trim().ifEmpty { null },
                                                 vm.filterMode,
@@ -1084,7 +1225,12 @@ fun SearchScreen(
                                             )
                                             if (result.beatmaps.isNotEmpty()) {
                                                 val merged =
-                                                    vm.searchService.mergeByTitle(vm.searchResults, result.beatmaps, vm.downloadedBeatmapSetIds, vm.downloadedKeys)
+                                                    vm.searchService.mergeSearchResultsForMode(
+                                                        existing = vm.searchResults,
+                                                        incoming = result.beatmaps,
+                                                        downloadedBeatmapSetIds = vm.downloadedBeatmapSetIds,
+                                                        filterMode = vm.filterMode
+                                                    )
                                                 val mergedIds = merged.map { it.id }.toSet()
                                                 vm.mergeGroups = vm.searchService.unionMergeGroups(
                                                     vm.mergeGroups,
@@ -1098,7 +1244,9 @@ fun SearchScreen(
                                                     (vm.searchScoreResults + result.scoreResults)
                                                         .filterKeys { it in mergedIds }
                                             } else {
-                                                vm.currentCursor = null
+                                                // A page can be empty after local multi-genre filtering
+                                                // while more unfiltered pages still remain.
+                                                vm.currentCursor = result.cursor
                                             }
                                         } catch (e: Exception) {
                                             Log.e("SearchScreen", "Load more failed", e)
@@ -1224,7 +1372,6 @@ fun SearchScreen(
             vm.userId,
             onlyLeaderboardEnabled,
             playedFilterMode,
-            vm.selectedGenreId,
             recentPlayHistoryEnabled
         ) {
             if (accessToken != null) {
@@ -1239,6 +1386,7 @@ fun SearchScreen(
                     scoreMode = vm.scoreModeFilter
                 )
             }
+        }
         }
     }
 }

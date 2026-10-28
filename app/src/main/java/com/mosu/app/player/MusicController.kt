@@ -68,6 +68,7 @@ class MusicController(
     private var playbackClockAnchor: PlaybackClockAnchor? = null
     private var lastPositionSample: PositionSample? = null
     private var awaitingClockAdvance = false
+    private var pendingSeek: PendingSeek? = null
 
     init {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -82,6 +83,7 @@ class MusicController(
                     playbackClockAnchor = null
                     lastPositionSample = null
                     awaitingClockAdvance = true
+                    pendingSeek = null
                     _currentPosition.value = 0L
                     _duration.value = controller.duration.coerceAtLeast(0L)
                     requestPositionSampleIfActive()
@@ -182,8 +184,10 @@ class MusicController(
         playbackClockEpoch++
         positionRequestInFlight = false
         positionRequestToken++
-        lastPositionSample = null
-        awaitingClockAdvance = false
+        if (pendingSeek == null) {
+            lastPositionSample = null
+            awaitingClockAdvance = false
+        }
         positionSamplingJob = scope.launch {
             while (isActive) {
                 requestPositionSample()
@@ -261,6 +265,26 @@ class MusicController(
         val sampleSpeed = result.extras
             .getFloat(PlaybackPositionProtocol.KEY_SPEED, 1f)
             .coerceAtLeast(0f)
+
+        val seek = pendingSeek
+        if (seek != null) {
+            if (
+                !hasPlaybackSeekReachedTarget(
+                    fromPositionMs = seek.fromPositionMs,
+                    targetPositionMs = seek.targetPositionMs,
+                    requestedAtMs = seek.requestedAtMs,
+                    samplePositionMs = samplePositionMs,
+                    sampleCompletionTimeMs = result.completionTimeMs,
+                    speed = sampleSpeed
+                )
+            ) {
+                return
+            }
+            pendingSeek = null
+            lastPositionSample = null
+            awaitingClockAdvance = false
+        }
+
         val previousSample = lastPositionSample
         val advancedSincePreviousSample = previousSample == null ||
             previousSample.hasAdvancedTo(samplePositionMs, sampleSpeed, result.completionTimeMs)
@@ -366,12 +390,18 @@ class MusicController(
     fun seekTo(positionMs: Long) {
         val targetMs = positionMs.coerceAtLeast(0L)
         val controller = this.controller ?: return
+        val requestedAtMs = SystemClock.elapsedRealtime()
+        pendingSeek = PendingSeek(
+            fromPositionMs = currentPositionMs(),
+            targetPositionMs = targetMs,
+            requestedAtMs = requestedAtMs
+        )
         playbackClockEpoch++
         lastPositionSample = null
         awaitingClockAdvance = true
         playbackClockAnchor = PlaybackClockAnchor(
             positionMs = targetMs.toDouble(),
-            atElapsedRealtimeMs = SystemClock.elapsedRealtime().toDouble(),
+            atElapsedRealtimeMs = requestedAtMs.toDouble(),
             speed = controller.playbackParameters.speed,
             isPlaying = false
         )
@@ -492,6 +522,12 @@ class MusicController(
             speed = speed
         )
     }
+
+    private data class PendingSeek(
+        val fromPositionMs: Long,
+        val targetPositionMs: Long,
+        val requestedAtMs: Long
+    )
 }
 
 internal fun hasPlaybackClockAdvanced(
@@ -508,6 +544,32 @@ internal fun hasPlaybackClockAdvanced(
         elapsedMs * speed * MIN_PROGRESS_FRACTION
     )
     return (nextPositionMs - previousPositionMs).toDouble() >= minimumProgressMs
+}
+
+/**
+ * Returns whether a service-side position sample proves that the requested seek has
+ * reached the player. Media3 queues player commands but dispatches session commands
+ * immediately, so the first sample after a seek can still describe the pre-seek
+ * position. A backward seek also allows the position to advance normally after it
+ * lands, so the sample may be slightly beyond the target.
+ */
+internal fun hasPlaybackSeekReachedTarget(
+    fromPositionMs: Long,
+    targetPositionMs: Long,
+    requestedAtMs: Long,
+    samplePositionMs: Long,
+    sampleCompletionTimeMs: Long,
+    speed: Float
+): Boolean {
+    if (targetPositionMs == fromPositionMs) return true
+
+    if (targetPositionMs > fromPositionMs) {
+        return samplePositionMs >= targetPositionMs
+    }
+
+    val elapsedMs = (sampleCompletionTimeMs - requestedAtMs).coerceAtLeast(0L)
+    val maximumProgressMs = (elapsedMs * speed.coerceAtLeast(0f)).roundToLong()
+    return samplePositionMs <= targetPositionMs + maximumProgressMs
 }
 
 private const val MIN_CLOCK_PROGRESS_MS = 4.0

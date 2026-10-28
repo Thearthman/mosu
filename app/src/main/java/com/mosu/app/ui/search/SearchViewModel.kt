@@ -38,7 +38,7 @@ class SearchViewModel(
     var searchResultsMetadata by mutableStateOf<Map<Long, Pair<Int, Int?>>>(emptyMap())
     var searchScoreResults by mutableStateOf<Map<Long, BestScore>>(emptyMap())
     var recentTimestamps by mutableStateOf<Map<Long, Long>>(emptyMap())
-    var selectedGenreId by mutableStateOf<Int?>(null)
+    var selectedGenreIds by mutableStateOf<Set<Int>>(emptySet())
     var currentCursor by mutableStateOf<String?>(null)
     var isLoadingMore by mutableStateOf(false)
     var isRefreshing by mutableStateOf(false)
@@ -93,7 +93,17 @@ class SearchViewModel(
         showPlayHistory: Boolean,
         scoreMode: String
     ) {
-        val loadKey = "$accessToken|$mode|$scoreMode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$selectedGenreId|$showPlayHistory"
+        val loadKey = initialLoadKey(
+            accessToken = accessToken,
+            mode = mode,
+            scoreMode = scoreMode,
+            uid = uid,
+            onlyLeaderboard = onlyLeaderboard,
+            playedMode = playedMode,
+            searchAny = searchAny,
+            showPlayHistory = showPlayHistory,
+            genreIds = selectedGenreIds
+        )
         if (lastInitialLoadKey == loadKey) return
         lastInitialLoadKey = loadKey
 
@@ -103,7 +113,7 @@ class SearchViewModel(
                 if (mode == "recent") {
                     // 1. Load local data immediately
                     val (groupedItems, mergeGroupsResult, timestamps) = searchService.loadRecentFiltered(
-                        accessToken, uid, searchQuery, selectedGenreId, scoreMode, forceRefresh = false, showPlayHistory = showPlayHistory
+                        accessToken, uid, searchQuery, selectedGenreIds, scoreMode, forceRefresh = false, showPlayHistory = showPlayHistory
                     )
                     mergeGroups = mergeGroupsResult
                     recentGroupedResults = groupedItems
@@ -118,7 +128,7 @@ class SearchViewModel(
                         launch {
                             try {
                                 val (freshItems, freshMergeGroups, freshTimestamps) = searchService.loadRecentFiltered(
-                                    accessToken, uid, searchQuery, selectedGenreId, scoreMode, forceRefresh = true, showPlayHistory = showPlayHistory
+                                    accessToken, uid, searchQuery, selectedGenreIds, scoreMode, forceRefresh = true, showPlayHistory = showPlayHistory
                                 )
                                 mergeGroups = freshMergeGroups
                                 recentGroupedResults = freshItems
@@ -133,7 +143,7 @@ class SearchViewModel(
                 } else {
                     // 1. Load cached data
                     val cachedResult = repository.getCachedPlayedBeatmaps(
-                        genreId = selectedGenreId,
+                        genreIds = selectedGenreIds,
                         searchQuery = null,
                         filterMode = mode,
                         playedFilterMode = playedMode,
@@ -142,7 +152,11 @@ class SearchViewModel(
                         scoreMode = scoreMode
                     )
                     if (cachedResult != null) {
-                        val deduped = searchService.dedupeByTitle(cachedResult.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                        val deduped = searchService.dedupeSearchResultsForMode(
+                            list = cachedResult.beatmaps,
+                            downloadedBeatmapSetIds = downloadedBeatmapSetIds,
+                            filterMode = mode
+                        )
                         mergeGroups = searchService.buildMergeGroups(cachedResult.beatmaps)
                         searchResults = deduped
                         currentCursor = cachedResult.cursor
@@ -158,10 +172,14 @@ class SearchViewModel(
                     launch {
                         try {
                             val result = repository.getPlayedBeatmaps(
-                                accessToken, selectedGenreId, null, null, mode, playedMode, uid, isSupporter, searchAny,
+                                accessToken, selectedGenreIds, null, null, mode, playedMode, uid, isSupporter, searchAny,
                                 scoreMode = scoreMode
                             )
-                            val deduped = searchService.dedupeByTitle(result.beatmaps, downloadedBeatmapSetIds, downloadedKeys)
+                            val deduped = searchService.dedupeSearchResultsForMode(
+                                list = result.beatmaps,
+                                downloadedBeatmapSetIds = downloadedBeatmapSetIds,
+                                filterMode = mode
+                            )
                             mergeGroups = searchService.buildMergeGroups(result.beatmaps)
                             searchResults = deduped
                             currentCursor = result.cursor
@@ -204,6 +222,29 @@ class SearchViewModel(
         searchScoreResults = emptyMap()
         recentTimestamps = emptyMap()
         lastInitialLoadKey = null
+    }
+
+    fun cancelInitialLoad() {
+        initialLoadJob?.cancel()
+    }
+
+    fun initialLoadKey(
+        accessToken: String,
+        mode: String,
+        scoreMode: String,
+        uid: String?,
+        onlyLeaderboard: Boolean,
+        playedMode: String,
+        searchAny: Boolean,
+        showPlayHistory: Boolean,
+        genreIds: Set<Int>
+    ): String {
+        val sortedGenreIds = genreIds.sorted().joinToString(",")
+        return "$accessToken|$mode|$scoreMode|$uid|$onlyLeaderboard|$playedMode|$searchAny|$sortedGenreIds|$showPlayHistory"
+    }
+
+    fun markInitialLoadHandled(loadKey: String) {
+        lastInitialLoadKey = loadKey
     }
 
     fun recordSearchHistory(query: String = searchQuery) {

@@ -10,6 +10,7 @@ import com.mosu.app.data.db.BeatmapStarRatingEntity
 import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,7 +31,7 @@ class BeatmapStarRatingServiceTest {
             officialDetail = null
         )
 
-        assertTrue(ratings.isEmpty())
+        assertNull(ratings.ratingFor(query(101L)))
         assertTrue(dao.rows.isEmpty())
     }
 
@@ -40,18 +41,23 @@ class BeatmapStarRatingServiceTest {
         val service = BeatmapStarRatingService(
             dao,
             source(
-                official = { officialDetail(101L to 5.68253f) },
+                official = {
+                    officialDetail(
+                        beatmapSetId = 42,
+                        beatmap(101L, rating = 5.68253f)
+                    )
+                },
                 fallback = { sayobotDetail(101L to 5.9, 102L to 6.1) }
             )
         )
 
         val ratings = service.refreshMissingRatings(
             beatmapSetId = 42,
-            requiredBeatmapIds = setOf(101L, 102L)
+            requiredDifficulties = listOf(query(101L), query(102L))
         )
 
-        assertEquals(5.68253f, ratings.getValue(101L))
-        assertEquals(6.1f, ratings.getValue(102L))
+        assertEquals(5.68253f, ratings.ratingFor(query(101L)))
+        assertEquals(6.1f, ratings.ratingFor(query(102L)))
     }
 
     @Test
@@ -60,17 +66,132 @@ class BeatmapStarRatingServiceTest {
         val service = BeatmapStarRatingService(
             dao,
             source(
-                official = { officialDetail(101L to 5.68253f) },
+                official = {
+                    officialDetail(
+                        beatmapSetId = 42,
+                        beatmap(101L, rating = 5.68253f)
+                    )
+                },
                 fallback = { throw IOException("fallback should not be called") }
             )
         )
 
         val ratings = service.refreshMissingRatings(
             beatmapSetId = 42,
-            requiredBeatmapIds = setOf(101L)
+            requiredDifficulties = listOf(query(101L))
         )
 
-        assertEquals(mapOf(101L to 5.68253f), ratings)
+        assertEquals(5.68253f, ratings.ratingFor(query(101L)))
+    }
+
+    @Test
+    fun legacyMapsResolveRatingsByUniqueModeAndDifficultyName() = runBlocking {
+        val dao = FakeStarRatingDao()
+        val service = BeatmapStarRatingService(
+            dao,
+            source(
+                official = {
+                    officialDetail(
+                        beatmapSetId = 43,
+                        beatmap(101L, "Easy", 1.505f),
+                        beatmap(102L, "Gladi's Hard", 3.518f),
+                        beatmap(103L, "Insane", 4.747f),
+                        beatmap(104L, "Normal", 2.389f),
+                        beatmap(105L, "Sp3's Taiko", 3.855f, mode = "taiko")
+                    )
+                },
+                fallback = { throw IOException("fallback should not be called") }
+            )
+        )
+        val required = listOf(
+            query(beatmapId = null, difficultyName = "Easy", mode = 0),
+            query(beatmapId = null, difficultyName = "Gladi's Hard", mode = 0),
+            query(beatmapId = null, difficultyName = "Insane", mode = 0),
+            query(beatmapId = null, difficultyName = "Normal", mode = 0)
+        )
+
+        val ratings = service.refreshMissingRatings(
+            beatmapSetId = 43,
+            requiredDifficulties = required
+        )
+
+        assertEquals(1.505f, ratings.ratingFor(required[0]))
+        assertEquals(3.518f, ratings.ratingFor(required[1]))
+        assertEquals(4.747f, ratings.ratingFor(required[2]))
+        assertEquals(2.389f, ratings.ratingFor(required[3]))
+        assertEquals(
+            3.855f,
+            ratings.ratingFor(
+                query(beatmapId = null, difficultyName = "Sp3's Taiko", mode = 1)
+            )
+        )
+    }
+
+    @Test
+    fun ambiguousLegacyDifficultyNameIsNotAssignedARating() = runBlocking {
+        val dao = FakeStarRatingDao()
+        val service = BeatmapStarRatingService(
+            dao,
+            source(
+                official = {
+                    officialDetail(
+                        beatmapSetId = 44,
+                        beatmap(101L, "Easy", 1.5f),
+                        beatmap(102L, "Easy", 2.5f)
+                    )
+                },
+                fallback = { throw IOException("fallback should not be called") }
+            )
+        )
+        val legacyQuery = query(
+            beatmapId = null,
+            difficultyName = "Easy",
+            mode = 0
+        )
+
+        val ratings = service.refreshMissingRatings(
+            beatmapSetId = 44,
+            requiredDifficulties = listOf(legacyQuery)
+        )
+
+        assertNull(ratings.ratingFor(legacyQuery))
+    }
+
+    @Test
+    fun cachedRatingWithoutLegacyMetadataIsRefreshed() = runBlocking {
+        val dao = FakeStarRatingDao().apply {
+            rows[45L to 101L] = BeatmapStarRatingEntity(
+                beatmapSetId = 45L,
+                beatmapId = 101L,
+                starRating = 5f
+            )
+        }
+        val service = BeatmapStarRatingService(
+            dao,
+            source(
+                official = {
+                    officialDetail(
+                        beatmapSetId = 45,
+                        beatmap(101L, "Easy", 1.505f)
+                    )
+                },
+                fallback = { throw IOException("fallback should not be called") }
+            )
+        )
+        val legacyQuery = query(
+            beatmapId = null,
+            difficultyName = "Easy",
+            mode = 0
+        )
+
+        val ratings = service.refreshMissingRatings(
+            beatmapSetId = 45,
+            requiredDifficulties = listOf(legacyQuery)
+        )
+
+        assertEquals(1.505f, ratings.ratingFor(legacyQuery))
+        assertEquals("Easy", dao.rows[45L to 101L]?.difficultyName)
+        assertEquals(0, dao.rows[45L to 101L]?.mode)
     }
 
     private fun source(
@@ -84,25 +205,43 @@ class BeatmapStarRatingServiceTest {
             fallback(beatmapSetId)
     }
 
-    private fun officialDetail(vararg ratings: Pair<Long, Float>) = BeatmapsetDetail(
-        id = 42,
+    private fun query(
+        beatmapId: Long?,
+        difficultyName: String = "Difficulty $beatmapId",
+        mode: Int = 0
+    ) = DifficultyRatingQuery(
+        beatmapId = beatmapId,
+        mode = mode,
+        difficultyName = difficultyName
+    )
+
+    private fun officialDetail(
+        beatmapSetId: Long = 42,
+        vararg beatmaps: BeatmapDetail
+    ) = BeatmapsetDetail(
+        id = beatmapSetId,
         title = "Title",
         artist = "Artist",
         creator = "Creator",
         covers = covers(),
         status = "ranked",
-        beatmaps = ratings.map { (id, rating) ->
-            BeatmapDetail(
-                id = id,
-                version = "Difficulty $id",
-                mode = "osu",
-                difficultyRating = rating,
-                url = null,
-                beatmapsetId = 42,
-                playCount = 0,
-                status = "ranked"
-            )
-        }
+        beatmaps = beatmaps.toList()
+    )
+
+    private fun beatmap(
+        id: Long,
+        difficultyName: String = "Difficulty $id",
+        rating: Float,
+        mode: String = "osu"
+    ) = BeatmapDetail(
+        id = id,
+        version = difficultyName,
+        mode = mode,
+        difficultyRating = rating,
+        url = null,
+        beatmapsetId = 42,
+        playCount = 0,
+        status = "ranked"
     )
 
     private fun sayobotDetail(vararg ratings: Pair<Long, Double>) = SayobotDetailData(

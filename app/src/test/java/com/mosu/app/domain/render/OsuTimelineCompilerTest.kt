@@ -136,6 +136,25 @@ class OsuTimelineCompilerTest {
         assertThrowsIllegalArgument { OsuTimelineCompiler.compile(mismatch, 42L) }
     }
 
+    @Test
+    fun legacyMapsWithoutAnEmbeddedSetIdUseTheContainingSetId() {
+        val parsed = ParsedOsuMap(
+            header = header(beatmapSetId = null),
+            timingPoints = listOf(OsuRawTimingPoint(0.0, 500.0, 4, true)),
+            hitObjects = listOf(
+                OsuRawCircle(1_000.0, RenderPoint(100f, 100f), false, 0)
+            ),
+            comboColours = emptyList(),
+            sliderTrackOverride = null,
+            sliderBorder = null
+        )
+
+        val timeline = OsuTimelineCompiler.compile(parsed, 42L)
+
+        assertEquals(42L, timeline.beatmapSetId)
+        assertEquals(1, timeline.objects.size)
+    }
+
     private fun assertTiming(
         expectedBeatLength: Double,
         expectedMultiplier: Double,
@@ -155,7 +174,7 @@ class OsuTimelineCompilerTest {
     }
 
     private fun header(
-        beatmapSetId: Long = 42L,
+        beatmapSetId: Long? = 42L,
         mode: Int = 0,
         approachRate: Float = 9f
     ) = OsuMapHeader(

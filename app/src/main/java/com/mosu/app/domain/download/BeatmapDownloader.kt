@@ -69,6 +69,7 @@ class BeatmapDownloader(
     }
 
     fun downloadBeatmap(beatmapSetId: Long, accessToken: String? = null): Flow<DownloadState> = flow {
+        require(beatmapSetId > 0L) { "Invalid beatmapset id: $beatmapSetId" }
         emit(DownloadState.Downloading(0, "Initializing..."))
         
         var success = false
@@ -78,6 +79,7 @@ class BeatmapDownloader(
         // Try mirrors sequentially
         val orderedMirrors = getOrderedMirrors()
         for (mirrorUrl in orderedMirrors) {
+            currentCoroutineContext().ensureActive()
             try {
                 val url = mirrorUrl.format(beatmapSetId)
                 Log.d("Downloader", "Trying mirror: $url")
@@ -88,24 +90,26 @@ class BeatmapDownloader(
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
                     .build()
                 
-                val response = client.newCall(request).execute()
-                
-                if (response.isSuccessful) {
-                    val body = response.body
-                    if (body != null) {
-                        saveToFile(body.byteStream(), body.contentLength(), targetFile) { progress ->
-                            emit(DownloadState.Downloading(progress, url))
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body
+                        if (body != null) {
+                            saveToFile(body.byteStream(), body.contentLength(), targetFile) { progress ->
+                                emit(DownloadState.Downloading(progress, url))
+                            }
+                            success = true
+                            emit(DownloadState.Downloaded(targetFile))
+                        } else {
+                            lastError = "Empty body from $url"
                         }
-                        success = true
-                        emit(DownloadState.Downloaded(targetFile))
-                        break // Success!
                     } else {
-                        lastError = "Empty body from $url"
+                        lastError = "HTTP ${response.code} from $url"
+                        Log.w("Downloader", "Mirror failed: $lastError")
                     }
-                } else {
-                    lastError = "HTTP ${response.code} from $url"
-                    Log.w("Downloader", "Mirror failed: $lastError")
                 }
+                if (success) break
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastError = "${e.javaClass.simpleName}: ${e.message}"
                 Log.e("Downloader", "Mirror exception: $mirrorUrl", e)

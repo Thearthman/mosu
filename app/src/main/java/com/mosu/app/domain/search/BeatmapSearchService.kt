@@ -7,6 +7,7 @@ import com.mosu.app.data.db.RecentPlayEntity
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.domain.model.toBeatmapset
 import com.mosu.app.domain.model.formatRecentPlayTimestamp
+import com.mosu.app.domain.model.shouldReplaceDedupedCandidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.LinkedHashMap
@@ -19,6 +20,21 @@ sealed class RecentItem {
         val play: RecentPlayEntity
     ) : RecentItem()
 }
+
+/**
+ * Personalized/filtered result sets already identify a concrete beatmapset. Only the generic
+ * "all" search needs duplicate-title resolution to pick the most-played version.
+ */
+private val filterProvidedBeatmapsetModes = setOf(
+    "played",
+    "recent",
+    "favorite",
+    "most_played",
+    "top_play"
+)
+
+fun String.usesFilterProvidedBeatmapset(): Boolean =
+    this in filterProvidedBeatmapsetModes
 
 class BeatmapSearchService(
     private val repository: OsuRepository,
@@ -59,10 +75,14 @@ class BeatmapSearchService(
         return result
     }
 
-    fun applyLocalFilters(list: List<BeatmapsetCompact>, query: String, selectedGenreId: Int?): List<BeatmapsetCompact> {
+    fun applyLocalFilters(
+        list: List<BeatmapsetCompact>,
+        query: String,
+        selectedGenreIds: Set<Int>
+    ): List<BeatmapsetCompact> {
         val trimmedQuery = query.trim()
         return list.filter { beatmap ->
-            val genreOk = selectedGenreId?.let { beatmap.genreId == it } ?: true
+            val genreOk = selectedGenreIds.isEmpty() || beatmap.genreId in selectedGenreIds
             val queryOk = if (trimmedQuery.isEmpty()) true else {
                 beatmap.title.contains(trimmedQuery, ignoreCase = true) || beatmap.artist.contains(trimmedQuery, ignoreCase = true)
             }
@@ -70,41 +90,75 @@ class BeatmapSearchService(
         }
     }
 
-    fun dedupeByTitle(list: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>, downloadedKeys: Set<String> = emptySet()): List<BeatmapsetCompact> {
+    fun dedupeByTitle(list: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>): List<BeatmapsetCompact> {
         val map = LinkedHashMap<String, BeatmapsetCompact>()
         list.forEach { beatmap ->
             val key = "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
             val existing = map[key]
-            val isDownloaded = beatmap.id in downloadedBeatmapSetIds || key in downloadedKeys
-            val existingDownloaded = existing?.id?.let { it in downloadedBeatmapSetIds } ?: (key in downloadedKeys && existing != null)
-            when {
-                existing == null -> map[key] = beatmap
-                !existingDownloaded && isDownloaded -> map[key] = beatmap // prefer downloaded variant
-                else -> { /* keep existing */ }
+            if (
+                existing == null ||
+                shouldReplaceDedupedCandidate(
+                    existing = existing,
+                    candidate = beatmap,
+                    downloadedBeatmapSetIds = downloadedBeatmapSetIds
+                )
+            ) {
+                map[key] = beatmap
             }
         }
         return map.values.toList()
     }
 
-    fun mergeByTitle(existing: List<BeatmapsetCompact>, incoming: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>, downloadedKeys: Set<String> = emptySet()): List<BeatmapsetCompact> {
+    fun dedupeSearchResultsForMode(
+        list: List<BeatmapsetCompact>,
+        downloadedBeatmapSetIds: Set<Long>,
+        filterMode: String
+    ): List<BeatmapsetCompact> {
+        return if (filterMode.usesFilterProvidedBeatmapset()) {
+            list
+        } else {
+            dedupeByTitle(list, downloadedBeatmapSetIds)
+        }
+    }
+
+    fun mergeByTitle(existing: List<BeatmapsetCompact>, incoming: List<BeatmapsetCompact>, downloadedBeatmapSetIds: Set<Long>): List<BeatmapsetCompact> {
         if (incoming.isEmpty()) return existing
 
         val map = LinkedHashMap<String, BeatmapsetCompact>()
         fun putIfBetter(beatmap: BeatmapsetCompact) {
             val key = "${beatmap.title.trim().lowercase()}|${beatmap.artist.trim().lowercase()}"
             val existingVal = map[key]
-            val isDownloaded = beatmap.id in downloadedBeatmapSetIds || key in downloadedKeys
-            val existingDownloaded = existingVal?.id?.let { it in downloadedBeatmapSetIds } ?: (key in downloadedKeys && existingVal != null)
-            when {
-                existingVal == null -> map[key] = beatmap
-                !existingDownloaded && isDownloaded -> map[key] = beatmap
-                else -> { /* keep existing */ }
+            if (
+                existingVal == null ||
+                shouldReplaceDedupedCandidate(
+                    existing = existingVal,
+                    candidate = beatmap,
+                    downloadedBeatmapSetIds = downloadedBeatmapSetIds
+                )
+            ) {
+                map[key] = beatmap
             }
         }
 
         existing.forEach { putIfBetter(it) }
         incoming.forEach { putIfBetter(it) }
 
+        return map.values.toList()
+    }
+
+    fun mergeSearchResultsForMode(
+        existing: List<BeatmapsetCompact>,
+        incoming: List<BeatmapsetCompact>,
+        downloadedBeatmapSetIds: Set<Long>,
+        filterMode: String
+    ): List<BeatmapsetCompact> {
+        if (!filterMode.usesFilterProvidedBeatmapset()) {
+            return mergeByTitle(existing, incoming, downloadedBeatmapSetIds)
+        }
+
+        val map = LinkedHashMap<Long, BeatmapsetCompact>()
+        existing.forEach { map[it.id] = it }
+        incoming.forEach { map[it.id] = it }
         return map.values.toList()
     }
 
@@ -150,7 +204,7 @@ class BeatmapSearchService(
         accessToken: String?,
         userId: String?,
         searchQuery: String,
-        selectedGenreId: Int?,
+        selectedGenreIds: Set<Int>,
         scoreMode: String = "all",
         forceRefresh: Boolean = false,
         showPlayHistory: Boolean = false
@@ -166,7 +220,7 @@ class BeatmapSearchService(
                 beatmapset.title.contains(searchQuery, ignoreCase = true) ||
                 beatmapset.artist.contains(searchQuery, ignoreCase = true) ||
                 beatmapset.creator.contains(searchQuery, ignoreCase = true)
-            val matchesGenre = selectedGenreId == null || beatmapset.genreId == selectedGenreId
+            val matchesGenre = selectedGenreIds.isEmpty() || beatmapset.genreId in selectedGenreIds
             val matchesMode = play.matchesScoreMode(scoreMode)
             matchesSearch && matchesGenre && matchesMode
         }

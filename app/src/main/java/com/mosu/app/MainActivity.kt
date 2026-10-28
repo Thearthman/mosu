@@ -3,48 +3,98 @@ package com.mosu.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.mosu.app.ui.player.FullPlayer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import com.mosu.app.ui.theme.MosuTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +125,10 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
+import androidx.compose.ui.semantics.Role
 import com.mosu.app.data.AccountManager
 import com.mosu.app.data.DataMigrations
 import com.mosu.app.data.SettingsManager
@@ -87,6 +141,11 @@ import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
+import com.mosu.app.ui.components.LandscapeMiniPlayer
+import com.mosu.app.ui.player.LandscapePlayerDragPosition
+import com.mosu.app.ui.player.LandscapePlayerMorph
+import com.mosu.app.ui.player.advanceLandscapePlayerDrag
+import com.mosu.app.ui.player.landscapePlayerMorphBounds
 import com.mosu.app.ui.DeferredActionViewModel
 import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.playlist.PlaylistScreen
@@ -97,6 +156,7 @@ import com.mosu.app.ui.search.SearchViewModel
 import com.mosu.app.ui.search.SearchViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
@@ -104,6 +164,14 @@ import com.mosu.app.data.api.RetrofitClient
 import androidx.core.net.toUri
 
 private const val REGION_RECHECK_INTERVAL_MS = 30L * 24L * 60L * 60L * 1000L
+private const val LANDSCAPE_DOCK_WIDTH_DP = 80
+private const val LANDSCAPE_DOCK_TITLE_ROW_HEIGHT_DP = 112
+private const val LANDSCAPE_CONTENT_TOP_MARGIN_DP = 16
+private const val LANDSCAPE_PLAYER_HEIGHT_FRACTION = 0.75f
+private const val LANDSCAPE_MINI_PLAYER_WIDTH_DP = 72
+private const val LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT = 2f / 3f
+private const val LANDSCAPE_SEARCH_BAR_HEIGHT_DP = 48
+private const val LANDSCAPE_EXPANSION_DRAG_GAIN = 1.2f
 
 class MainActivity : ComponentActivity() {
     private fun mediaRestorePermissions(): Array<String> {
@@ -262,6 +330,284 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+private fun LandscapeTopScreenAction(
+    currentRoute: String?,
+    refreshEnabled: Boolean,
+    onPlaylistCreate: () -> Unit,
+    onScoreRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        when (currentRoute) {
+            "playlists" -> {
+                LandscapeSidebarIconButton(onClick = onPlaylistCreate) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = stringResource(R.string.playlist_cd_create_playlist)
+                    )
+                }
+            }
+            "score" -> {
+                LandscapeSidebarIconButton(
+                    onClick = onScoreRefresh,
+                    enabled = refreshEnabled
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.score_cd_refresh)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LandscapeBottomScreenAction(
+    currentRoute: String?,
+    hasNowPlaying: Boolean,
+    activeDownloadCount: Int,
+    onLibraryFindCurrent: () -> Unit,
+    onPlaylistImport: () -> Unit,
+    onSearchTasks: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        when (currentRoute) {
+            "library" -> {
+                if (hasNowPlaying) {
+                    LandscapeSidebarIconButton(onClick = onLibraryFindCurrent) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = stringResource(R.string.library_find_current_cd)
+                        )
+                    }
+                }
+            }
+            "playlists" -> {
+                LandscapeSidebarIconButton(onClick = onPlaylistImport) {
+                    Icon(
+                        imageVector = Icons.Default.FileDownload,
+                        contentDescription = stringResource(R.string.playlist_cd_import_playlist)
+                    )
+                }
+            }
+            "search" -> {
+                LandscapeSidebarIconButton(onClick = onSearchTasks) {
+                    BadgedBox(
+                        badge = {
+                            if (activeDownloadCount > 0) {
+                                Badge {
+                                    Text(activeDownloadCount.toString())
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = stringResource(R.string.search_cd_download)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LandscapeSidebarIconButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = Modifier.size(40.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun LandscapeDockTitle(
+    currentRoute: String?,
+    modifier: Modifier = Modifier
+) {
+    val title = when (currentRoute) {
+        "library" -> stringResource(R.string.library_title)
+        "playlists" -> stringResource(R.string.playlist_title)
+        "score" -> stringResource(R.string.score_title)
+        "search" -> stringResource(R.string.search_title)
+        "profile" -> stringResource(R.string.profile_title)
+        else -> return
+    }
+    val isChinese = LocalConfiguration.current.locales[0].language == "zh"
+    val chineseTitleStyle = MaterialTheme.typography.titleLarge.copy(
+        fontSize = 26.sp,
+        lineHeight = 26.sp
+    )
+    val rotatedTitleStyle = MaterialTheme.typography.titleLarge.copy(
+        fontSize = 24.sp,
+        lineHeight = 24.sp
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(LANDSCAPE_DOCK_TITLE_ROW_HEIGHT_DP.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isChinese) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                title.filterNot(Char::isWhitespace).forEach { character ->
+                    Text(
+                        text = character.toString(),
+                        style = chineseTitleStyle,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = title,
+                modifier = Modifier
+                    .requiredWidth((LANDSCAPE_DOCK_TITLE_ROW_HEIGHT_DP - 8).dp)
+                    .rotate(90f),
+                style = rotatedTitleStyle,
+                maxLines = 1,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun LandscapeLibrarySearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester
+) {
+    TextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier
+            .widthIn(min = 220.dp, max = 440.dp)
+            .height(LANDSCAPE_SEARCH_BAR_HEIGHT_DP.dp)
+            .focusRequester(focusRequester),
+        placeholder = {
+            Text(
+                text = stringResource(R.string.library_search_placeholder),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Clear,
+                        contentDescription = stringResource(R.string.search_cd_clear),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = {}),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent
+        ),
+        shape = RoundedCornerShape(12.dp)
+    )
+}
+
+@Composable
+private fun SpaceEvenlyNavigationItem(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = NavigationBarItemDefaults.colors()
+    val iconColor by animateColorAsState(
+        targetValue = if (selected) colors.selectedIconColor else colors.unselectedIconColor,
+        label = "navigationIconColor"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (selected) colors.selectedTextColor else colors.unselectedTextColor,
+        label = "navigationTextColor"
+    )
+
+    Column(
+        modifier = modifier
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.Tab
+            )
+            .widthIn(min = 56.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .width(56.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (selected) colors.selectedIndicatorColor else Color.Transparent
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = textColor,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
 fun MainScreen(
     initialAuthCode: String?,
     repository: OsuRepository,
@@ -274,6 +620,7 @@ fun MainScreen(
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     // Configure API authentication for automatic token refresh
     // Do this synchronously to ensure it's set up before any API calls
@@ -359,6 +706,7 @@ fun MainScreen(
     }
 
     val language by settingsManager.language.collectAsState(initial = "en")
+    val genreBarEnabled by settingsManager.genreBarEnabled.collectAsState(initial = true)
     val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
     val clientId by tokenManager.clientId.collectAsState(initial = "")
 
@@ -420,7 +768,9 @@ fun MainScreen(
     val navbarHeightPx = 280f
     val collapsedOffset = screenHeightPx - navbarHeightPx
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isLandscape = maxWidth > maxHeight
+        var landscapeDragging by remember { mutableStateOf(false) }
         val screenHeight = configuration.screenHeightDp.dp
         val screenHeightPxLocal = screenHeightPx // Using the value calculated above
         
@@ -455,18 +805,160 @@ fun MainScreen(
         val isSheetOpen by remember {
             derivedStateOf { sheetOffset.value < collapsedOffset }
         }
-        val isSheetFullyOpen by remember {
-            derivedStateOf { sheetOffset.value <= 0f }
-        }
         
         val nowPlaying by musicController.nowPlaying.collectAsState()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
+        val landscapeDownloadTasks by downloadManager.tasks.collectAsState()
+        val landscapeActiveDownloadCount = remember(landscapeDownloadTasks) {
+            landscapeDownloadTasks.values.count {
+                it.status == com.mosu.app.domain.download.DownloadStatus.Downloading ||
+                    it.status == com.mosu.app.domain.download.DownloadStatus.Queued ||
+                    it.status == com.mosu.app.domain.download.DownloadStatus.Extracting ||
+                    it.status == com.mosu.app.domain.download.DownloadStatus.Paused
+            }
+        }
+        var librarySearchQuery by remember { mutableStateOf("") }
+        var librarySearchExpanded by remember { mutableStateOf(false) }
+        val librarySearchFocusRequester = remember { FocusRequester() }
+        var libraryFindCurrentRequest by remember { mutableStateOf(0) }
+        var playlistCreateRequest by remember { mutableStateOf(0) }
+        var playlistImportRequest by remember { mutableStateOf(0) }
+        var searchTaskViewRequest by remember { mutableStateOf(0) }
+        var scoreRefreshRequest by remember { mutableStateOf(0) }
+        val landscapeLibrarySearchVisible =
+            currentRoute == "library" &&
+                (librarySearchExpanded || librarySearchQuery.isNotEmpty())
+
+        LaunchedEffect(
+            isLandscape,
+            currentRoute,
+            librarySearchExpanded
+        ) {
+            if (isLandscape && currentRoute == "library" && librarySearchExpanded) {
+                delay(50)
+                runCatching { librarySearchFocusRequester.requestFocus() }
+            }
+        }
+        LaunchedEffect(isLandscape, currentRoute) {
+            if (!isLandscape || currentRoute != "library") {
+                librarySearchExpanded = false
+            }
+        }
 
         val contentBottomPadding = when {
-            currentRoute == "profile" -> 80.dp
+            isLandscape -> 0.dp
             nowPlaying != null -> 144.dp
             else -> 80.dp
+        }
+        val landscapePlayerHeight = maxHeight * LANDSCAPE_PLAYER_HEIGHT_FRACTION
+        val landscapeMiniPlayerHeight = landscapePlayerHeight
+        val landscapeCompactPlayerHeight = landscapePlayerHeight
+        val landscapeCompactPlayerWidth =
+            landscapeCompactPlayerHeight * LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT
+        val landscapeFullscreenSize = DpSize(maxWidth, maxHeight)
+        val landscapeActionSlotHeight =
+            (maxHeight - landscapeMiniPlayerHeight) / 2f
+        val landscapePlayerCollapsedOffset =
+            with(density) { landscapeCompactPlayerWidth.toPx() }
+        val landscapeExpansionDistancePx = with(density) {
+            (maxWidth - landscapeCompactPlayerWidth).toPx().coerceAtLeast(1f)
+        }
+        val landscapeSheetOffset = remember(landscapePlayerCollapsedOffset) {
+            Animatable(landscapePlayerCollapsedOffset)
+        }
+        val landscapeExpansionProgress = remember { Animatable(0f) }
+
+        fun applyLandscapeDrag(delta: Float) {
+            scope.launch {
+                val next = advanceLandscapePlayerDrag(
+                    position = LandscapePlayerDragPosition(
+                        sheetOffsetPx = landscapeSheetOffset.value,
+                        expansionProgress = landscapeExpansionProgress.value
+                    ),
+                    deltaPx = delta,
+                    collapsedOffsetPx = landscapePlayerCollapsedOffset,
+                    expansionDistancePx = landscapeExpansionDistancePx,
+                    expansionGain = LANDSCAPE_EXPANSION_DRAG_GAIN
+                )
+                landscapeSheetOffset.snapTo(next.sheetOffsetPx)
+                landscapeExpansionProgress.snapTo(next.expansionProgress)
+            }
+        }
+
+        val landscapeDraggableState = rememberDraggableState { delta ->
+            applyLandscapeDrag(delta)
+        }
+
+        fun settleLandscapePlayer(velocity: Float) {
+            scope.launch {
+                val progress = landscapeExpansionProgress.value
+                val currentSheetOffset = landscapeSheetOffset.value
+                if (
+                    progress > 0f ||
+                    (currentSheetOffset <= 0f && velocity < -1000f)
+                ) {
+                    val target = if (
+                        velocity < -1000f ||
+                        (velocity <= 1000f && progress >= 0.5f)
+                    ) {
+                        1f
+                    } else {
+                        0f
+                    }
+                    landscapeExpansionProgress.animateTo(
+                        target,
+                        animationSpec = tween(300)
+                    )
+                } else {
+                    val target = if (
+                        velocity < -1000f ||
+                        (
+                            velocity <= 1000f &&
+                                currentSheetOffset < landscapePlayerCollapsedOffset / 2f
+                            )
+                    ) {
+                        0f
+                    } else {
+                        landscapePlayerCollapsedOffset
+                    }
+                    landscapeSheetOffset.animateTo(target, animationSpec = tween(300))
+                }
+            }
+        }
+
+        val isLandscapePlayerOpen by remember {
+            derivedStateOf {
+                landscapeSheetOffset.value < landscapePlayerCollapsedOffset
+            }
+        }
+
+        LaunchedEffect(nowPlaying) {
+            if (nowPlaying == null) {
+                landscapeExpansionProgress.snapTo(0f)
+                landscapeSheetOffset.animateTo(
+                    landscapePlayerCollapsedOffset,
+                    animationSpec = tween(300)
+                )
+            }
+        }
+        BackHandler(
+            enabled = isLandscape &&
+                (landscapeExpansionProgress.value > 0f || isLandscapePlayerOpen)
+        ) {
+            scope.launch {
+                if (landscapeExpansionProgress.value > 0f) {
+                    landscapeExpansionProgress.animateTo(
+                        0f,
+                        animationSpec = tween(300)
+                    )
+                } else {
+                    landscapeSheetOffset.animateTo(
+                        landscapePlayerCollapsedOffset,
+                        animationSpec = tween(300)
+                    )
+                }
+            }
         }
 
         // 1. Content Layer (Scaffold without BottomBar)
@@ -484,6 +976,13 @@ fun MainScreen(
                     startDestination = "library",
                     modifier = Modifier
                         .padding(innerPadding)
+                        .padding(start = if (isLandscape) LANDSCAPE_DOCK_WIDTH_DP.dp else 0.dp)
+                        .padding(
+                            end = if (isLandscape) LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp else 0.dp
+                        )
+                        .padding(
+                            top = if (isLandscape) LANDSCAPE_CONTENT_TOP_MARGIN_DP.dp else 0.dp
+                        )
                         .padding(bottom = contentBottomPadding) // Manual padding for MiniPlayer + NavBar
                 ) {
                     composable("library") {
@@ -496,11 +995,34 @@ fun MainScreen(
                             scrollToTop = scrollLibraryToTop,
                             onScrolledToTop = { scrollLibraryToTop = false },
                             snackbarHostState = snackbarHostState,
-                            deferredActionViewModel = deferredActionViewModel
+                            deferredActionViewModel = deferredActionViewModel,
+                            isLandscape = isLandscape,
+                            genreBarEnabled = genreBarEnabled,
+                            librarySearchQuery = librarySearchQuery,
+                            onLibrarySearchQueryChange = { librarySearchQuery = it },
+                            landscapeFindCurrentRequest = libraryFindCurrentRequest,
+                            onLandscapeFindCurrentRequestConsumed = {
+                                libraryFindCurrentRequest = 0
+                            }
                         )
                     }
                     composable("playlists") {
-                        PlaylistScreen(db, musicController, repository, downloadManager, accessToken, snackbarHostState, deferredActionViewModel)
+                        PlaylistScreen(
+                            db = db,
+                            musicController = musicController,
+                            repository = repository,
+                            downloadManager = downloadManager,
+                            accessToken = accessToken,
+                            snackbarHostState = snackbarHostState,
+                            deferredActionViewModel = deferredActionViewModel,
+                            isLandscape = isLandscape,
+                            landscapeCreateRequest = playlistCreateRequest,
+                            onLandscapeCreateRequestConsumed = { playlistCreateRequest = 0 },
+                            landscapeImportRequest = playlistImportRequest,
+                            onLandscapeImportRequestConsumed = {
+                                playlistImportRequest = 0
+                            }
+                        )
                     }
                     composable("search") {
                         SearchScreen(
@@ -513,7 +1035,11 @@ fun MainScreen(
                             downloadManager = downloadManager,
                             scrollToTop = scrollSearchToTop,
                             onScrolledToTop = { scrollSearchToTop = false },
-                            snackbarHostState = snackbarHostState
+                            snackbarHostState = snackbarHostState,
+                            isLandscape = isLandscape,
+                            genreBarEnabled = genreBarEnabled,
+                            landscapeTaskViewRequest = searchTaskViewRequest,
+                            onLandscapeTaskViewRequestConsumed = { searchTaskViewRequest = 0 }
                         )
                     }
                     composable("score") {
@@ -521,7 +1047,12 @@ fun MainScreen(
                             accessToken = accessToken,
                             repository = repository,
                             db = db,
-                            settingsManager = settingsManager
+                            settingsManager = settingsManager,
+                            isLandscape = isLandscape,
+                            landscapeRefreshRequest = scoreRefreshRequest,
+                            onLandscapeRefreshRequestConsumed = {
+                                scoreRefreshRequest = 0
+                            }
                         )
                     }
                     composable("profile") {
@@ -533,6 +1064,7 @@ fun MainScreen(
                             accountManager = accountManager,
                             settingsManager = settingsManager,
                             downloadManager = downloadManager,
+                            isLandscape = isLandscape,
                             onLoginClick = {
                                 if (clientId.isNotEmpty()) {
                                     val intent = Intent(
@@ -577,132 +1109,517 @@ fun MainScreen(
 
         // 2. Full Player Sheet (Middle Layer)
         // Keep in composition but hide when collapsed to prevent surface re-allocation issues
-        Box(
-            modifier = Modifier
-                .zIndex(1f)
-                .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
-                .graphicsLayer { 
-                    alpha = if (sheetOffset.value >= collapsedOffset) 0f else 1f
-                }
-                .fillMaxSize()
-                .statusBarsPadding()
-                .draggable(
-                    state = draggableState,
-                    orientation = Orientation.Vertical,
-                    onDragStopped = { velocity -> snapToTarget(velocity) }
+        if (!isLandscape) {
+            Box(
+                modifier = Modifier
+                    .zIndex(1f)
+                    .offset { IntOffset(0, sheetOffset.value.roundToInt()) }
+                    .graphicsLayer {
+                        alpha = if (sheetOffset.value >= collapsedOffset) 0f else 1f
+                    }
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .draggable(
+                        state = draggableState,
+                        orientation = Orientation.Vertical,
+                        onDragStopped = { velocity -> snapToTarget(velocity) }
+                    )
+            ) {
+                FullPlayer(
+                    musicController = musicController,
+                    settingsManager = settingsManager,
+                    db = db,
+                    isExpanded = isSheetOpen,
+                    onCollapse = {
+                        scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
+                    }
                 )
-        ) {
-            FullPlayer(
-                musicController = musicController,
-                settingsManager = settingsManager,
-                db = db,
-                isExpanded = isSheetOpen,
-                onCollapse = {
-                    scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
-                }
-            )
+            }
         }
 
-        // 3. NavigationBar (Top Layer) - Moves DOWN
-        NavigationBar(
+        // 3. Navigation (Top Layer)
+        if (isLandscape) {
+            Surface(
+                modifier = Modifier
+                    .zIndex(2f)
+                    .align(Alignment.CenterStart)
+                    .width(LANDSCAPE_DOCK_WIDTH_DP.dp)
+                    .fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 3.dp
+            ) {
+                NavigationRail(
+                    containerColor = Color.Transparent,
+                    windowInsets = WindowInsets(0),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxHeight()
+                    ) {
+                        LandscapeDockTitle(currentRoute = currentRoute)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            NavigationRailItem(
+                                icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
+                                modifier = Modifier.height(48.dp),
+                                selected = currentRoute == "library",
+                                onClick = {
+                                    val currentTime = System.currentTimeMillis()
+                                    if (
+                                        currentRoute == "library" &&
+                                        (currentTime - lastLibraryTapTime) < 500
+                                    ) {
+                                        scrollLibraryToTop = true
+                                    } else {
+                                        navController.navigate("library") {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                    lastLibraryTapTime = currentTime
+                                }
+                            )
+                            NavigationRailItem(
+                                icon = {
+                                    Icon(
+                                        Icons.Default.LibraryMusic,
+                                        contentDescription = "Playlists"
+                                    )
+                                },
+                                modifier = Modifier.height(48.dp),
+                                selected = currentRoute == "playlists",
+                                onClick = {
+                                    navController.navigate("playlists") {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
+                            NavigationRailItem(
+                                icon = { Icon(Icons.Default.Star, contentDescription = "Scores") },
+                                modifier = Modifier.height(48.dp),
+                                selected = currentRoute == "score",
+                                onClick = {
+                                    navController.navigate("score") {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
+                            NavigationRailItem(
+                                icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                                modifier = Modifier.height(48.dp),
+                                selected = currentRoute == "search",
+                                onClick = {
+                                    val currentTime = System.currentTimeMillis()
+                                    if (
+                                        currentRoute == "search" &&
+                                        (currentTime - lastSearchTapTime) < 500
+                                    ) {
+                                        scrollSearchToTop = true
+                                    } else {
+                                        navController.navigate("search") {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                    lastSearchTapTime = currentTime
+                                }
+                            )
+                            NavigationRailItem(
+                                icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                                modifier = Modifier.height(48.dp),
+                                selected = currentRoute == "profile",
+                                onClick = {
+                                    navController.navigate("profile") {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        } else Surface(
             modifier = Modifier
                 .zIndex(2f)
                 .align(Alignment.BottomCenter)
-                .offset { 
+                .offset {
                     val currentProgress = 1f - (sheetOffset.value / collapsedOffset).coerceIn(0f, 1f)
                     val translationY = currentProgress * (300f + navigationBarHeightPx)
-                    IntOffset(0, translationY.roundToInt()) 
-                }
+                    IntOffset(0, translationY.roundToInt())
+                },
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = 3.dp
         ) {
-            val navBackStackEntryLocal by navController.currentBackStackEntryAsState()
-            val currentDestination = navBackStackEntryLocal?.destination?.route
-
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
-                label = { Text("Library") },
-                selected = currentDestination == "library",
-                onClick = {
-                    val currentTime = System.currentTimeMillis()
-                    if (currentDestination == "library" && (currentTime - lastLibraryTapTime) < 500) {
-                        scrollLibraryToTop = true
-                    } else {
-                        navController.navigate("library") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .heightIn(min = 80.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SpaceEvenlyNavigationItem(
+                    selected = currentRoute == "library",
+                    onClick = {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentRoute == "library" && (currentTime - lastLibraryTapTime) < 500) {
+                            scrollLibraryToTop = true
+                        } else {
+                            navController.navigate("library") {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                        lastLibraryTapTime = currentTime
+                    },
+                    icon = Icons.Default.Home,
+                    label = "Library"
+                )
+                SpaceEvenlyNavigationItem(
+                    selected = currentRoute == "playlists",
+                    onClick = {
+                        navController.navigate("playlists") {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
                             }
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }
-                    lastLibraryTapTime = currentTime
-                }
-            )
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.LibraryMusic, contentDescription = "Playlists") },
-                label = { Text("Playlists") },
-                selected = currentDestination == "playlists",
-                onClick = {
-                    navController.navigate("playlists") {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.Star, contentDescription = "Scores") },
-                label = { Text("Scores") },
-                selected = currentDestination == "score",
-                onClick = {
-                    navController.navigate("score") {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                label = { Text("Search") },
-                selected = currentDestination == "search",
-                onClick = {
-                    val currentTime = System.currentTimeMillis()
-                    if (currentDestination == "search" && (currentTime - lastSearchTapTime) < 500) {
-                        scrollSearchToTop = true
-                    } else {
-                        navController.navigate("search") {
+                    },
+                    icon = Icons.Default.LibraryMusic,
+                    label = "Playlists"
+                )
+                SpaceEvenlyNavigationItem(
+                    selected = currentRoute == "score",
+                    onClick = {
+                        navController.navigate("score") {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
                             }
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }
-                    lastSearchTapTime = currentTime
-                }
-            )
-            NavigationBarItem(
-                icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                label = { Text("Profile") },
-                selected = currentDestination == "profile",
-                onClick = {
-                    navController.navigate("profile") {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+                    },
+                    icon = Icons.Default.Star,
+                    label = "Scores"
+                )
+                SpaceEvenlyNavigationItem(
+                    selected = currentRoute == "search",
+                    onClick = {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentRoute == "search" && (currentTime - lastSearchTapTime) < 500) {
+                            scrollSearchToTop = true
+                        } else {
+                            navController.navigate("search") {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
+                        lastSearchTapTime = currentTime
+                    },
+                    icon = Icons.Default.Search,
+                    label = "Search"
+                )
+                SpaceEvenlyNavigationItem(
+                    selected = currentRoute == "profile",
+                    onClick = {
+                        navController.navigate("profile") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    icon = Icons.Default.Person,
+                    label = "Profile"
+                )
+            }
         }
 
-        // 4. MiniPlayer (Top Layer) - Moves UP with Sheet
-        if (nowPlaying != null && currentRoute != "profile" && !isSheetFullyOpen) {
+        if (isLandscape) {
+            val expansionProgress = landscapeExpansionProgress.value.coerceIn(0f, 1f)
+            val morphBounds = landscapePlayerMorphBounds(
+                compactSize = DpSize(
+                    landscapeCompactPlayerWidth,
+                    landscapePlayerHeight
+                ),
+                fullscreenSize = landscapeFullscreenSize,
+                progress = expansionProgress
+            )
+            val leftCornerRadius = lerp(18.dp, 0.dp, expansionProgress)
+            val morphedPlayerShape = AbsoluteRoundedCornerShape(
+                topLeft = leftCornerRadius,
+                bottomLeft = leftCornerRadius,
+                topRight = 0.dp,
+                bottomRight = 0.dp
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(5f)
+            ) {
+                // The right-hand action slots belong to the dock, not to the mini-player.
+                // Keep them anchored while the compact player slides in; the expanding
+                // player card is drawn above them and covers them in fullscreen.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp)
+                        .fillMaxHeight()
+                ) {
+                    LandscapeTopScreenAction(
+                        currentRoute = currentRoute,
+                        refreshEnabled = accessToken != null,
+                        onPlaylistCreate = { playlistCreateRequest++ },
+                        onScoreRefresh = { scoreRefreshRequest++ },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .fillMaxWidth()
+                            .height(landscapeActionSlotHeight)
+                    )
+                    LandscapeBottomScreenAction(
+                        currentRoute = currentRoute,
+                        hasNowPlaying = nowPlaying != null,
+                        activeDownloadCount = landscapeActiveDownloadCount,
+                        onLibraryFindCurrent = {
+                            libraryFindCurrentRequest++
+                        },
+                        onPlaylistImport = {
+                            playlistImportRequest++
+                        },
+                        onSearchTasks = { searchTaskViewRequest++ },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .fillMaxWidth()
+                            .height(landscapeActionSlotHeight)
+                    )
+                    if (currentRoute == "library") {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(
+                                    top = (
+                                        (landscapeActionSlotHeight -
+                                            LANDSCAPE_SEARCH_BAR_HEIGHT_DP.dp) / 2
+                                        ).coerceAtLeast(0.dp),
+                                    end = (
+                                        LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp - 40.dp
+                                        ) / 2
+                                )
+                                .zIndex(2f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AnimatedVisibility(
+                                visible = landscapeLibrarySearchVisible,
+                                enter = expandHorizontally(
+                                    expandFrom = Alignment.End,
+                                    animationSpec = tween(220)
+                                ) + fadeIn(tween(120)),
+                                exit = shrinkHorizontally(
+                                    shrinkTowards = Alignment.End,
+                                    animationSpec = tween(180)
+                                ) + fadeOut(tween(100)),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                LandscapeLibrarySearchBar(
+                                    query = librarySearchQuery,
+                                    onQueryChange = {
+                                        librarySearchQuery = it
+                                        if (it.isNotEmpty()) {
+                                            librarySearchExpanded = true
+                                        }
+                                    },
+                                    focusRequester = librarySearchFocusRequester
+                                )
+                            }
+                            LandscapeSidebarIconButton(
+                                onClick = {
+                                    if (
+                                        librarySearchExpanded &&
+                                        librarySearchQuery.isEmpty()
+                                    ) {
+                                        librarySearchExpanded = false
+                                        focusManager.clearFocus()
+                                    } else {
+                                        librarySearchExpanded = true
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = stringResource(R.string.search_cd_search)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(morphBounds.width)
+                        .height(morphBounds.height)
+                        .offset {
+                            IntOffset(landscapeSheetOffset.value.roundToInt(), 0)
+                        }
+                        .graphicsLayer {
+                            alpha = if (
+                                landscapeSheetOffset.value >= landscapePlayerCollapsedOffset
+                            ) {
+                                0f
+                            } else {
+                                1f
+                            }
+                        }
+                        .draggable(
+                            state = landscapeDraggableState,
+                            orientation = Orientation.Horizontal,
+                            enabled = nowPlaying != null,
+                            onDragStarted = { landscapeDragging = true },
+                            onDragStopped = { velocity ->
+                                landscapeDragging = false
+                                settleLandscapePlayer(velocity)
+                            }
+                        )
+                        .clip(morphedPlayerShape)
+                ) {
+                    FullPlayer(
+                        musicController = musicController,
+                        settingsManager = settingsManager,
+                        db = db,
+                        isExpanded = isLandscapePlayerOpen,
+                        onCollapse = {
+                            scope.launch {
+                                if (landscapeExpansionProgress.value > 0f) {
+                                    landscapeExpansionProgress.animateTo(
+                                        0f,
+                                        animationSpec = tween(300)
+                                    )
+                                } else {
+                                    landscapeSheetOffset.animateTo(
+                                        landscapePlayerCollapsedOffset,
+                                        animationSpec = tween(300)
+                                    )
+                                }
+                            }
+                        },
+                        landscapeMorph = LandscapePlayerMorph(
+                            progress = expansionProgress,
+                            compactSize = DpSize(
+                                landscapeCompactPlayerWidth,
+                                landscapeCompactPlayerHeight
+                            ),
+                            fullscreenSize = landscapeFullscreenSize
+                        ),
+                        onEnterFullscreen = {
+                            scope.launch {
+                                if (landscapeSheetOffset.value > 0f) {
+                                    landscapeSheetOffset.animateTo(
+                                        0f,
+                                        animationSpec = tween(180)
+                                    )
+                                }
+                                landscapeExpansionProgress.animateTo(
+                                    1f,
+                                    animationSpec = tween(300)
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // Keep this pointer-input node alive for the duration of a drag. A swipe
+                // that started on the mini-player can therefore continue from compact
+                // into fullscreen after the mini-player visual has disappeared.
+                if (!isLandscapePlayerOpen || landscapeDragging) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp)
+                            .height(landscapeMiniPlayerHeight)
+                            .offset {
+                                IntOffset(
+                                    (
+                                        (
+                                            landscapeSheetOffset.value -
+                                                landscapePlayerCollapsedOffset
+                                            ) * 0.3f
+                                        ).roundToInt(),
+                                    0
+                                )
+                            }
+                            .graphicsLayer {
+                                val currentProgress = 1f - (
+                                    landscapeSheetOffset.value /
+                                        landscapePlayerCollapsedOffset
+                                    ).coerceIn(0f, 1f)
+                                val alphaValue =
+                                    (1f - currentProgress * 4f).coerceIn(0f, 1f)
+                                alpha = if (alphaValue < 0.1f) 0f else alphaValue
+                            }
+                            .draggable(
+                                state = landscapeDraggableState,
+                                orientation = Orientation.Horizontal,
+                                enabled = nowPlaying != null,
+                                onDragStarted = { landscapeDragging = true },
+                                onDragStopped = { velocity ->
+                                    landscapeDragging = false
+                                    settleLandscapePlayer(velocity)
+                                }
+                            )
+                    ) {
+                        if (nowPlaying != null) {
+                            LandscapeMiniPlayer(
+                                musicController = musicController,
+                                onClick = {
+                                    scope.launch {
+                                        landscapeSheetOffset.animateTo(
+                                            0f,
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Portrait MiniPlayer (Top Layer) - Moves UP with Sheet
+        if (nowPlaying != null && currentRoute != "profile" && !isSheetOpen) {
             Box(
                 modifier = Modifier
                     .zIndex(3f)

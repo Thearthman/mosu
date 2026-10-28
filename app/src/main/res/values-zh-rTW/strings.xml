@@ -172,6 +172,7 @@
     <string name="search_download_extracting">解壓縮…</string>
     <string name="search_download_done">完成 ✓</string>
     <string name="search_download_failed">失敗</string>
+    <string name="search_download_target_resolve_failed">找不到 %1$s 播放次數最多的版本</string>
     <string name="download_trying_alternatives">在鏡像中未找到 %1$s，正在嘗試其他版本…</string>
     <string name="download_error_no_audio">%1$s 的音檔缺失，正在嘗試其他版本…</string>
     <string name="profile_restore_downloads_title">恢復下載</string>
@@ -203,6 +204,7 @@
     <string name="profile_debug_missing_osu_queued">已排隊 — 正在等待網路或背景工作啟動…</string>
     <string name="profile_debug_missing_osu_failed">.osu 修復失敗</string>
     <string name="profile_debug_missing_osu_cancelled">.osu 修復已取消</string>
+    <string name="profile_debug_missing_osu_cancel_action">取消 .osu 修復</string>
     <string name="profile_debug_missing_osu_scan_progress">已掃描 %1$d/%2$d 個譜面集</string>
     <string name="profile_debug_missing_osu_repair_total">待修復譜面集：%1$d</string>
     <string name="profile_debug_missing_osu_repair_progress">已處理 %1$d/%2$d 個譜面集</string>
@@ -211,6 +213,7 @@
     <string name="missing_osu_notification_channel">譜面維護</string>
     <string name="missing_osu_notification_title">正在修復缺失的 .osu 檔案</string>
     <string name="missing_osu_notification_starting">正在準備 .osu 修復…</string>
+    <string name="missing_osu_notification_cancel">取消</string>
     <string name="profile_config_backup_title">設定備份</string>
     <string name="profile_config_backup_desc">匯出或匯入曲庫、歌單和播放記錄。</string>
     <string name="profile_config_export">匯出</string>
@@ -222,6 +225,8 @@
     <!-- 資訊彈窗 -->
     <string name="info_cover_title">資訊彈窗顯示封面</string>
     <string name="info_cover_desc">控制搜尋資訊彈窗是否顯示譜面封面。</string>
+    <string name="genre_bar_title">顯示曲風列</string>
+    <string name="genre_bar_desc">在曲庫和搜尋中顯示曲風篩選器。</string>
     <string name="info_no_details">暫無難度詳細資訊。</string>
     <string name="info_diff_count">%1$d 個難度</string>
     <string name="search_info_load_error">詳細資訊載入失敗</string>
@@ -247,6 +252,22 @@
     <string name="genre_jazz">爵士</string>
     <string name="genre_novelty">另類</string>
     <string name="genre_other">其他</string>
+    <string name="genre_electronic_short">電子</string>
+    <string name="genre_anime_short">動漫</string>
+    <string name="genre_rock_short">搖滾</string>
+    <string name="genre_pop_short">流行</string>
+    <string name="genre_game_short">遊戲</string>
+    <string name="genre_hiphop_short">嘻哈</string>
+    <string name="genre_metal_short">金屬</string>
+    <string name="genre_classical_short">古典</string>
+    <string name="genre_folk_short">民謠</string>
+    <string name="genre_jazz_short">爵士</string>
+    <string name="genre_novelty_short">另類</string>
+    <string name="genre_other_short">其他</string>
+    <string name="pill_menu_clear">清除</string>
+    <string name="pill_menu_expanded">已展開</string>
+    <string name="pill_menu_collapsed">已收合</string>
+    <string name="genre_filter_selected_count">%1$s，已選擇 %2$d 個</string>
 
     <!-- 內容描述 -->
     <string name="search_cd_search">搜尋</string>

@@ -164,6 +164,11 @@ class MusicController(
             while (isActive) {
                 val controller = this@MusicController.controller
                 if (controller != null) {
+                    // Keep the playback clock anchored when the renderer's high-frequency
+                    // sampler is inactive (for example, while the album cover is shown).
+                    if (positionSamplingJob?.isActive != true) {
+                        requestPositionSample()
+                    }
                     _currentPosition.value = currentPositionMs()
                 }
                 delay(300) // changed back to 300ms for smoother look
@@ -304,6 +309,7 @@ class MusicController(
                 !awaitingClockAdvance &&
                 advancedSincePreviousSample
         )
+        _currentPosition.value = currentPositionMs()
     }
 
     fun playSong(selectedBeatmap: BeatmapEntity, playlist: List<BeatmapEntity> = listOf(selectedBeatmap)) {

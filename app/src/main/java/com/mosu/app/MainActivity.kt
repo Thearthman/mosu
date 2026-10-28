@@ -805,6 +805,9 @@ fun MainScreen(
         val isSheetOpen by remember {
             derivedStateOf { sheetOffset.value < collapsedOffset }
         }
+        val isSheetFullyOpen by remember {
+            derivedStateOf { sheetOffset.value <= 0f }
+        }
         
         val nowPlaying by musicController.nowPlaying.collectAsState()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -931,6 +934,9 @@ fun MainScreen(
             derivedStateOf {
                 landscapeSheetOffset.value < landscapePlayerCollapsedOffset
             }
+        }
+        val isLandscapePlayerFullyOpen by remember {
+            derivedStateOf { landscapeSheetOffset.value <= 0f }
         }
 
         LaunchedEffect(nowPlaying) {
@@ -1562,7 +1568,7 @@ fun MainScreen(
                 // Keep this pointer-input node alive for the duration of a drag. A swipe
                 // that started on the mini-player can therefore continue from compact
                 // into fullscreen after the mini-player visual has disappeared.
-                if (!isLandscapePlayerOpen || landscapeDragging) {
+                if (!isLandscapePlayerFullyOpen || landscapeDragging) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
@@ -1619,7 +1625,7 @@ fun MainScreen(
         }
 
         // 4. Portrait MiniPlayer (Top Layer) - Moves UP with Sheet
-        if (nowPlaying != null && currentRoute != "profile" && !isSheetOpen) {
+        if (!isLandscape && nowPlaying != null && !isSheetFullyOpen) {
             Box(
                 modifier = Modifier
                     .zIndex(3f)

@@ -3,12 +3,14 @@ package com.mosu.app.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -47,14 +49,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mosu.app.player.MusicController
+
+const val LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP = 6
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,98 +157,150 @@ fun LandscapeMiniPlayer(
 ) {
     val nowPlaying by musicController.nowPlaying.collectAsState()
     val isPlaying by musicController.isPlaying.collectAsState()
+    val duration by musicController.duration.collectAsState()
 
     if (nowPlaying != null) {
         val title = nowPlaying?.title?.toString() ?: "Unknown Title"
         val artist = nowPlaying?.artist?.toString() ?: "Unknown Artist"
 
-        Surface(
-            modifier = modifier
-                .semantics { contentDescription = "Mini player" }
-                .clickable(
-                    role = Role.Button,
-                    onClickLabel = "Open full player",
-                    onClick = onClick
-                ),
-            shape = AbsoluteRoundedCornerShape(
-                topLeft = 18.dp,
-                bottomLeft = 18.dp,
-                topRight = 0.dp,
-                bottomRight = 0.dp
-            ),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            tonalElevation = 8.dp
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
+        val shape = AbsoluteRoundedCornerShape(
+            topLeft = 18.dp,
+            bottomLeft = 18.dp,
+            topRight = 0.dp,
+            bottomRight = 0.dp
+        )
+
+        Box(modifier = modifier) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Leave the rightmost strip free for the progress rail without
+                    // shrinking or shifting the rail itself.
+                    .offset(x = (-LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP).dp)
+                    .semantics { contentDescription = "Mini player" }
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = "Open full player",
+                        onClick = onClick
+                    ),
+                shape = shape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 8.dp
             ) {
-                AsyncImage(
-                    model = nowPlaying?.artworkUri,
-                    contentDescription = "Cover art for $title",
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .requiredWidth(maxHeight)
-                                .rotate(90f),
-                            horizontalAlignment = Alignment.Start
-                        ) {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                    AsyncImage(
+                        model = nowPlaying?.artworkUri,
+                        contentDescription = "Cover art for $title",
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .requiredWidth(maxHeight)
+                                    .rotate(90f),
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = artist,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { musicController.skipToPrevious() }) {
+                            Icon(
+                                imageVector = Icons.Filled.SkipPrevious,
+                                contentDescription = "Previous track"
                             )
-                            Text(
-                                text = artist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        IconButton(onClick = { musicController.togglePlayPause() }) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play"
+                            )
+                        }
+                        IconButton(onClick = { musicController.skipToNext() }) {
+                            Icon(
+                                imageVector = Icons.Filled.SkipNext,
+                                contentDescription = "Next track"
                             )
                         }
                     }
                 }
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { musicController.skipToPrevious() }) {
-                        Icon(
-                            imageVector = Icons.Filled.SkipPrevious,
-                            contentDescription = "Previous track"
-                        )
-                    }
-                    IconButton(onClick = { musicController.togglePlayPause() }) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play"
-                        )
-                    }
-                    IconButton(onClick = { musicController.skipToNext() }) {
-                        Icon(
-                            imageVector = Icons.Filled.SkipNext,
-                            contentDescription = "Next track"
-                        )
-                    }
-                }
             }
+
+            LandscapeMiniPlayerProgressBar(
+                musicController = musicController,
+                duration = duration,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 3.dp)
+                    .fillMaxHeight()
+            )
         }
+    }
+}
+
+@Composable
+private fun LandscapeMiniPlayerProgressBar(
+    musicController: MusicController,
+    duration: Long,
+    modifier: Modifier = Modifier
+) {
+    val currentPosition by musicController.currentPosition.collectAsState()
+    val progress = if (duration > 0L) {
+        (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val activeColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = modifier
+            .width(4.dp)
+            .background(activeColor.copy(alpha = 0.2f))
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    current = progress,
+                    range = 0f..1f
+                )
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(progress)
+                .background(activeColor)
+        )
     }
 }
 

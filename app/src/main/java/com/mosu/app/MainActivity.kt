@@ -142,6 +142,7 @@ import com.mosu.app.data.work.RecentPlaysSyncWorker
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
 import com.mosu.app.ui.components.LandscapeMiniPlayer
+import com.mosu.app.ui.components.LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP
 import com.mosu.app.ui.player.LandscapePlayerDragPosition
 import com.mosu.app.ui.player.LandscapePlayerMorph
 import com.mosu.app.ui.player.advanceLandscapePlayerDrag
@@ -169,6 +170,7 @@ private const val LANDSCAPE_DOCK_TITLE_ROW_HEIGHT_DP = 112
 private const val LANDSCAPE_CONTENT_TOP_MARGIN_DP = 16
 private const val LANDSCAPE_PLAYER_HEIGHT_FRACTION = 0.75f
 private const val LANDSCAPE_MINI_PLAYER_WIDTH_DP = 72
+private const val LANDSCAPE_MINI_PLAYER_BACKGROUND_BLEED_DP = 100
 private const val LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT = 2f / 3f
 private const val LANDSCAPE_SEARCH_BAR_HEIGHT_DP = 48
 private const val LANDSCAPE_EXPANSION_DRAG_GAIN = 1.2f
@@ -1569,6 +1571,56 @@ fun MainScreen(
                 // that started on the mini-player can therefore continue from compact
                 // into fullscreen after the mini-player visual has disappeared.
                 if (!isLandscapePlayerFullyOpen || landscapeDragging) {
+                    // Draw the overscan as its own layer above the compact player. Only
+                    // the background is widened; the mini-player content stays 72dp wide.
+                    if (nowPlaying != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .width(
+                                    (
+                                        LANDSCAPE_MINI_PLAYER_WIDTH_DP +
+                                            LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP +
+                                            LANDSCAPE_MINI_PLAYER_BACKGROUND_BLEED_DP
+                                        ).dp
+                                )
+                                .height(landscapeMiniPlayerHeight)
+                                .offset {
+                                    IntOffset(
+                                        LANDSCAPE_MINI_PLAYER_BACKGROUND_BLEED_DP.dp.roundToPx() +
+                                            (
+                                                (
+                                                    landscapeSheetOffset.value -
+                                                        landscapePlayerCollapsedOffset
+                                                    ) * 0.3f
+                                                ).roundToInt(),
+                                        0
+                                    )
+                                }
+                                .graphicsLayer {
+                                    val currentProgress = 1f - (
+                                        landscapeSheetOffset.value /
+                                            landscapePlayerCollapsedOffset
+                                        ).coerceIn(0f, 1f)
+                                    val alphaValue =
+                                        (1f - currentProgress * 4f).coerceIn(0f, 1f)
+                                    alpha = if (alphaValue < 0.1f) 0f else alphaValue
+                                }
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                shape = AbsoluteRoundedCornerShape(
+                                    topLeft = 18.dp,
+                                    bottomLeft = 18.dp,
+                                    topRight = 0.dp,
+                                    bottomRight = 0.dp
+                                ),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                tonalElevation = 8.dp
+                            ) {}
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)

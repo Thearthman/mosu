@@ -141,11 +141,18 @@ class LandscapePlayerMorphTest {
             showDifficultySelector = true
         )
 
-        assertTrue(rects.artwork.height >= 70.dp)
+        assertTrue(rects.artwork.height >= 56.dp)
         assertTrue(rects.artwork.width > rects.artwork.height)
+        assertEquals(44f, rects.artwork.top.value, 0.001f)
+        assertEquals(
+            rects.artwork.top - (rects.collapse.top + rects.collapse.height),
+            rects.title.top - (rects.artwork.top + rects.artwork.height)
+        )
         assertTrue(rects.artwork.top + rects.artwork.height <= rects.title.top)
         assertTrue(rects.title.top + rects.title.height <= rects.progress.top)
         assertTrue(rects.progress.top + rects.progress.height <= rects.controls.top)
+        assertEquals(240f, (rects.controls.top + rects.controls.height).value, 0.001f)
+        assertEquals(16.2f, rects.title.left.value, 0.001f)
 
         val metadataRight = rects.title.left + rects.title.width
         assertTrue(metadataRight <= rects.difficulty.left)

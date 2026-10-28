@@ -6,6 +6,7 @@
 - [ ] Debug .osu file backfill may stuck at "queued, waiting for network or background worker to start"
 - [ ] In landscape view, the full play's play control components will stretch to fill full width during the miliseconds it takes for renderer to show.
 - [ ] Current beatmapset data parsing structure struggle to handle when a beatmapset contains difficulties of different modes.
+- [ ] The search button in the Library screen is not working.
 - [x] Seeking forward in full-player will still have a chance of causing renderer poorly synced with audio. Look into the seek sync implementation, compare to pause and play because the later works fine. it might have something to do with how we implemented the audio side of the seek as well.
 
 ### UIUX
@@ -15,6 +16,7 @@
 - [ ] [v1.3] Reimagine the entire Landscape UI.
 - [ ] redesign how scores are presented on search page. Right now cover art takes up too much space and titles are clipped aggressively especially in topplay and recent play mode.
 - [x] Make genre bar a generic pill shaped slide out menu composable just like the osu mode switcher.
+- [ ] Find a good placement for the genre filter on both the Library and Search screens.
 - [ ] Make sliders for beatmapsetlists to the left for horizontal view.
 
 ### Features

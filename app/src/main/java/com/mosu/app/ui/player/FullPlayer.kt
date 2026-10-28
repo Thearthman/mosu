@@ -12,6 +12,7 @@ import android.graphics.Shader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -79,6 +80,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -382,7 +384,8 @@ fun FullPlayer(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                .consumeUnhandledTaps(isExpanded),
             contentAlignment = Alignment.TopCenter
         ) {
             val isHorizontal = maxWidth.value > (maxHeight.value * 1.2f)
@@ -465,6 +468,23 @@ fun FullPlayer(
         }
     }
 }
+
+/**
+ * The expanded player is drawn above the rest of the screen, but Compose only hit-tests
+ * nodes that handle pointer input. Without this node, taps on non-interactive areas such
+ * as the artwork renderer fall through to controls on the screen underneath.
+ *
+ * The gesture detector waits on the Main pass, so clickable descendants consume their
+ * taps first and continue to work normally.
+ */
+private fun Modifier.consumeUnhandledTaps(enabled: Boolean): Modifier =
+    if (enabled) {
+        pointerInput(Unit) {
+            detectTapGestures(onTap = {})
+        }
+    } else {
+        this
+    }
 
 /**
  * Portrait layout: a single centered column (cover, title/artist, progress, controls) whose

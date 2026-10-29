@@ -198,7 +198,7 @@ fun BeatmapSetList(
             DraggableScrollbar(
                 state = listState,
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
+                    .align(if (config.scrollBarOnLeft) Alignment.CenterStart else Alignment.CenterEnd)
                     .padding(config.scrollBarPadding)
             )
         }

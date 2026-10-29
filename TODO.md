@@ -17,7 +17,6 @@
 - [ ] redesign how scores are presented on search page. Right now cover art takes up too much space and titles are clipped aggressively especially in topplay and recent play mode.
 - [x] Make genre bar a generic pill shaped slide out menu composable just like the osu mode switcher.
 - [ ] Find a good placement for the genre filter on both the Library and Search screens.
-- [ ] Make sliders for beatmapsetlists to the left for horizontal view.
 
 ### Features
 
@@ -160,6 +159,7 @@
 - [x] Refactored the recent score database with a non-destructive migration so it suffices the panels' data requirements.
 
 ### UI/UX Improvements
+- [x] Make sliders for beatmapsetlists to the left for horizontal view.
 - [x] Blended the top/status bar color into the app UI.
 - [x] Added dark mode.
 - [x] Removed black line below Search bar and tightened genre bar/list spacing.

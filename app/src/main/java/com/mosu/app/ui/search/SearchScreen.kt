@@ -764,6 +764,7 @@ fun SearchScreen(
                     config = BeatmapSetListConfig(
                         showDividers = false,
                         showScrollbar = true,
+                        scrollBarOnLeft = isLandscape,
                         scrollBarPadding = PaddingValues(horizontal = 6.dp),
                         expandedIds = vm.expandedBeatmapSets,
                         onExpansionChanged = { id, isExpanded ->

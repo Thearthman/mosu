@@ -903,6 +903,7 @@ fun PlaylistScreen(
                     config = BeatmapSetListConfig(
                         showDividers = true,
                         showScrollbar = true,
+                        scrollBarOnLeft = isLandscape,
                         scrollBarPadding = PaddingValues(horizontal = 4.dp),
                         expandedIds = expandedBeatmapSets,
                         onExpansionChanged = { id, isExpanded ->

@@ -76,7 +76,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -996,9 +995,7 @@ private fun MorphingLandscapePlayerLayout(
                         "Collapse player"
                     },
                     tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .rotate(progress * 90f)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }

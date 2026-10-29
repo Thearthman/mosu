@@ -26,6 +26,12 @@
     <string name="search_filter_most_played">最多游玩</string>
     <string name="search_filter_top_play">最佳表现</string>
     <string name="search_filter_all">全部</string>
+    <string name="search_filter_played_short">已玩</string>
+    <string name="search_filter_recent_short">最近</string>
+    <string name="search_filter_favorite_short">收藏</string>
+    <string name="search_filter_most_played_short">PC</string>
+    <string name="search_filter_top_play_short">BP</string>
+    <string name="search_filter_all_short">全部</string>
     <string name="search_filter_select">选择</string>
     <string name="search_history_title">最近</string>
     <string name="search_history_delete">移除搜索历史项</string>

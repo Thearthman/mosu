@@ -133,7 +133,7 @@ import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
 import com.mosu.app.ui.components.LandscapeMiniPlayer
 import com.mosu.app.ui.components.LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP
-import com.mosu.app.ui.components.LibrarySearchBar
+import com.mosu.app.ui.components.LandscapeLibrarySearchBar
 import com.mosu.app.ui.player.LandscapePlayerDragPosition
 import com.mosu.app.ui.player.LandscapePlayerMorph
 import com.mosu.app.ui.player.advanceLandscapePlayerDrag
@@ -163,7 +163,8 @@ private const val LANDSCAPE_PLAYER_HEIGHT_FRACTION = 0.75f
 private const val LANDSCAPE_MINI_PLAYER_WIDTH_DP = 72
 private const val LANDSCAPE_MINI_PLAYER_BACKGROUND_BLEED_DP = 100
 private const val LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT = 2f / 3f
-private const val LANDSCAPE_SEARCH_BAR_SIZE_DP = 50
+private const val LANDSCAPE_SEARCH_BAR_COLLAPSED_SIZE_DP = 40
+private const val LANDSCAPE_SEARCH_BAR_EXPANDED_HEIGHT_DP = 50
 private const val LANDSCAPE_SEARCH_BAR_EXPANDED_WIDTH_DP = 440
 private const val LANDSCAPE_EXPANSION_DRAG_GAIN = 1.2f
 private val CompactPlayerSnapSpec = spring<Float>(
@@ -331,8 +332,10 @@ class MainActivity : ComponentActivity() {
 private fun LandscapeTopScreenAction(
     currentRoute: String?,
     refreshEnabled: Boolean,
+    activeDownloadCount: Int,
     onPlaylistCreate: () -> Unit,
     onScoreRefresh: () -> Unit,
+    onSearchTasks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -359,6 +362,24 @@ private fun LandscapeTopScreenAction(
                     )
                 }
             }
+            "search" -> {
+                LandscapeSidebarIconButton(onClick = onSearchTasks) {
+                    BadgedBox(
+                        badge = {
+                            if (activeDownloadCount > 0) {
+                                Badge {
+                                    Text(activeDownloadCount.toString())
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = stringResource(R.string.search_cd_download)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -367,10 +388,8 @@ private fun LandscapeTopScreenAction(
 private fun LandscapeBottomScreenAction(
     currentRoute: String?,
     hasNowPlaying: Boolean,
-    activeDownloadCount: Int,
     onLibraryFindCurrent: () -> Unit,
     onPlaylistImport: () -> Unit,
-    onSearchTasks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -394,24 +413,6 @@ private fun LandscapeBottomScreenAction(
                         imageVector = Icons.Default.FileDownload,
                         contentDescription = stringResource(R.string.playlist_cd_import_playlist)
                     )
-                }
-            }
-            "search" -> {
-                LandscapeSidebarIconButton(onClick = onSearchTasks) {
-                    BadgedBox(
-                        badge = {
-                            if (activeDownloadCount > 0) {
-                                Badge {
-                                    Text(activeDownloadCount.toString())
-                                }
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = stringResource(R.string.search_cd_download)
-                        )
-                    }
                 }
             }
         }
@@ -776,6 +777,7 @@ fun MainScreen(
         }
         var librarySearchQuery by remember { mutableStateOf("") }
         var librarySearchExpanded by remember { mutableStateOf(false) }
+        var librarySelectedGenreIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
         val librarySearchFocusRequester = remember { FocusRequester() }
         var libraryFindCurrentRequest by remember { mutableStateOf(0) }
         var playlistCreateRequest by remember { mutableStateOf(0) }
@@ -786,6 +788,9 @@ fun MainScreen(
             if (!isLandscape || currentRoute != "library") {
                 librarySearchExpanded = false
             }
+        }
+        LaunchedEffect(genreBarEnabled) {
+            if (!genreBarEnabled) librarySelectedGenreIds = emptySet()
         }
 
         val contentBottomPadding = when {
@@ -801,6 +806,14 @@ fun MainScreen(
         val landscapeFullscreenSize = DpSize(maxWidth, maxHeight)
         val landscapeActionSlotHeight =
             (maxHeight - landscapeMiniPlayerHeight) / 2f
+        val landscapeLibraryGenreMenuMaxWidth = (
+            maxWidth -
+                LANDSCAPE_DOCK_WIDTH_DP.dp -
+                LANDSCAPE_SEARCH_BAR_COLLAPSED_SIZE_DP.dp -
+                ((LANDSCAPE_MINI_PLAYER_WIDTH_DP -
+                    LANDSCAPE_SEARCH_BAR_COLLAPSED_SIZE_DP) / 2).dp -
+                8.dp
+            ).coerceAtLeast(40.dp)
         val landscapePlayerCollapsedOffset =
             with(density) { landscapeCompactPlayerWidth.toPx() }
         val landscapeExpansionDistancePx = with(density) {
@@ -976,6 +989,8 @@ fun MainScreen(
                             genreBarEnabled = genreBarEnabled,
                             librarySearchQuery = librarySearchQuery,
                             onLibrarySearchQueryChange = { librarySearchQuery = it },
+                            selectedGenreIds = librarySelectedGenreIds,
+                            onSelectedGenreIdsChange = { librarySelectedGenreIds = it },
                             landscapeFindCurrentRequest = libraryFindCurrentRequest,
                             onLandscapeFindCurrentRequestConsumed = {
                                 libraryFindCurrentRequest = 0
@@ -1381,8 +1396,10 @@ fun MainScreen(
                     LandscapeTopScreenAction(
                         currentRoute = currentRoute,
                         refreshEnabled = accessToken != null,
+                        activeDownloadCount = landscapeActiveDownloadCount,
                         onPlaylistCreate = { playlistCreateRequest++ },
                         onScoreRefresh = { scoreRefreshRequest++ },
+                        onSearchTasks = { searchTaskViewRequest++ },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .fillMaxWidth()
@@ -1391,14 +1408,12 @@ fun MainScreen(
                     LandscapeBottomScreenAction(
                         currentRoute = currentRoute,
                         hasNowPlaying = nowPlaying != null,
-                        activeDownloadCount = landscapeActiveDownloadCount,
                         onLibraryFindCurrent = {
                             libraryFindCurrentRequest++
                         },
                         onPlaylistImport = {
                             playlistImportRequest++
                         },
-                        onSearchTasks = { searchTaskViewRequest++ },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .fillMaxWidth()
@@ -1408,25 +1423,29 @@ fun MainScreen(
                 // Keep the search bar outside the 72dp action rail so it can measure
                 // beyond that rail and expand leftward from the slot.
                 if (currentRoute == "library") {
-                    LibrarySearchBar(
+                    LandscapeLibrarySearchBar(
                         query = librarySearchQuery,
                         onQueryChange = { librarySearchQuery = it },
                         expanded = librarySearchExpanded,
                         onExpandedChange = { librarySearchExpanded = it },
                         expandedWidth = LANDSCAPE_SEARCH_BAR_EXPANDED_WIDTH_DP.dp,
                         focusRequester = librarySearchFocusRequester,
-                        collapsedWidth = LANDSCAPE_SEARCH_BAR_SIZE_DP.dp,
-                        height = LANDSCAPE_SEARCH_BAR_SIZE_DP.dp,
+                        selectedGenreIds = librarySelectedGenreIds,
+                        onGenreSelected = { librarySelectedGenreIds = it },
+                        genreBarEnabled = genreBarEnabled,
+                        maxGenreMenuWidth = landscapeLibraryGenreMenuMaxWidth,
+                        collapsedSize = LANDSCAPE_SEARCH_BAR_COLLAPSED_SIZE_DP.dp,
+                        expandedHeight = LANDSCAPE_SEARCH_BAR_EXPANDED_HEIGHT_DP.dp,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(
                                 top = (
                                     (landscapeActionSlotHeight -
-                                        LANDSCAPE_SEARCH_BAR_SIZE_DP.dp) / 2
+                                        LANDSCAPE_SEARCH_BAR_EXPANDED_HEIGHT_DP.dp) / 2
                                     ).coerceAtLeast(0.dp),
                                 end = (
                                     LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp -
-                                        LANDSCAPE_SEARCH_BAR_SIZE_DP.dp
+                                        LANDSCAPE_SEARCH_BAR_COLLAPSED_SIZE_DP.dp
                                     ) / 2
                             )
                     )

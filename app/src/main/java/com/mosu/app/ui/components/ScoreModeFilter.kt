@@ -44,7 +44,7 @@ import com.mosu.app.R
 
 private val ScoreModeIconSize = 36.dp
 private val ScoreModeIconGap = 2.dp
-private val ScoreModeExpandedMenuHeight = 60.dp
+private val ScoreModeExpandedMenuHeight = ScoreModeIconSize
 private const val ExpandDurationMillis = 180
 private const val CollapseDurationMillis = 140
 

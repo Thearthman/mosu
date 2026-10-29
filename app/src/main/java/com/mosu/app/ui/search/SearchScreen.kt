@@ -3,18 +3,21 @@ package com.mosu.app.ui.search
 import android.util.Log
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -69,9 +72,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -90,7 +96,7 @@ import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.GenreFilter
-import com.mosu.app.ui.components.GenreRail
+import com.mosu.app.ui.components.GenreTriggerStyle
 import com.mosu.app.ui.components.BeatmapSetSwipeActions
 import com.mosu.app.ui.components.BeatmapSetSwipeItem
 import com.mosu.app.ui.components.PlaylistOption
@@ -583,16 +589,7 @@ fun SearchScreen(
             }
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        if (isLandscape && genreBarEnabled) {
-            GenreRail(
-                selectedGenreIds = vm.selectedGenreIds,
-                onGenreSelected = ::applyGenreSelection,
-                modifier = Modifier.fillMaxHeight()
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         if (!isLandscape) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(end = 16.dp),
@@ -777,46 +774,73 @@ fun SearchScreen(
                         header = {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 // Item 1: Search Bar (1 unit tall)
-                                Box(
+                                BoxWithConstraints(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(60.dp)
                                         .padding(horizontal = 16.dp, vertical = 4.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    TextField(
-                                        value = vm.searchQuery,
-                                        onValueChange = { vm.searchQuery = it },
+                                    // Landscape stays clear of the leading search icon.
+                                    // Portrait expands left only as far as the search icon.
+                                    val maxGenreMenuWidth = if (isLandscape) {
+                                        (maxWidth - 154.dp).coerceAtLeast(36.dp)
+                                    } else {
+                                        null
+                                    }
+                                    Box(
                                         modifier = Modifier.fillMaxSize(),
-                                        placeholder = {
-                                            Text(
-                                                stringResource(id = R.string.search_placeholder),
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Default.Search,
-                                                contentDescription = stringResource(id = R.string.search_cd_search)
-                                            )
-                                        },
-                                        trailingIcon = {
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        TextField(
+                                            value = vm.searchQuery,
+                                            onValueChange = { vm.searchQuery = it },
+                                            modifier = Modifier.fillMaxSize(),
+                                            placeholder = {
+                                                Text(
+                                                    stringResource(id = R.string.search_placeholder),
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            },
+                                            // Material's leading-icon slot reserves 48.dp. Use a
+                                            // prefix spacer and overlay the icon instead so the input
+                                            // can start closer to the icon.
+                                            prefix = {
+                                                Spacer(modifier = Modifier.width(20.dp))
+                                            },
+                                            trailingIcon = {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier.padding(end = 8.dp)
                                             ) {
                                                 if (vm.searchQuery.isNotEmpty()) {
-                                                    IconButton(onClick = {
-                                                        vm.searchQuery = ""
-                                                        scope.launch {
-                                                            runSearch("", recordHistory = false, forceRefresh = true)
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .offset(x = 4.dp)
+                                                            .width(12.dp)
+                                                            .height(36.dp),
+                                                        contentAlignment = Alignment.CenterStart
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .offset(x = (-4).dp)
+                                                                .requiredSize(24.dp)
+                                                                .clickable(role = Role.Button) {
+                                                                    vm.searchQuery = ""
+                                                                    scope.launch {
+                                                                        runSearch("", recordHistory = false, forceRefresh = true)
+                                                                    }
+                                                                },
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.Clear,
+                                                                contentDescription = stringResource(id = R.string.search_cd_clear),
+                                                                modifier = Modifier.size(24.dp)
+                                                            )
                                                         }
-                                                    }) {
-                                                        Icon(
-                                                            Icons.Default.Clear,
-                                                            contentDescription = stringResource(id = R.string.search_cd_clear)
-                                                        )
                                                     }
+                                                    Spacer(modifier = Modifier.width(2.dp))
                                                 }
 
                                                 ScoreModeFilterIcons(
@@ -829,10 +853,29 @@ fun SearchScreen(
                                                             }
                                                         }
                                                     },
-                                                    minimised = isLandscape ||
-                                                        LocalConfiguration.current.screenWidthDp <= 380,
+                                                    minimised = true,
                                                     modifier = Modifier.padding(end = 4.dp)
                                                 )
+
+                                                if (genreBarEnabled) {
+                                                    GenreFilter(
+                                                        selectedGenreIds = vm.selectedGenreIds,
+                                                        onGenreSelected = ::applyGenreSelection,
+                                                        triggerStyle = GenreTriggerStyle.ModeIcon,
+                                                        maxExpandedWidth = maxGenreMenuWidth,
+                                                        expandedWindowInset = if (isLandscape) {
+                                                            0.dp
+                                                        } else {
+                                                            // Search field margin (16.dp) plus the
+                                                            // overlaid search icon's start padding.
+                                                            26.dp
+                                                        },
+                                                        inactiveContainerColor =
+                                                            Color.Transparent,
+                                                        expandedContainerColor =
+                                                            MaterialTheme.colorScheme.background
+                                                    )
+                                                }
 
                                                 var filterMenuExpanded by remember { mutableStateOf(false) }
                                                 val isSupporterAllowed = vm.isSupporter
@@ -841,13 +884,21 @@ fun SearchScreen(
                                                 } else {
                                                     listOf("recent", "favorite", "most_played", "top_play", "all")
                                                 }
-                                                val optionLabels = mapOf(
+                                                val optionMenuLabels = mapOf(
                                                     "played" to stringResource(id = R.string.search_filter_played),
                                                     "recent" to stringResource(id = R.string.search_filter_recent),
                                                     "favorite" to stringResource(id = R.string.search_filter_favorite),
                                                     "most_played" to stringResource(id = R.string.search_filter_most_played),
                                                     "top_play" to stringResource(id = R.string.search_filter_top_play),
                                                     "all" to stringResource(id = R.string.search_filter_all)
+                                                )
+                                                val optionButtonLabels = mapOf(
+                                                    "played" to stringResource(id = R.string.search_filter_played_short),
+                                                    "recent" to stringResource(id = R.string.search_filter_recent_short),
+                                                    "favorite" to stringResource(id = R.string.search_filter_favorite_short),
+                                                    "most_played" to stringResource(id = R.string.search_filter_most_played_short),
+                                                    "top_play" to stringResource(id = R.string.search_filter_top_play_short),
+                                                    "all" to stringResource(id = R.string.search_filter_all_short)
                                                 )
                                                 val optionColors = mapOf(
                                                     "played" to MaterialTheme.colorScheme.primary,
@@ -867,10 +918,33 @@ fun SearchScreen(
                                                 )
                                                 val currentColor = optionColors[vm.filterMode] ?: MaterialTheme.colorScheme.primary
                                                 val currentContentColor = contentColors[vm.filterMode] ?: MaterialTheme.colorScheme.primary
+                                                val filterButtonTextStyle =
+                                                    MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                                val filterButtonTextMeasurer = rememberTextMeasurer()
+                                                val density = LocalDensity.current
+                                                val filterTextStartPadding =
+                                                    if (LocalConfiguration.current.locales[0].language == "zh") 2.dp else 0.dp
+                                                val filterButtonWidth = remember(
+                                                    optionButtonLabels,
+                                                    filterButtonTextStyle,
+                                                    filterButtonTextMeasurer,
+                                                    density,
+                                                    filterTextStartPadding
+                                                ) {
+                                                    val maxLabelWidthPx = optionButtonLabels.values.maxOf { label ->
+                                                        filterButtonTextMeasurer.measure(
+                                                            text = label,
+                                                            style = filterButtonTextStyle,
+                                                            maxLines = 1
+                                                        ).size.width
+                                                    }
+                                                    with(density) { maxLabelWidthPx.toDp() } +
+                                                        28.dp + filterTextStartPadding
+                                                }
 
                                                 OutlinedButton(
                                                     onClick = { filterMenuExpanded = true },
-                                                    modifier = Modifier.width(98.dp).height(36.dp),
+                                                    modifier = Modifier.width(filterButtonWidth).height(36.dp),
                                                     shape = RoundedCornerShape(8.dp),
                                                     colors = ButtonDefaults.buttonColors(
                                                         containerColor = currentColor,
@@ -879,8 +953,11 @@ fun SearchScreen(
                                                     contentPadding = PaddingValues(horizontal = 4.dp)
                                                 ) {
                                                     Text(
-                                                        text = optionLabels[vm.filterMode] ?: "",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        text = optionButtonLabels[vm.filterMode]
+                                                            ?: optionMenuLabels[vm.filterMode]
+                                                            ?: "",
+                                                        style = filterButtonTextStyle,
+                                                        modifier = Modifier.padding(start = filterTextStartPadding),
                                                         maxLines = 1
                                                     )
                                                     Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -891,7 +968,7 @@ fun SearchScreen(
                                                 ) {
                                                     options.forEach { mode ->
                                                         DropdownMenuItem(
-                                                            text = { Text(optionLabels[mode] ?: mode) },
+                                                            text = { Text(optionMenuLabels[mode] ?: mode) },
                                                             onClick = {
                                                                 filterMenuExpanded = false
                                                                 vm.filterMode = mode
@@ -940,25 +1017,38 @@ fun SearchScreen(
                                                     }
                                                 }
                                             }
-                                        },
-                                        singleLine = true,
-                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                        keyboardActions = KeyboardActions(
-                                            onSearch = {
-                                                scope.launch { runSearch(vm.searchQuery) }
-                                            }
-                                        ),
-                                        colors = TextFieldDefaults.colors(
-                                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            focusedIndicatorColor = Color.Transparent,
-                                            unfocusedIndicatorColor = Color.Transparent
-                                        ),
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
+                                            },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                            keyboardActions = KeyboardActions(
+                                                onSearch = {
+                                                    scope.launch { runSearch(vm.searchQuery) }
+                                                }
+                                            ),
+                                            colors = TextFieldDefaults.colors(
+                                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                focusedIndicatorColor = Color.Transparent,
+                                                unfocusedIndicatorColor = Color.Transparent
+                                            ),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = stringResource(id = R.string.search_cd_search),
+                                            // 52.dp field height - 24.dp icon = 14.dp on each edge.
+                                            modifier = Modifier.padding(start = 10.dp)
+                                        )
+                                    }
                                 }
 
-                                if (vm.searchQuery.isBlank() && searchHistory.isNotEmpty()) {
+                                val showHistoryRow = if (isLandscape) {
+                                    vm.searchQuery.isBlank() && searchHistory.isNotEmpty()
+                                } else {
+                                    searchHistory.isNotEmpty()
+                                }
+
+                                if (showHistoryRow) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1014,25 +1104,17 @@ fun SearchScreen(
                                             }
                                         }
 
-                                        IconButton(onClick = { vm.clearSearchHistory() }) {
-                                            Icon(
-                                                Icons.Default.Delete,
-                                                contentDescription = stringResource(id = R.string.search_history_clear)
-                                            )
+                                        if (searchHistory.isNotEmpty()) {
+                                            IconButton(onClick = { vm.clearSearchHistory() }) {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = stringResource(
+                                                        id = R.string.search_history_clear
+                                                    )
+                                                )
+                                            }
                                         }
                                     }
-                                }
-
-                                // Portrait uses the same pill menu as Library; landscape uses the rail.
-                                if (!isLandscape && genreBarEnabled) {
-                                    GenreFilter(
-                                        selectedGenreIds = vm.selectedGenreIds,
-                                        onGenreSelected = ::applyGenreSelection,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(56.dp)
-                                            .padding(horizontal = 16.dp)
-                                    )
                                 }
                             }
                         }
@@ -1387,7 +1469,6 @@ fun SearchScreen(
                     scoreMode = vm.scoreModeFilter
                 )
             }
-        }
         }
     }
 }

@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,12 +34,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -60,13 +62,15 @@ import com.mosu.app.ui.components.BeatmapSetListConfig
 import com.mosu.app.ui.components.BeatmapTrackData
 import com.mosu.app.ui.components.DownloadProgress
 import com.mosu.app.ui.components.GenreFilter
-import com.mosu.app.ui.components.GenreRail
+import com.mosu.app.ui.components.GenreTriggerStyle
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.LibrarySearchBar
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.beatmapSetList
+import com.mosu.app.ui.components.pillMenuExpandedWidth
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mosu.app.ui.DeferredActionViewModel
 import kotlinx.coroutines.delay
@@ -89,6 +93,8 @@ fun LibraryScreen(
     genreBarEnabled: Boolean = true,
     librarySearchQuery: String = "",
     onLibrarySearchQueryChange: (String) -> Unit = {},
+    selectedGenreIds: Set<Int> = emptySet(),
+    onSelectedGenreIdsChange: (Set<Int>) -> Unit = {},
     landscapeFindCurrentRequest: Int = 0,
     onLandscapeFindCurrentRequestConsumed: () -> Unit = {}
 ) {
@@ -169,12 +175,6 @@ fun LibraryScreen(
         }
     }
 
-    // Genre Filter State
-    var selectedGenreIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    LaunchedEffect(genreBarEnabled) {
-        if (!genreBarEnabled) selectedGenreIds = emptySet()
-    }
-
     // Deletion states from shared ViewModel
     val pendingDeletions by deferredActionViewModel.pendingLibraryTrackDeletions.collectAsState()
     val pendingSetDeletions by deferredActionViewModel.pendingLibrarySetDeletions.collectAsState()
@@ -184,6 +184,7 @@ fun LibraryScreen(
 
     // Search State
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var isGenreExpanded by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val effectiveSearchQuery = librarySearchQuery
 
@@ -387,8 +388,7 @@ fun LibraryScreen(
                 delay(50)
 
                 // 3. Calculate actual flattened index
-                val genreHeaderItemCount = if (!isLandscape && genreBarEnabled) 1 else 0
-                var flattenedIndex = genreHeaderItemCount
+                var flattenedIndex = 0
                 for (set in beatmapSets) {
                     if (set.id == match.beatmapSetId) {
                         if (isAlbumTrack) {
@@ -446,52 +446,117 @@ fun LibraryScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            if (isLandscape && genreBarEnabled) {
-                GenreRail(
-                    selectedGenreIds = selectedGenreIds,
-                    onGenreSelected = { selectedGenreIds = it },
-                    modifier = Modifier.fillMaxHeight()
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        Column(modifier = Modifier.fillMaxSize()) {
             val libraryTitle = stringResource(id = R.string.library_title)
             val titleStyle = MaterialTheme.typography.displayMedium
             val textMeasurer = rememberTextMeasurer()
             val titleWidth = with(LocalDensity.current) {
                 textMeasurer.measure(text = libraryTitle, style = titleStyle).size.width.toDp()
             }
+            val titlePadding = 16.dp
 
             // Portrait header. Landscape owns the title and search action in the app rails.
             if (!isLandscape) {
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = titlePadding),
                 ) {
-                val expandedSearchBarWidth = (maxWidth - titleWidth).coerceAtLeast(50.dp)
+                val collapsedSearchSize = 40.dp
+                val genreSearchGap = 8.dp
+                val availableWidth = maxWidth
+                val expandedSearchBarWidth =
+                    (availableWidth - titleWidth - titlePadding)
+                        .coerceAtLeast(collapsedSearchSize)
+                val normalGenreMenuMaxWidth = (
+                    expandedSearchBarWidth -
+                        collapsedSearchSize -
+                        genreSearchGap
+                    ).coerceAtLeast(40.dp)
+                val fullWidthGenreMenuMaxWidth = (
+                    availableWidth -
+                        collapsedSearchSize -
+                        genreSearchGap
+                    ).coerceAtLeast(40.dp)
+                val needsFullWidthGenreMenu = normalGenreMenuMaxWidth <
+                    pillMenuExpandedWidth(
+                        triggerSize = collapsedSearchSize,
+                        itemCount = 4
+                    )
+                val hideTitleForGenreExpansion =
+                    isGenreExpanded && needsFullWidthGenreMenu
+                val genreMenuMaxWidth = if (needsFullWidthGenreMenu) {
+                    fullWidthGenreMenuMaxWidth
+                } else {
+                    normalGenreMenuMaxWidth
+                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom
-                ) {
+                if (hideTitleForGenreExpansion) {
+                    // Keep the title row's height while the expanded genre bar uses its width.
                     Text(
                         text = libraryTitle,
-                        style = titleStyle, // Apple Music style large title
+                        style = titleStyle,
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 16.dp, bottom = 16.dp)
+                            .alpha(0f)
+                            .clearAndSetSemantics { }
+                            .padding(top = titlePadding, bottom = titlePadding)
                     )
+                }
 
-                    LibrarySearchBar(
-                        query = librarySearchQuery,
-                        onQueryChange = onLibrarySearchQueryChange,
-                        expanded = isSearchExpanded,
-                        onExpandedChange = { isSearchExpanded = it },
-                        expandedWidth = expandedSearchBarWidth,
-                        focusRequester = searchFocusRequester
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterStart),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!hideTitleForGenreExpansion) {
+                        Text(
+                            text = libraryTitle,
+                            style = titleStyle, // Apple Music style large title
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(top = titlePadding, bottom = titlePadding)
+                        )
+
+                        Spacer(modifier = Modifier.width(titlePadding))
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(
+                                if (hideTitleForGenreExpansion) {
+                                    availableWidth
+                                } else {
+                                    expandedSearchBarWidth
+                                }
+                            )
+                            .height(50.dp)
+                    ) {
+                        if (genreBarEnabled) {
+                            GenreFilter(
+                                selectedGenreIds = selectedGenreIds,
+                                onGenreSelected = onSelectedGenreIdsChange,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = collapsedSearchSize + genreSearchGap),
+                                triggerStyle = GenreTriggerStyle.LibrarySearch,
+                                maxExpandedWidth = genreMenuMaxWidth,
+                                onExpandedChange = { isGenreExpanded = it }
+                            )
+                        }
+
+                        LibrarySearchBar(
+                            query = librarySearchQuery,
+                            onQueryChange = onLibrarySearchQueryChange,
+                            expanded = isSearchExpanded,
+                            onExpandedChange = { isSearchExpanded = it },
+                            expandedWidth = expandedSearchBarWidth,
+                            focusRequester = searchFocusRequester,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .zIndex(1f)
+                        )
+                    }
                 }
             }
             }
@@ -515,28 +580,9 @@ fun LibraryScreen(
                         } else {
                             expandedBeatmapSets - id
                         }
-                    },
-                    header = if (!isLandscape && genreBarEnabled) {
-                        {
-                            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                                Text(
-                                    text = stringResource(id = R.string.library_filter_genre),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-                                GenreFilter(
-                                    selectedGenreIds = selectedGenreIds,
-                                    onGenreSelected = { selectedGenreIds = it },
-                                    modifier = Modifier.padding(top = 4.dp, start = 16.dp, end = 16.dp)
-                                )
-                            }
-                        }
-                    } else {
-                        null
                     }
                 )
             )
-        }
         }
 
         if (showPlaylistDialog && dialogTrack != null) {

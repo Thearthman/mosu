@@ -26,6 +26,12 @@
     <string name="search_filter_most_played">Most Played</string>
     <string name="search_filter_top_play">Top Play</string>
     <string name="search_filter_all">All</string>
+    <string name="search_filter_played_short">Pld</string>
+    <string name="search_filter_recent_short">Rct</string>
+    <string name="search_filter_favorite_short">Fav</string>
+    <string name="search_filter_most_played_short">PC</string>
+    <string name="search_filter_top_play_short">BP</string>
+    <string name="search_filter_all_short">All</string>
     <string name="search_filter_select">Select</string>
     <string name="search_history_title">Recent</string>
     <string name="search_history_delete">Remove search history item</string>

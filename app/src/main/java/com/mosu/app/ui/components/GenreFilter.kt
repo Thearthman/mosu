@@ -2,15 +2,9 @@ package com.mosu.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
@@ -21,10 +15,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.mosu.app.R
 
 /**
@@ -36,52 +35,73 @@ data class GenreOption(
     val shortNameResId: Int = nameResId
 )
 
+enum class GenreTriggerStyle {
+    /** Rounded, filled pill used by Search's recent row. */
+    Pill,
+
+    /** Square search control used immediately beside the portrait Library search button. */
+    LibrarySearch,
+
+    /** Transparent circular control matching the score-mode filter icons. */
+    ModeIcon,
+
+    /** Transparent half of the landscape Library's fused genre/search control. */
+    FusedHalf
+}
+
 /**
- * Horizontal genre menu used in portrait layouts.
+ * Genre menu used by Library and Search in both orientations.
  */
 @Composable
 fun GenreFilter(
     selectedGenreIds: Set<Int>,
     onGenreSelected: (Set<Int>) -> Unit,
     modifier: Modifier = Modifier,
-    genres: List<GenreOption> = defaultGenres
+    genres: List<GenreOption> = defaultGenres,
+    triggerStyle: GenreTriggerStyle = GenreTriggerStyle.Pill,
+    maxExpandedWidth: Dp? = null,
+    expandedWindowInset: Dp = 0.dp,
+    inactiveContainerColor: Color? = null,
+    expandedContainerColor: Color? = null,
+    onExpandedChange: (Boolean) -> Unit = {}
 ) {
+    val triggerSize = when (triggerStyle) {
+        GenreTriggerStyle.Pill -> 40.dp
+        GenreTriggerStyle.LibrarySearch -> 40.dp
+        GenreTriggerStyle.ModeIcon -> 36.dp
+        GenreTriggerStyle.FusedHalf -> 40.dp
+    }
+    val triggerShape = when (triggerStyle) {
+        GenreTriggerStyle.Pill, GenreTriggerStyle.ModeIcon -> CircleShape
+        GenreTriggerStyle.LibrarySearch -> RoundedCornerShape(12.dp)
+        GenreTriggerStyle.FusedHalf -> RoundedCornerShape(
+            topStart = 12.dp,
+            bottomStart = 12.dp
+        )
+    }
+
     PillSlideOutMenu(
         items = genreMenuItems(genres),
         selectedValues = selectedGenreIds,
         onSelectionChanged = onGenreSelected,
         modifier = modifier,
         collapsedContent = {
-            GenreTrigger(selectedCount = selectedGenreIds.size, compact = false)
+            GenreTrigger(
+                selectedCount = selectedGenreIds.size,
+                style = triggerStyle,
+                size = triggerSize,
+                inactiveContainerColor = inactiveContainerColor
+            )
         },
-        direction = PillMenuDirection.Horizontal,
         showClearAction = true,
-        triggerAlignment = Alignment.CenterStart
-    )
-}
-
-/**
- * Thin vertical genre menu used beside the landscape navigation dock.
- */
-@Composable
-fun GenreRail(
-    selectedGenreIds: Set<Int>,
-    onGenreSelected: (Set<Int>) -> Unit,
-    modifier: Modifier = Modifier,
-    genres: List<GenreOption> = defaultGenres
-) {
-    PillSlideOutMenu(
-        items = genreMenuItems(genres),
-        selectedValues = selectedGenreIds,
-        onSelectionChanged = onGenreSelected,
-        modifier = modifier.width(48.dp).fillMaxHeight(),
-        collapsedContent = {
-            GenreTrigger(selectedCount = selectedGenreIds.size, compact = true)
-        },
-        direction = PillMenuDirection.Vertical,
-        expandedMenuWidth = 56.dp,
-        showClearAction = true,
-        triggerAlignment = Alignment.Center
+        triggerAlignment = Alignment.Center,
+        triggerTouchSize = triggerSize,
+        triggerShape = triggerShape,
+        maxExpandedWidth = maxExpandedWidth,
+        expandedWindowInset = expandedWindowInset,
+        expandedContainerColor =
+            expandedContainerColor ?: MaterialTheme.colorScheme.surfaceVariant,
+        onExpandedChange = onExpandedChange
     )
 }
 
@@ -100,7 +120,9 @@ private fun genreMenuItems(genres: List<GenreOption>): List<PillMenuItem<Int>> {
 @Composable
 private fun GenreTrigger(
     selectedCount: Int,
-    compact: Boolean
+    style: GenreTriggerStyle,
+    size: Dp,
+    inactiveContainerColor: Color?
 ) {
     val description = stringResource(R.string.library_filter_genre)
     val selectionDescription = if (selectedCount > 0) {
@@ -108,67 +130,78 @@ private fun GenreTrigger(
     } else {
         description
     }
-    val shape = RoundedCornerShape(percent = 50)
-    val containerColor = if (selectedCount > 0) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.secondaryContainer
+    val selected = selectedCount > 0
+    val styleContainerColor = when (style) {
+        GenreTriggerStyle.Pill -> if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+        GenreTriggerStyle.LibrarySearch -> MaterialTheme.colorScheme.surfaceVariant
+        GenreTriggerStyle.ModeIcon -> if (selected) {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+        GenreTriggerStyle.FusedHalf -> if (selected) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
     }
-    val contentColor = if (selectedCount > 0) {
-        MaterialTheme.colorScheme.onPrimaryContainer
+    val containerColor = if (!selected && inactiveContainerColor != null) {
+        inactiveContainerColor
     } else {
-        MaterialTheme.colorScheme.onSecondaryContainer
+        styleContainerColor
     }
-
+    val contentColor = when (style) {
+        GenreTriggerStyle.Pill -> if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        }
+        GenreTriggerStyle.LibrarySearch -> MaterialTheme.colorScheme.onSurface
+        GenreTriggerStyle.ModeIcon, GenreTriggerStyle.FusedHalf -> if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    }
+    val shape: Shape = when (style) {
+        GenreTriggerStyle.Pill, GenreTriggerStyle.ModeIcon -> CircleShape
+        GenreTriggerStyle.LibrarySearch -> RoundedCornerShape(12.dp)
+        GenreTriggerStyle.FusedHalf -> RoundedCornerShape(
+            topStart = 12.dp,
+            bottomStart = 12.dp
+        )
+    }
     Box(
         modifier = Modifier
             .semantics { contentDescription = selectionDescription }
-            .then(
-                if (compact) {
-                    Modifier.width(40.dp).height(64.dp)
-                } else {
-                    Modifier.widthIn(min = 44.dp).height(40.dp)
-                }
-            )
+            .size(size)
             .clip(shape)
-            .background(containerColor)
-            .padding(horizontal = if (compact) 4.dp else 12.dp),
+            .background(containerColor),
         contentAlignment = Alignment.Center
     ) {
-        if (compact) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-                if (selectedCount > 0) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = selectedCount.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = contentColor
-                    )
-                }
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-                if (selectedCount > 0) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = selectedCount.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = contentColor
-                    )
-                }
-            }
+        Icon(
+            imageVector = Icons.Default.FilterList,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(if (style == GenreTriggerStyle.ModeIcon) 22.dp else 19.dp)
+        )
+        if (selected) {
+            Text(
+                text = selectedCount.toString(),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    lineHeight = 9.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = contentColor,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 6.dp, bottom = 6.dp)
+            )
         }
     }
 }

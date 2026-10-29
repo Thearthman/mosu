@@ -105,6 +105,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -778,12 +779,21 @@ fun MainScreen(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isLandscape = maxWidth > maxHeight
+        // The portrait sheet and the landscape fullscreen player are the same
+        // presentation. Persisting this one flag keeps that mapping one-to-one when
+        // rotation switches branches or recreates the Activity.
+        var isFullPlayerOpen by rememberSaveable { mutableStateOf(false) }
+        var hasObservedPlayback by remember { mutableStateOf(false) }
         var landscapeDragging by remember { mutableStateOf(false) }
         val screenHeight = configuration.screenHeightDp.dp
         val screenHeightPxLocal = screenHeightPx // Using the value calculated above
         
         // Sheet Offset: collapsedOffset (Collapsed) -> 0f (Expanded)
-        val sheetOffset = remember { Animatable(collapsedOffset) }
+        val sheetOffset = remember(isLandscape, collapsedOffset) {
+            Animatable(
+                if (!isLandscape && isFullPlayerOpen) 0f else collapsedOffset
+            )
+        }
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -801,6 +811,7 @@ fun MainScreen(
                 } else {
                     collapsedOffset // Collapse
                 }
+                isFullPlayerOpen = target == 0f
                 sheetOffset.animateTo(target, animationSpec = tween(300))
             }
         }
@@ -875,10 +886,21 @@ fun MainScreen(
         val landscapeExpansionDistancePx = with(density) {
             (maxWidth - landscapeCompactPlayerWidth).toPx().coerceAtLeast(1f)
         }
-        val landscapeSheetOffset = remember(landscapePlayerCollapsedOffset) {
-            Animatable(landscapePlayerCollapsedOffset)
+        val landscapeSheetOffset = remember(
+            isLandscape,
+            landscapePlayerCollapsedOffset
+        ) {
+            Animatable(
+                if (isLandscape && isFullPlayerOpen) {
+                    0f
+                } else {
+                    landscapePlayerCollapsedOffset
+                }
+            )
         }
-        val landscapeExpansionProgress = remember { Animatable(0f) }
+        val landscapeExpansionProgress = remember(isLandscape) {
+            Animatable(if (isLandscape && isFullPlayerOpen) 1f else 0f)
+        }
 
         fun applyLandscapeDrag(delta: Float) {
             scope.launch {
@@ -917,6 +939,7 @@ fun MainScreen(
                     } else {
                         0f
                     }
+                    isFullPlayerOpen = target == 1f
                     landscapeExpansionProgress.animateTo(
                         target,
                         animationSpec = if (target == 0f) {
@@ -937,6 +960,9 @@ fun MainScreen(
                     } else {
                         landscapePlayerCollapsedOffset
                     }
+                    // A compact landscape card has no portrait counterpart. Only the
+                    // fully expanded landscape state maps to the portrait sheet.
+                    isFullPlayerOpen = false
                     landscapeSheetOffset.animateTo(
                         target,
                         animationSpec = if (target == 0f) {
@@ -959,12 +985,16 @@ fun MainScreen(
         }
 
         LaunchedEffect(nowPlaying) {
-            if (nowPlaying == null) {
+            if (nowPlaying != null) {
+                hasObservedPlayback = true
+            } else if (hasObservedPlayback) {
+                isFullPlayerOpen = false
                 landscapeExpansionProgress.snapTo(0f)
                 landscapeSheetOffset.animateTo(
                     landscapePlayerCollapsedOffset,
                     animationSpec = tween(300)
                 )
+                sheetOffset.animateTo(collapsedOffset, animationSpec = tween(300))
             }
         }
         BackHandler(
@@ -972,6 +1002,7 @@ fun MainScreen(
                 (landscapeExpansionProgress.value > 0f || isLandscapePlayerOpen)
         ) {
             scope.launch {
+                isFullPlayerOpen = false
                 if (landscapeExpansionProgress.value > 0f) {
                     landscapeExpansionProgress.animateTo(
                         0f,
@@ -1156,6 +1187,7 @@ fun MainScreen(
                     db = db,
                     isExpanded = isSheetOpen,
                     onCollapse = {
+                        isFullPlayerOpen = false
                         scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
                     }
                 )
@@ -1554,6 +1586,7 @@ fun MainScreen(
                         db = db,
                         isExpanded = isLandscapePlayerOpen,
                         onCollapse = {
+                            isFullPlayerOpen = false
                             scope.launch {
                                 if (landscapeExpansionProgress.value > 0f) {
                                     landscapeExpansionProgress.animateTo(
@@ -1577,6 +1610,7 @@ fun MainScreen(
                             fullscreenSize = landscapeFullscreenSize
                         ),
                         onEnterFullscreen = {
+                            isFullPlayerOpen = true
                             scope.launch {
                                 if (landscapeSheetOffset.value > 0f) {
                                     landscapeSheetOffset.animateTo(
@@ -1688,6 +1722,7 @@ fun MainScreen(
                             LandscapeMiniPlayer(
                                 musicController = musicController,
                                 onClick = {
+                                    isFullPlayerOpen = false
                                     scope.launch {
                                         landscapeSheetOffset.animateTo(
                                             0f,
@@ -1725,6 +1760,7 @@ fun MainScreen(
                 MiniPlayer(
                     musicController = musicController,
                     onClick = {
+                        isFullPlayerOpen = true
                         scope.launch { sheetOffset.animateTo(0f, tween(300)) }
                     }
                 )

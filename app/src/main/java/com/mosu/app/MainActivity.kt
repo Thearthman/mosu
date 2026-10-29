@@ -12,12 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -46,10 +41,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -60,16 +52,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.mosu.app.ui.player.FullPlayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Home
@@ -95,8 +84,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -146,6 +133,7 @@ import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
 import com.mosu.app.ui.components.LandscapeMiniPlayer
 import com.mosu.app.ui.components.LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP
+import com.mosu.app.ui.components.LibrarySearchBar
 import com.mosu.app.ui.player.LandscapePlayerDragPosition
 import com.mosu.app.ui.player.LandscapePlayerMorph
 import com.mosu.app.ui.player.advanceLandscapePlayerDrag
@@ -175,7 +163,8 @@ private const val LANDSCAPE_PLAYER_HEIGHT_FRACTION = 0.75f
 private const val LANDSCAPE_MINI_PLAYER_WIDTH_DP = 72
 private const val LANDSCAPE_MINI_PLAYER_BACKGROUND_BLEED_DP = 100
 private const val LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT = 2f / 3f
-private const val LANDSCAPE_SEARCH_BAR_HEIGHT_DP = 48
+private const val LANDSCAPE_SEARCH_BAR_SIZE_DP = 50
+private const val LANDSCAPE_SEARCH_BAR_EXPANDED_WIDTH_DP = 440
 private const val LANDSCAPE_EXPANSION_DRAG_GAIN = 1.2f
 private val CompactPlayerSnapSpec = spring<Float>(
     dampingRatio = 0.85f,
@@ -508,60 +497,6 @@ private fun LandscapeDockTitle(
 }
 
 @Composable
-private fun LandscapeLibrarySearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    focusRequester: FocusRequester
-) {
-    TextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = modifier
-            .widthIn(min = 220.dp, max = 440.dp)
-            .height(LANDSCAPE_SEARCH_BAR_HEIGHT_DP.dp)
-            .focusRequester(focusRequester),
-        placeholder = {
-            Text(
-                text = stringResource(R.string.library_search_placeholder),
-                style = MaterialTheme.typography.bodyMedium
-            )
-        },
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null
-            )
-        },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(
-                    onClick = { onQueryChange("") },
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Clear,
-                        contentDescription = stringResource(R.string.search_cd_clear),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = {}),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent
-        ),
-        shape = RoundedCornerShape(12.dp)
-    )
-}
-
-@Composable
 private fun SpaceEvenlyNavigationItem(
     selected: Boolean,
     onClick: () -> Unit,
@@ -629,7 +564,6 @@ fun MainScreen(
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
 
     // Configure API authentication for automatic token refresh
     // Do this synchronously to ensure it's set up before any API calls
@@ -848,20 +782,6 @@ fun MainScreen(
         var playlistImportRequest by remember { mutableStateOf(0) }
         var searchTaskViewRequest by remember { mutableStateOf(0) }
         var scoreRefreshRequest by remember { mutableStateOf(0) }
-        val landscapeLibrarySearchVisible =
-            currentRoute == "library" &&
-                (librarySearchExpanded || librarySearchQuery.isNotEmpty())
-
-        LaunchedEffect(
-            isLandscape,
-            currentRoute,
-            librarySearchExpanded
-        ) {
-            if (isLandscape && currentRoute == "library" && librarySearchExpanded) {
-                delay(50)
-                runCatching { librarySearchFocusRequester.requestFocus() }
-            }
-        }
         LaunchedEffect(isLandscape, currentRoute) {
             if (!isLandscape || currentRoute != "library") {
                 librarySearchExpanded = false
@@ -1484,65 +1404,32 @@ fun MainScreen(
                             .fillMaxWidth()
                             .height(landscapeActionSlotHeight)
                     )
-                    if (currentRoute == "library") {
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(
-                                    top = (
-                                        (landscapeActionSlotHeight -
-                                            LANDSCAPE_SEARCH_BAR_HEIGHT_DP.dp) / 2
-                                        ).coerceAtLeast(0.dp),
-                                    end = (
-                                        LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp - 40.dp
-                                        ) / 2
-                                )
-                                .zIndex(2f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AnimatedVisibility(
-                                visible = landscapeLibrarySearchVisible,
-                                enter = expandHorizontally(
-                                    expandFrom = Alignment.End,
-                                    animationSpec = tween(220)
-                                ) + fadeIn(tween(120)),
-                                exit = shrinkHorizontally(
-                                    shrinkTowards = Alignment.End,
-                                    animationSpec = tween(180)
-                                ) + fadeOut(tween(100)),
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                LandscapeLibrarySearchBar(
-                                    query = librarySearchQuery,
-                                    onQueryChange = {
-                                        librarySearchQuery = it
-                                        if (it.isNotEmpty()) {
-                                            librarySearchExpanded = true
-                                        }
-                                    },
-                                    focusRequester = librarySearchFocusRequester
-                                )
-                            }
-                            LandscapeSidebarIconButton(
-                                onClick = {
-                                    if (
-                                        librarySearchExpanded &&
-                                        librarySearchQuery.isEmpty()
-                                    ) {
-                                        librarySearchExpanded = false
-                                        focusManager.clearFocus()
-                                    } else {
-                                        librarySearchExpanded = true
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = stringResource(R.string.search_cd_search)
-                                )
-                            }
-                        }
-                    }
+                }
+                // Keep the search bar outside the 72dp action rail so it can measure
+                // beyond that rail and expand leftward from the slot.
+                if (currentRoute == "library") {
+                    LibrarySearchBar(
+                        query = librarySearchQuery,
+                        onQueryChange = { librarySearchQuery = it },
+                        expanded = librarySearchExpanded,
+                        onExpandedChange = { librarySearchExpanded = it },
+                        expandedWidth = LANDSCAPE_SEARCH_BAR_EXPANDED_WIDTH_DP.dp,
+                        focusRequester = librarySearchFocusRequester,
+                        collapsedWidth = LANDSCAPE_SEARCH_BAR_SIZE_DP.dp,
+                        height = LANDSCAPE_SEARCH_BAR_SIZE_DP.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(
+                                top = (
+                                    (landscapeActionSlotHeight -
+                                        LANDSCAPE_SEARCH_BAR_SIZE_DP.dp) / 2
+                                    ).coerceAtLeast(0.dp),
+                                end = (
+                                    LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp -
+                                        LANDSCAPE_SEARCH_BAR_SIZE_DP.dp
+                                    ) / 2
+                            )
+                    )
                 }
 
                 Box(

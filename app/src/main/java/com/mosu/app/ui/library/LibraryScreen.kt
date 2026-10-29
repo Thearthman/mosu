@@ -1,34 +1,24 @@
 package com.mosu.app.ui.library
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,14 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -77,6 +63,7 @@ import com.mosu.app.ui.components.GenreFilter
 import com.mosu.app.ui.components.GenreRail
 import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
+import com.mosu.app.ui.components.LibrarySearchBar
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.beatmapSetList
@@ -87,7 +74,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Modifier
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LibraryScreen(
     db: AppDatabase,
@@ -199,18 +185,7 @@ fun LibraryScreen(
     // Search State
     var isSearchExpanded by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
     val effectiveSearchQuery = librarySearchQuery
-
-    // Monitor keyboard visibility - collapse when keyboard is hidden and no search text
-    val isKeyboardVisible = WindowInsets.isImeVisible
-
-    LaunchedEffect(isKeyboardVisible, librarySearchQuery) {
-        if (!isLandscape && !isKeyboardVisible && librarySearchQuery.isEmpty() && isSearchExpanded) {
-            isSearchExpanded = false
-            focusManager.clearFocus()
-        }
-    }
 
     // Filter maps by selected genre and search query
     val filteredMaps = remember(
@@ -492,17 +467,7 @@ fun LibraryScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                 ) {
-                // Animated width for collapsible search bar
                 val expandedSearchBarWidth = (maxWidth - titleWidth).coerceAtLeast(50.dp)
-                val searchBarWidth by animateDpAsState(
-                    targetValue = if (isSearchExpanded || librarySearchQuery.isNotEmpty()) {
-                        expandedSearchBarWidth
-                    } else {
-                        50.dp
-                    },
-                    animationSpec = tween(durationMillis = 300),
-                    label = "searchBarWidth"
-                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -516,109 +481,14 @@ fun LibraryScreen(
                             .padding(top = 16.dp, bottom = 16.dp)
                     )
 
-                    // In landscape the collapsed search action lives above the player rail.
-                    if (!isLandscape || isSearchExpanded || librarySearchQuery.isNotEmpty()) {
-                        Box(
-                        modifier = Modifier
-                            .width(searchBarWidth)
-                            .height(50.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .focusRequester(searchFocusRequester)
-                            .onFocusChanged { focusState ->
-                                if (focusState.isFocused) {
-                                    isSearchExpanded = true
-                                }
-                            }
-                        ) {
-                        // Search icon (fades/disappears based on width)
-                        if (searchBarWidth < 120.dp) {
-                            val iconAlpha = 1f - ((searchBarWidth - 50.dp) / (120.dp - 50.dp)).coerceIn(0f, 1f)
-
-                            IconButton(
-                                onClick = {
-                                    if (!isSearchExpanded) {
-                                        isSearchExpanded = true
-                                        searchFocusRequester.requestFocus()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = "Open search",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = iconAlpha)
-                                )
-                            }
-                        }
-
-                        // Text field content with dynamic positioning
-                        BasicTextField(
-                            value = librarySearchQuery,
-                            onValueChange = {
-                                onLibrarySearchQueryChange(it)
-                                // Keep expanded when there's text
-                                if (it.isNotEmpty()) {
-                                    isSearchExpanded = true
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(
-                                    start = if (searchBarWidth >= 120.dp) 18.dp else 10.dp, // More space when icon hidden
-                                    end = 30.dp,  // Space for clear button
-                                    bottom = 1.dp
-                                ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(
-                                onSearch = {
-                                    // Search is already triggered by the filtering logic
-                                }
-                            ),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            decorationBox = { innerTextField ->
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    if (librarySearchQuery.isEmpty() && searchBarWidth >= 125.dp) {
-                                        Text(
-                                            text = stringResource(id = R.string.library_search_placeholder),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    innerTextField()
-                                }
-                            }
-                        )
-
-                        // Clear button
-                        if (librarySearchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { onLibrarySearchQueryChange("") },
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .padding(end = 10.dp)
-                                    .size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Clear,
-                                    contentDescription = stringResource(id = R.string.search_cd_clear),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                        }
-                    }
+                    LibrarySearchBar(
+                        query = librarySearchQuery,
+                        onQueryChange = onLibrarySearchQueryChange,
+                        expanded = isSearchExpanded,
+                        onExpandedChange = { isSearchExpanded = it },
+                        expandedWidth = expandedSearchBarWidth,
+                        focusRequester = searchFocusRequester
+                    )
                 }
             }
             }

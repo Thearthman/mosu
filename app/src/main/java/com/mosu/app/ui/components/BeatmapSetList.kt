@@ -61,7 +61,7 @@ fun LazyListScope.beatmapSetList(
                         backgroundBrush = brush
                     )
                     if (config.showDividers) {
-                        HorizontalDivider(modifier = Modifier.padding(start = 64.dp, end = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(start = 76.dp, end = 16.dp))
                     }
                 }
             }
@@ -144,7 +144,7 @@ fun LazyListScope.beatmapSetList(
                         )
                     }
                     if (config.showDividers) {
-                        HorizontalDivider(modifier = Modifier.padding(start = 64.dp, end = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(start = 76.dp, end = 16.dp))
                     }
                 }
             }

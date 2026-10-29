@@ -39,7 +39,7 @@
     <string name="library_track_count">%1$d 首曲目</string>
 
     <!-- 播放清單介面 -->
-    <string name="playlist_title">播放清單</string>
+    <string name="playlist_title">歌單</string>
     <string name="playlist_empty_state">尚無播放清單。點擊 + 建立一個。</string>
     <string name="playlist_default_name">播放清單</string>
     <string name="playlist_song_count_suffix">首歌曲</string>

@@ -3,10 +3,9 @@
 
 ### Bugs
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
-- [ ] Debug .osu file backfill may stuck at "queued, waiting for network or background worker to start"
-- [ ] In landscape view, the full play's play control components will stretch to fill full width during the miliseconds it takes for renderer to show.
+- [x] Debug .osu file backfill may stuck at "queued, waiting for network or background worker to start"
+- [x] In landscape view, the full play's play control components will stretch to fill full width during the miliseconds it takes for renderer to show.
 - [ ] Current beatmapset data parsing structure struggle to handle when a beatmapset contains difficulties of different modes.
-- [ ] The search button in the Library screen is not working.
 - [x] Seeking forward in full-player will still have a chance of causing renderer poorly synced with audio. Look into the seek sync implementation, compare to pause and play because the later works fine. it might have something to do with how we implemented the audio side of the seek as well.
 
 ### UIUX
@@ -50,7 +49,7 @@
 - [ ] [v1.3] Add beatmap skin import option.
 - [ ] [v1.3] Add slider ticks and inter-object follow points to the Full Player renderer.
 - [ ] [v1.3] Add replay parsing and cursor rendering using the existing `ReplayInput` extension point.
-- [ ] [v1.2] Add support for other three modes in renderer
+- [ ] [v1.2] Add support for other three modes in renderer (mania: https://github.com/HecticKiwi/Web-Osu-Mania)
 - [ ] [v1.2] Add general/skin hit-sound support
 - [ ] [v1.2] Add beatmap hit-sound support
 - [ ] [v1.2] Add per beatmapid local hit-sound offset for individual diffs. Require persistent storage, maybe in a new table
@@ -202,6 +201,7 @@
 - [x] Account deletion in the account manager now snaps the slider back and shows a warning confirmation before removing the account from the UI and storage.
 
 ### Bug Fixes
+- [x] Fixed the Library landscape search button and matched the portrait expand/collapse animation, including IME and back-gesture dismissal.
 - [x] Fixed delete swipe red background persisting after removing a non-bottom item.
 - [x] Fixed Search `Load More` button disappearing after quick navigation.
 - [x] Fixed cached Search results when clearing text with "Only songs with Leaderboard" disabled.

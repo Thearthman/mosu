@@ -1,6 +1,7 @@
 package com.mosu.app.domain.model
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import com.mosu.app.R
 import androidx.compose.ui.graphics.Color as ComposeColor
 import com.mosu.app.data.api.model.BeatmapsetCompact
@@ -37,32 +38,45 @@ fun modeLabel(mode: String): String {
     }
 }
 
+private data class StarRatingColorAnchor(
+    val stars: Float,
+    val color: Color
+)
+
+private val starRatingColorAnchors = listOf(
+    StarRatingColorAnchor(0.0f, Color(0xFF4FC0FF)), // Light Blue
+    StarRatingColorAnchor(1.5f, Color(0xFF4FFFD5)), // Light Green/Teal
+    StarRatingColorAnchor(2.0f, Color(0xFF7CFF4F)), // Green
+    StarRatingColorAnchor(2.5f, Color(0xFFF6F05C)), // Yellow
+    StarRatingColorAnchor(3.25f, Color(0xFFFF8068)), // Orange/Red
+    StarRatingColorAnchor(4.5f, Color(0xFFFF3C71)), // Pink/Red
+    StarRatingColorAnchor(6.0f, Color(0xFF6563DE)), // Purple
+    StarRatingColorAnchor(7.0f, Color(0xFF18158E)), // Dark Blue
+    StarRatingColorAnchor(8.0f, Color(0xFF000000)) // Black
+)
+
 fun getStarRatingColor(stars: Float): Color {
-    return when {
-        stars < 1.5f -> Color(0xFF4FC0FF) // Light Blue - 1.50* and below
-        stars < 2.0f -> Color(0xFF4FFFD5) // Light Green/Teal - 2.00*
-        stars < 2.5f -> Color(0xFF7CFF4F) // Green - 2.50*
-        stars < 3.25f -> Color(0xFFF6F05C) // Yellow - 3.25*
-        stars < 4.5f -> Color(0xFFFF8068) // Orange/Red - 4.50*
-        stars < 6.0f -> Color(0xFFFF3C71) // Pink/Red - 6.00*
-        stars < 7.0f -> Color(0xFF6563DE) // Purple - 7.00*
-        stars < 8.0f -> Color(0xFF18158E) // Dark Blue - right below 8.00*
-        else -> Color(0xFF000000) // Black - 8.00* and above
+    if (stars.isNaN()) return Color(0xFF000000)
+
+    val firstAnchor = starRatingColorAnchors.first()
+    val lastAnchor = starRatingColorAnchors.last()
+    if (stars <= firstAnchor.stars) return firstAnchor.color
+    if (stars >= lastAnchor.stars) return lastAnchor.color
+
+    for (index in 0 until starRatingColorAnchors.lastIndex) {
+        val start = starRatingColorAnchors[index]
+        val end = starRatingColorAnchors[index + 1]
+        if (stars <= end.stars) {
+            val fraction = (stars - start.stars) / (end.stars - start.stars)
+            return lerp(start.color, end.color, fraction)
+        }
     }
+
+    return lastAnchor.color
 }
 
 fun getStarRatingColors(): List<Color> {
-    return listOf(
-        Color(0xFF4FC0FF), // < 1.5★: Light Blue
-        Color(0xFF4FFFD5), // 1.5-2.0★: Light Green/Teal
-        Color(0xFF7CFF4F), // 2.0-2.5★: Green
-        Color(0xFFF6F05C), // 2.5-3.25★: Yellow
-        Color(0xFFFF8068), // 3.25-4.5★: Orange/Red
-        Color(0xFFFF3C71), // 4.5-6.0★: Pink/Red
-        Color(0xFF6563DE), // 6.0-7.0★: Purple
-        Color(0xFF18158E), // 7.0-8.0★: Dark Blue
-        Color(0xFF000000)  // 8.0★+: Black
-    )
+    return starRatingColorAnchors.map { it.color }
 }
 
 fun getGradientColorsForRange(minStars: Float, maxStars: Float): List<Color> {

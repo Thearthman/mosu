@@ -57,6 +57,9 @@ class TrackService {
 
             // Remove from preserved list if no more tracks from this set remain
             val remainingTracks = db.beatmapDao().getTracksForSet(track.beatmapSetId)
+            remainingAlbumTrackToConvert(remainingTracks)?.let { remainingTrack ->
+                db.beatmapDao().markAsSong(remainingTrack.uid)
+            }
             if (remainingTracks.isEmpty()) {
                 db.preservedBeatmapSetIdDao().deletePreservedSetId(track.beatmapSetId)
                 db.beatmapStarRatingDao().deleteForSet(track.beatmapSetId)
@@ -124,3 +127,11 @@ class TrackService {
         }
     }
 }
+
+/**
+ * An album becomes a song when deleting one of its tracks leaves a single track.
+ * Only the remaining track from the affected set is considered.
+ */
+internal fun remainingAlbumTrackToConvert(
+    remainingTracks: List<BeatmapEntity>
+): BeatmapEntity? = remainingTracks.singleOrNull()?.takeIf { it.isAlbum }

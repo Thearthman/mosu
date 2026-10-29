@@ -255,7 +255,10 @@ fun LibraryScreen(
     val beatmapSets = remember(groupedMaps, expandedBeatmapSets, downloadTasks) {
         groupedMaps.map { (setId, tracks) ->
             val first = tracks.first()
-            val isAlbumSet = tracks.any { it.isAlbum }
+            // Pending swipe deletions are already removed from filteredMaps. Derive
+            // album presentation from the tracks still visible so deleting an
+            // album track immediately previews a single remaining track as a song.
+            val isAlbumSet = tracks.size > 1
             val task = downloadTasks[setId]
             
             val showProgress = task != null && 
@@ -372,7 +375,7 @@ fun LibraryScreen(
         if (match != null) {
             scope.launch {
                 // 1. If it's a track in an album, ensure album is expanded first
-                val isAlbumTrack = groupedMaps[match.beatmapSetId]?.any { it.isAlbum } == true
+                val isAlbumTrack = (groupedMaps[match.beatmapSetId]?.size ?: 0) > 1
                 if (isAlbumTrack) {
                     expandedBeatmapSets = expandedBeatmapSets + match.beatmapSetId
                     highlightTrackId = match.uid

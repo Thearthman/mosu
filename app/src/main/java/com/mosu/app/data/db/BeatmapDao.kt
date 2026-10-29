@@ -55,6 +55,9 @@ interface BeatmapDao {
     @Delete
     suspend fun deleteBeatmap(beatmap: BeatmapEntity)
 
+    @Query("UPDATE beatmaps SET isAlbum = 0 WHERE uid = :uid")
+    suspend fun markAsSong(uid: Long)
+
     @Query("DELETE FROM beatmaps WHERE beatmapSetId = :setId")
     suspend fun deleteBeatmapSet(setId: Long)
 

@@ -94,8 +94,8 @@ fun BeatmapSetHeaderItem(
             model = MediaPathUtils.asImageModel(album.coverPath, album.coverUrl),
             contentDescription = null,
             modifier = Modifier
-                .size(44.dp) // Adjusted for 60dp
-                .clip(RoundedCornerShape(4.dp)),
+                .size(48.dp)
+                .clip(RoundedCornerShape(6.dp)),
             contentScale = ContentScale.Crop
         )
 

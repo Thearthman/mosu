@@ -28,7 +28,7 @@
 - [ ] [v1.2] Add the homepage widget
 - [ ] [v1.2] Add import to Mosu option for downloaded .osz file.
 - [ ] [v1.2] Add general offset tuning for hit-sound
-- [ ] [v1.2] albums that have only one diff left(through deletion of diffs) should be convered into songs.
+- [x] [v1.2] albums that have only one diff left(through deletion of diffs) should be convered into songs.
 
 #### Settings
 - [ ] [v1.4] Add a display toggle for native-language (Unicode) beatmap titles/artists. Both are already stored in the DB (`titleUnicode`/`artistUnicode`); romaji is shown for now as the osu! standard. (Stage 5 of the beatmap-metadata source-of-truth rework.)

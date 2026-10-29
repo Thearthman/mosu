@@ -56,11 +56,10 @@ fun BeatmapSetItem(
     contentPadding: PaddingValues? = null
 ) {
     val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
-    val finalBackgroundModifier = if (backgroundBrush != null) {
-        Modifier.background(backgroundBrush)
-    } else {
-        Modifier.background(if (highlight) flickerColor else backgroundColor)
-    }
+    val baseBackgroundColor = if (highlight && backgroundBrush == null) flickerColor else backgroundColor
+    val finalBackgroundModifier = Modifier
+        .background(baseBackgroundColor)
+        .then(backgroundBrush?.let { Modifier.background(it) } ?: Modifier)
     val score = set.score
     val resolvedContentPadding = contentPadding ?: if (set.ranking != null) {
         PaddingValues(start = 0.dp, end = 8.dp)

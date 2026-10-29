@@ -181,11 +181,10 @@ fun BeatmapSetSwipeItem(
         null -> Alignment.CenterEnd
     }
 
-    val finalBackgroundModifier = if (backgroundBrush != null) {
-        Modifier.background(backgroundBrush)
-    } else {
-        Modifier.background(if (highlight) flickerColor else backgroundColor)
-    }
+    val baseBackgroundColor = if (highlight && backgroundBrush == null) flickerColor else backgroundColor
+    val finalBackgroundModifier = Modifier
+        .background(baseBackgroundColor)
+        .then(backgroundBrush?.let { Modifier.background(it) } ?: Modifier)
 
     Box(
         modifier = Modifier.onSizeChanged { rowWidthPx = it.width.toFloat() }

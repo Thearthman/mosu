@@ -1147,7 +1147,7 @@ fun SearchScreen(
                                                 onSwipeRight = { openPlaylistDialog(setData) }
                                             ),
                                             backgroundBrush = previewBrush,
-                                            backgroundColor = Color.Transparent,
+                                            backgroundColor = MaterialTheme.colorScheme.surface,
                                             startToEndIcon = Icons.Default.Add,
                                             endToStartIcon = Icons.Default.Delete,
                                             snackbarHostState = snackbarHostState,
@@ -1158,7 +1158,7 @@ fun SearchScreen(
                                                 actions = recentActions,
                                                 highlight = highlight,
                                                 backgroundBrush = previewBrush,
-                                                backgroundColor = Color.Transparent
+                                                backgroundColor = MaterialTheme.colorScheme.surface
                                             )
                                         }
                                     } else {
@@ -1167,7 +1167,7 @@ fun SearchScreen(
                                             actions = recentActions,
                                             highlight = highlight,
                                             backgroundBrush = previewBrush,
-                                            backgroundColor = Color.Transparent
+                                            backgroundColor = MaterialTheme.colorScheme.surface
                                         )
                                     }
                                 }

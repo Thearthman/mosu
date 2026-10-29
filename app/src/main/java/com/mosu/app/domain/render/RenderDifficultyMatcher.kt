@@ -3,42 +3,52 @@ package com.mosu.app.domain.render
 import java.util.Locale
 
 /**
- * Selects the preview difficulty group belonging to the currently playing
- * audio. Maps are grouped by their normalized `.osu` AudioFilename, never by
- * `isAlbum` or difficulty-name heuristics.
+ * Selects the difficulty group belonging to the currently playing audio. Maps
+ * are grouped by normalized `.osu` AudioFilename, never by `isAlbum` or
+ * difficulty-name heuristics.
  */
-object OsuDifficultyMatcher {
+object RenderDifficultyMatcher {
     fun selectCatalog(
-        maps: List<OsuDifficultyMap>,
+        maps: List<RenderDifficulty>,
         beatmapSetId: Long,
         defaultDifficultyName: String,
+        supportedModes: Set<RenderMode>,
         playedAudioFilename: String? = null
-    ): OsuPreviewCatalog? {
+    ): RenderCatalog? {
+        if (supportedModes.isEmpty()) return null
+
         val setMaps = maps
             .filter { it.beatmapSetId == beatmapSetId }
             .distinctBy { it.path }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.difficultyName })
+            .sortedWith(
+                compareBy(String.CASE_INSENSITIVE_ORDER) { difficulty: RenderDifficulty ->
+                    difficulty.difficultyName
+                }
+                    .thenBy { it.mode.osuMode }
+                    .thenBy { it.path }
+            )
         if (setMaps.isEmpty()) return null
 
         // A library row may represent a non-standard difficulty. Resolve that
         // row to its audio group before dropping unsupported rulesets so a
-        // mixed-mode set cannot make the standard catalog ambiguous.
+        // mixed-mode set cannot make the renderable catalog ambiguous.
         val entityAudioFilename = setMaps
             .asSequence()
             .filter { it.difficultyName == defaultDifficultyName }
-            .map { OsuBeatmapParser.normalizeAudioFilename(it.audioFilename) }
+            .map { OsuFileHeaderReader.normalizeAudioFilename(it.audioFilename) }
             .distinct()
             .singleOrNull()
 
-        val standardMaps = setMaps.filter { it.mode == 0 }
-        if (standardMaps.isEmpty()) return null
+        val renderableMaps = setMaps.filter { it.mode in supportedModes }
+        if (renderableMaps.isEmpty()) return null
 
-        val groups = standardMaps
-            .groupBy { OsuBeatmapParser.normalizeAudioFilename(it.audioFilename) }
+        val groups = renderableMaps
+            .groupBy { OsuFileHeaderReader.normalizeAudioFilename(it.audioFilename) }
             .toSortedMap()
         val playedAudio = playedAudioFilename
             ?.takeIf { it.isNotBlank() }
-            ?.let(OsuBeatmapParser::normalizeAudioFilename)
+            ?.let(OsuFileHeaderReader::normalizeAudioFilename)
+        if (entityAudioFilename != null && entityAudioFilename !in groups) return null
         val entityAudio = entityAudioFilename?.let { filename ->
             groups[filename]?.let { filename to it }
         }
@@ -64,20 +74,22 @@ object OsuDifficultyMatcher {
         val (selectedAudioFilename, selectedMaps) = selected
         val difficulties = selectedMaps
             .sortedWith(
-                compareBy(String.CASE_INSENSITIVE_ORDER) { difficulty: OsuDifficultyMap ->
+                compareBy(String.CASE_INSENSITIVE_ORDER) { difficulty: RenderDifficulty ->
                     difficulty.difficultyName
-                }.thenBy { it.path }
+                }
+                    .thenBy { it.mode.osuMode }
+                    .thenBy { it.path }
             )
             .distinctBy { it.mode to normalizeDifficultyName(it.difficultyName) }
         if (difficulties.isEmpty()) return null
 
-        return OsuPreviewCatalog(
+        return RenderCatalog(
             beatmapSetId = beatmapSetId,
             audioFilename = selectedAudioFilename,
             difficulties = difficulties,
-            defaultDifficultyName = difficulties.firstOrNull {
+            defaultDifficultyKey = difficulties.firstOrNull {
                 it.difficultyName == defaultDifficultyName
-            }?.difficultyName ?: difficulties.first().difficultyName
+            }?.key ?: difficulties.first().key
         )
     }
 

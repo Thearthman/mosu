@@ -190,9 +190,55 @@ restore-after-reinstall work even when local audio is unreadable.
 | `.../domain/download/` | Mirror downloader, zip/.osu extraction, download service/worker/manager. |
 | `.../domain/restore/RestoreDownloadsService.kt` | Enqueue missing preserved sets. |
 | `.../domain/search/BeatmapSearchService.kt` | Search merge/dedupe/filter + genre list. |
+| `.../domain/render/` | Ruleset-neutral renderer contracts, discovery, matching, cache, and the standard-only renderer implementation. |
 | `.../ui/` | Compose screens (`library`, `player`, `playlist`, `profile`, `score`, `search`, `components`, `theme`). Settings live at the **bottom of the Profile tab** (no separate settings screen). |
 | `.../player/` | Media3 playback. |
 | `.../utils/` | `RegionUtils` (mirror region preference) etc. |
+
+## Renderer architecture (standard implemented; other modes TBD)
+
+Only osu!standard has a parser/compiler/renderer today. Taiko, catch, and mania
+are intentionally **not implemented and have no visible UI stubs**; the neutral
+contracts exist so adding them does not require reworking Full Player,
+discovery, or preference persistence.
+
+| Piece | File | Contract |
+|-------|------|----------|
+| Ruleset/mode | `domain/render/RenderContracts.kt` | `RenderMode` maps the four osu! modes (`0..3`) to stable app-level modes. |
+| Difficulty identity | `domain/render/RenderContracts.kt` | `RenderDifficultyKey(mode, difficultyName)` encodes as `v1:<osuMode>:<difficultyName>`. Decoding splits on the first colon, so names may contain colons. |
+| Catalog | `domain/render/RenderContracts.kt` | `RenderCatalog` owns the set/audio selection key and resolves encoded preferences first, then a unique legacy name-only value, then the catalog default. |
+| Discovery | `domain/render/RenderCatalogLoader.kt` | Scans headers ruleset-agnostically through `OsuFileHeaderCache`; constructs `RenderDifficulty` values for every known mode. |
+| Matching | `domain/render/RenderDifficultyMatcher.kt` | Selects the audio group using all scanned modes, then filters to `RendererRegistry.supportedModes`, deduplicates by `(mode, normalized difficulty name)`, and rejects sets with no renderable map. |
+| Registry | `domain/render/RendererRegistry.kt` | Enforces one renderer per mode and exposes failure-safe preparation. `RendererRegistry.default()` currently registers only `OSU`. |
+| Standard renderer | `domain/render/osu/OsuStandardBeatmapRenderer.kt` | Adapter that prepares the existing standard timeline/skin and forwards neutral frames to `OsuRenderer`. |
+
+### Renderer API lifecycle
+
+`RendererRegistry.prepare` invokes `BeatmapRenderer.prepare(context, difficulty)`
+on `Dispatchers.IO`; renderers may perform file/asset I/O there. Preparation
+returns a `PreparedRender` or `null` on failure, and the registry also converts
+thrown failures and prepared-mode mismatches into the cover fallback without
+swallowing coroutine cancellation. `PreparedRender.draw(canvas, RenderFrame)` is
+the frame-loop entry point: it must be pure with respect to `RenderFrame` and
+must not perform I/O. `PreparedRender.close()` releases renderer-owned resources
+and is called when the media/selection changes or the player leaves composition.
+
+Full Player passes only neutral catalog/difficulty/key, `PreparedRender`, and
+the selected renderer's `preferredAspectRatio` into its layouts. The selection
+preference remains a string: new writes use `RenderDifficultyKey.encode()`, while
+legacy name-only values remain readable when unambiguous.
+
+### Adding a future ruleset
+
+1. Implement that mode's parser/compiler and `BeatmapRenderer` under
+   `domain/render/<mode>/`; return a `PreparedRender` whose `mode` matches.
+2. Declare the renderer's content aspect ratio with `preferredAspectRatio`.
+3. Register the renderer exactly once in `RendererRegistry.default()`.
+4. Add mode-specific unit tests for its parser/compiler/renderer.
+
+Discovery, matching, Full Player orchestration, aspect selection, and preference
+persistence should need no mode-specific changes. **TBD:** taiko, catch, and
+mania parsing, compilation, rendering, and runtime registration.
 
 ## Heuristics
 

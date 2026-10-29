@@ -339,19 +339,6 @@ data class OsuRenderTimeline(
     }
 }
 
-data class ReplayPosition(val x: Float, val y: Float)
-
-data class ReplayFrame(
-    val timeMs: Long,
-    val position: ReplayPosition,
-    val buttons: Int
-)
-
-/** Extension point only; v1.2 deliberately does not render replay input. */
-fun interface ReplayInput {
-    fun sampleAt(timeMs: Long): ReplayFrame?
-}
-
 /** AR → preempt, floored exactly as specified for v1.2. */
 fun approachRateToPreemptMs(approachRate: Float): Double {
     val raw = when {

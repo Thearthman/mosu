@@ -220,11 +220,11 @@ class SettingsManager(private val context: Context) {
         ]
     }
 
-    suspend fun saveSelectedDifficulty(songKey: String, difficultyName: String) {
-        if (songKey.isBlank() || difficultyName.isBlank()) return
+    suspend fun saveSelectedDifficulty(songKey: String, selection: String) {
+        if (songKey.isBlank() || selection.isBlank()) return
         context.settingsDataStore.edit { preferences ->
             preferences[stringPreferencesKey(RENDERER_DIFFICULTY_KEY_PREFIX + songKey)] =
-                difficultyName
+                selection
         }
     }
 

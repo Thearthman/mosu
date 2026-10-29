@@ -106,14 +106,14 @@ import coil.request.SuccessResult
 import com.mosu.app.R
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.db.AppDatabase
-import com.mosu.app.domain.render.OsuDifficultyMap
-import com.mosu.app.domain.render.OsuMapPreviewLoader
-import com.mosu.app.domain.render.OsuPlayfieldSize
-import com.mosu.app.domain.render.OsuPreviewCatalog
-import com.mosu.app.domain.render.OsuRenderTimeline
-import com.mosu.app.domain.render.OsuRenderer
-import com.mosu.app.domain.render.OsuSkin
-import com.mosu.app.domain.render.OsuSkinLoader
+import com.mosu.app.domain.render.PreparedRender
+import com.mosu.app.domain.render.RenderCatalog
+import com.mosu.app.domain.render.RenderCatalogLoader
+import com.mosu.app.domain.render.RenderDifficulty
+import com.mosu.app.domain.render.RenderDifficultyKey
+import com.mosu.app.domain.render.RenderFrame
+import com.mosu.app.domain.render.RenderSurface
+import com.mosu.app.domain.render.RendererRegistry
 import com.mosu.app.domain.rating.BeatmapStarRatingCatalog
 import com.mosu.app.domain.rating.BeatmapStarRatingService
 import com.mosu.app.domain.rating.DifficultyRatingQuery
@@ -308,20 +308,20 @@ private const val SHADOW_COLOR_SAMPLE_SIZE = 48
 private const val SHADOW_MAX_BRIGHTNESS = 0.34f
 private val DefaultPreviewShadowColor = Color(0xFF05050A)
 
-private data class OsuPreviewData(
+private data class RenderPreviewData(
     val mediaId: Long,
-    val catalog: OsuPreviewCatalog,
-    val selectedDifficulty: String,
+    val catalog: RenderCatalog,
+    val selectedDifficultyKey: RenderDifficultyKey,
     val starRatings: BeatmapStarRatingCatalog = BeatmapStarRatingCatalog.Empty,
-    val timeline: OsuRenderTimeline?,
-    val timelineLoadAttempted: Boolean = false
+    val preparedRender: PreparedRender?,
+    val preparationAttempted: Boolean = false
 )
 
-private fun BeatmapStarRatingCatalog.ratingFor(difficulty: OsuDifficultyMap): Float? =
+private fun BeatmapStarRatingCatalog.ratingFor(difficulty: RenderDifficulty): Float? =
     ratingFor(
         DifficultyRatingQuery(
             beatmapId = difficulty.beatmapId,
-            mode = difficulty.mode,
+            mode = difficulty.mode.osuMode,
             difficultyName = difficulty.difficultyName
         )
     )
@@ -413,18 +413,19 @@ fun FullPlayer(
     val preferenceLoaded = rendererPreference != null
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val previewLoader = remember(context, db) { OsuMapPreviewLoader(context, db) }
+    val rendererRegistry = remember { RendererRegistry.default() }
+    val catalogLoader = remember(context, db, rendererRegistry) {
+        RenderCatalogLoader(context, db, rendererRegistry.supportedModes)
+    }
     val ratingService = remember(db) { BeatmapStarRatingService(db) }
-    var previewData by remember { mutableStateOf<OsuPreviewData?>(null) }
+    var previewData by remember { mutableStateOf<RenderPreviewData?>(null) }
     var catalogUnavailableMediaId by remember { mutableStateOf<Long?>(null) }
-    var skin by remember { mutableStateOf<OsuSkin?>(null) }
-    var skinLoadAttempted by remember { mutableStateOf(false) }
 
     LaunchedEffect(
         preferenceLoaded,
         rendererEnabled,
         currentMediaId,
-        previewLoader,
+        catalogLoader,
         ratingService
     ) {
         val mediaId = currentMediaId
@@ -435,29 +436,29 @@ fun FullPlayer(
         if (previewData?.mediaId != mediaId) previewData = null
         catalogUnavailableMediaId = null
         val catalog = existing?.catalog
-            ?: previewLoader.loadCatalog(mediaId)
+            ?: catalogLoader.loadCatalog(mediaId)
             ?: run {
                 if (currentMediaId == mediaId) catalogUnavailableMediaId = mediaId
                 return@LaunchedEffect
             }
         val cachedRatings = ratingService.getCachedRatings(catalog.beatmapSetId)
-        val selectedDifficulty = existing?.selectedDifficulty
+        val selectedDifficultyKey = existing?.selectedDifficultyKey
             ?: catalog.resolveSavedDifficulty(
                 settingsManager.getSelectedDifficulty(catalog.selectionKey)
             )
-        previewData = OsuPreviewData(
+        previewData = RenderPreviewData(
             mediaId = mediaId,
             catalog = catalog,
-            selectedDifficulty = selectedDifficulty,
+            selectedDifficultyKey = selectedDifficultyKey,
             starRatings = cachedRatings,
-            timeline = existing?.timeline,
-            timelineLoadAttempted = existing?.timelineLoadAttempted ?: false
+            preparedRender = existing?.preparedRender,
+            preparationAttempted = existing?.preparationAttempted ?: false
         )
 
         val requiredDifficulties = catalog.difficulties.map { difficulty ->
             DifficultyRatingQuery(
                 beatmapId = difficulty.beatmapId,
-                mode = difficulty.mode,
+                mode = difficulty.mode.osuMode,
                 difficultyName = difficulty.difficultyName
             )
         }
@@ -478,61 +479,70 @@ fun FullPlayer(
 
     LaunchedEffect(
         previewData?.mediaId,
-        previewData?.selectedDifficulty,
+        previewData?.selectedDifficultyKey,
         rendererEnabled,
         isExpanded
     ) {
         val data = previewData ?: return@LaunchedEffect
-        if (!preferenceLoaded || !rendererEnabled || !isExpanded || data.timeline != null) {
+        if (
+            !preferenceLoaded ||
+            !rendererEnabled ||
+            !isExpanded ||
+            data.preparedRender != null
+        ) {
             return@LaunchedEffect
         }
-        val timeline = previewLoader.loadTimeline(data.catalog, data.selectedDifficulty)
+        val difficulty = data.catalog.difficulty(data.selectedDifficultyKey)
+            ?: return@LaunchedEffect
+        val preparedRender = rendererRegistry.prepare(context, difficulty)
         val latest = previewData
         if (
             latest?.mediaId == data.mediaId &&
-            latest.selectedDifficulty == data.selectedDifficulty
+            latest.selectedDifficultyKey == data.selectedDifficultyKey
         ) {
             previewData = latest.copy(
-                timeline = timeline,
-                timelineLoadAttempted = true
+                preparedRender = preparedRender,
+                preparationAttempted = true
             )
+        } else {
+            preparedRender?.close()
         }
-    }
-
-    LaunchedEffect(preferenceLoaded, rendererEnabled, isExpanded) {
-        if (!preferenceLoaded || !rendererEnabled || !isExpanded || skin != null) {
-            return@LaunchedEffect
-        }
-        skin = withContext(Dispatchers.IO) {
-            runCatching { OsuSkinLoader.load(context) }.getOrNull()
-        }
-        skinLoadAttempted = true
     }
 
     val activePreview = previewData?.takeIf { it.mediaId == currentMediaId }
+    DisposableEffect(activePreview?.preparedRender) {
+        val prepared = activePreview?.preparedRender
+        onDispose { prepared?.close() }
+    }
     val previewUnavailable = when {
         !rendererEnabled -> true
         currentMediaId == null -> true
         activePreview == null -> catalogUnavailableMediaId == currentMediaId
-        activePreview.timeline == null -> activePreview.timelineLoadAttempted
-        skin == null -> skinLoadAttempted
+        activePreview.preparedRender == null -> activePreview.preparationAttempted
         else -> false
     }
+    val previewAspectRatio = activePreview
+        ?.catalog
+        ?.difficulty(activePreview.selectedDifficultyKey)
+        ?.mode
+        ?.let(rendererRegistry::rendererFor)
+        ?.preferredAspectRatio
+        ?: PREVIEW_ASPECT_RATIO
     val onRendererEnabledChange: (Boolean) -> Unit = { enabled ->
         scope.launch { settingsManager.saveRendererEnabled(enabled) }
     }
-    val onDifficultySelected: (String) -> Unit = { difficultyName ->
+    val onDifficultySelected: (RenderDifficultyKey) -> Unit = { difficultyKey ->
         val current = previewData
         if (current != null && current.mediaId == currentMediaId) {
             previewData = current.copy(
-                selectedDifficulty = difficultyName,
-                timeline = null,
-                timelineLoadAttempted = false
+                selectedDifficultyKey = difficultyKey,
+                preparedRender = null,
+                preparationAttempted = false
             )
             scope.launch {
                 settingsManager.saveSelectedDifficulty(
                     songKey = current.catalog.selectionKey,
-                    difficultyName = difficultyName
+                    selection = difficultyKey.encode()
                 )
             }
         }
@@ -605,7 +615,7 @@ fun FullPlayer(
                     rendererEnabled = rendererEnabled,
                     previewUnavailable = previewUnavailable,
                     previewData = activePreview,
-                    skin = skin,
+                    previewAspectRatio = previewAspectRatio,
                     onRendererEnabledChange = onRendererEnabledChange,
                     onDifficultySelected = onDifficultySelected,
                     morph = landscapeMorph,
@@ -627,7 +637,7 @@ fun FullPlayer(
                     rendererEnabled = rendererEnabled,
                     previewUnavailable = previewUnavailable,
                     previewData = activePreview,
-                    skin = skin,
+                    previewAspectRatio = previewAspectRatio,
                     onRendererEnabledChange = onRendererEnabledChange,
                     onDifficultySelected = onDifficultySelected,
                     wideMode = isWideHorizontal,
@@ -648,7 +658,7 @@ fun FullPlayer(
                     rendererEnabled = rendererEnabled,
                     previewUnavailable = previewUnavailable,
                     previewData = activePreview,
-                    skin = skin,
+                    previewAspectRatio = previewAspectRatio,
                     onRendererEnabledChange = onRendererEnabledChange,
                     onDifficultySelected = onDifficultySelected,
                     modifier = Modifier
@@ -694,10 +704,10 @@ private fun VerticalPlayerLayout(
     currentMediaId: Long?,
     rendererEnabled: Boolean,
     previewUnavailable: Boolean,
-    previewData: OsuPreviewData?,
-    skin: OsuSkin?,
+    previewData: RenderPreviewData?,
+    previewAspectRatio: Float,
     onRendererEnabledChange: (Boolean) -> Unit,
-    onDifficultySelected: (String) -> Unit,
+    onDifficultySelected: (RenderDifficultyKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -731,14 +741,14 @@ private fun VerticalPlayerLayout(
         ) {
             PlayerArtwork(
                 artworkUri = artworkUri,
-                timeline = previewData?.timeline,
-                skin = skin,
+                preparedRender = previewData?.preparedRender,
                 musicController = musicController,
                 isExpanded = isExpanded,
                 currentMediaId = currentMediaId,
                 landscape = false,
                 rendererEnabled = rendererEnabled,
-                previewUnavailable = previewUnavailable
+                previewUnavailable = previewUnavailable,
+                previewAspectRatio = previewAspectRatio
             )
         }
 
@@ -748,7 +758,7 @@ private fun VerticalPlayerLayout(
             title = title,
             artist = artist,
             rendererEnabled = rendererEnabled,
-            selectedDifficulty = previewData?.selectedDifficulty,
+            selectedDifficultyKey = previewData?.selectedDifficultyKey,
             difficulties = previewData?.catalog?.difficulties.orEmpty(),
             starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
             onRendererEnabledChange = onRendererEnabledChange,
@@ -800,10 +810,10 @@ private fun MorphingLandscapePlayerLayout(
     currentMediaId: Long?,
     rendererEnabled: Boolean,
     previewUnavailable: Boolean,
-    previewData: OsuPreviewData?,
-    skin: OsuSkin?,
+    previewData: RenderPreviewData?,
+    previewAspectRatio: Float,
     onRendererEnabledChange: (Boolean) -> Unit,
-    onDifficultySelected: (String) -> Unit,
+    onDifficultySelected: (RenderDifficultyKey) -> Unit,
     morph: LandscapePlayerMorph,
     modifier: Modifier = Modifier
 ) {
@@ -815,18 +825,25 @@ private fun MorphingLandscapePlayerLayout(
     val wideMode =
         fullscreenSize.width.value > fullscreenSize.height.value * WIDE_HORIZONTAL_RATIO
 
-    val compactRects = remember(compactSize, showDifficultySelector) {
+    val compactRects = remember(compactSize, showDifficultySelector, previewAspectRatio) {
         compactLandscapeMorphRects(
             compactSize = compactSize,
-            showDifficultySelector = showDifficultySelector
+            showDifficultySelector = showDifficultySelector,
+            previewAspectRatio = previewAspectRatio
         )
     }
-    val fullscreenRects = remember(fullscreenSize, wideMode, rendererEnabled, previewUnavailable) {
+    val fullscreenRects = remember(
+        fullscreenSize,
+        wideMode,
+        rendererEnabled,
+        previewUnavailable,
+        previewAspectRatio
+    ) {
         fullscreenLandscapeMorphRects(
             size = fullscreenSize,
             wideMode = wideMode,
             artworkAspectRatio = if (rendererEnabled && !previewUnavailable) {
-                PREVIEW_ASPECT_RATIO
+                previewAspectRatio
             } else {
                 1f
             }
@@ -845,8 +862,8 @@ private fun MorphingLandscapePlayerLayout(
         collapse = compactRects.collapse.lerp(fullscreenRects.collapse, progress),
         fullscreen = compactRects.fullscreen.lerp(fullscreenRects.fullscreen, progress)
     )
-    val selectedDifficulty = previewData?.selectedDifficulty
-        ?: previewData?.catalog?.difficulties?.firstOrNull()?.difficultyName
+    val selectedDifficultyKey = previewData?.selectedDifficultyKey
+        ?: previewData?.catalog?.difficulties?.firstOrNull()?.key
 
     Box(modifier = modifier.fillMaxSize()) {
         MorphSlot(rects.artwork) {
@@ -856,14 +873,14 @@ private fun MorphingLandscapePlayerLayout(
             ) {
                 PlayerArtwork(
                     artworkUri = artworkUri,
-                    timeline = previewData?.timeline,
-                    skin = skin,
+                    preparedRender = previewData?.preparedRender,
                     musicController = musicController,
                     isExpanded = isExpanded,
                     currentMediaId = currentMediaId,
                     landscape = true,
                     rendererEnabled = rendererEnabled,
                     previewUnavailable = previewUnavailable,
+                    previewAspectRatio = previewAspectRatio,
                     fillSlot = true,
                     innerFeather = lerp(PreviewCompactInnerFeather, 0.dp, progress)
                 )
@@ -883,9 +900,9 @@ private fun MorphingLandscapePlayerLayout(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                if (showDifficultySelector && selectedDifficulty != null) {
+                if (showDifficultySelector && selectedDifficultyKey != null) {
                     DifficultySelector(
-                        selectedDifficulty = selectedDifficulty,
+                        selectedDifficultyKey = selectedDifficultyKey,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
                         starRatings = previewData?.starRatings
                             ?: BeatmapStarRatingCatalog.Empty,
@@ -1056,7 +1073,8 @@ private fun lerpTextStyle(
 
 internal fun compactLandscapeMorphRects(
     compactSize: DpSize,
-    showDifficultySelector: Boolean
+    showDifficultySelector: Boolean,
+    previewAspectRatio: Float = PREVIEW_ASPECT_RATIO
 ): LandscapeMorphRects {
     val horizontalPadding = 8.dp
     val verticalPadding = 6.dp
@@ -1103,9 +1121,9 @@ internal fun compactLandscapeMorphRects(
         (trackTop - artworkGap / 2f).coerceAtLeast(artworkSlotTop)
     val artworkSlotHeight = artworkSlotBottom - artworkSlotTop
     val artworkWidth = (
-        artworkSlotHeight * PREVIEW_ASPECT_RATIO
+        artworkSlotHeight * previewAspectRatio
         ).coerceAtMost(contentWidth).coerceAtLeast(1.dp)
-    val artworkHeight = artworkWidth / PREVIEW_ASPECT_RATIO
+    val artworkHeight = artworkWidth / previewAspectRatio
     val artworkLeft = (compactSize.width - artworkWidth) / 2f
     val artworkTop = artworkSlotTop + (artworkSlotHeight - artworkHeight) / 2f
 
@@ -1336,10 +1354,10 @@ private fun HorizontalPlayerLayout(
     currentMediaId: Long?,
     rendererEnabled: Boolean,
     previewUnavailable: Boolean,
-    previewData: OsuPreviewData?,
-    skin: OsuSkin?,
+    previewData: RenderPreviewData?,
+    previewAspectRatio: Float,
     onRendererEnabledChange: (Boolean) -> Unit,
-    onDifficultySelected: (String) -> Unit,
+    onDifficultySelected: (RenderDifficultyKey) -> Unit,
     wideMode: Boolean,
     modifier: Modifier = Modifier,
     collapseDescription: String = "Collapse"
@@ -1373,7 +1391,7 @@ private fun HorizontalPlayerLayout(
             // loading cannot stretch the controls. Album view remains square, while the
             // renderer preview uses its wider playfield aspect ratio.
             val artworkAspectRatio = if (rendererEnabled && !previewUnavailable) {
-                PREVIEW_ASPECT_RATIO
+                previewAspectRatio
             } else {
                 1f
             }
@@ -1385,14 +1403,14 @@ private fun HorizontalPlayerLayout(
             ) {
                 PlayerArtwork(
                     artworkUri = artworkUri,
-                    timeline = previewData?.timeline,
-                    skin = skin,
+                    preparedRender = previewData?.preparedRender,
                     musicController = musicController,
                     isExpanded = isExpanded,
                     currentMediaId = currentMediaId,
                     landscape = true,
                     rendererEnabled = rendererEnabled,
-                    previewUnavailable = previewUnavailable
+                    previewUnavailable = previewUnavailable,
+                    previewAspectRatio = previewAspectRatio
                 )
             }
             Column(
@@ -1425,7 +1443,7 @@ private fun HorizontalPlayerLayout(
                         artist = artist,
                         titleMaxLines = 2,
                         rendererEnabled = rendererEnabled,
-                        selectedDifficulty = previewData?.selectedDifficulty,
+                        selectedDifficultyKey = previewData?.selectedDifficultyKey,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
                         starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
                         onRendererEnabledChange = onRendererEnabledChange,
@@ -1451,7 +1469,7 @@ private fun HorizontalPlayerLayout(
                         artist = artist,
                         titleMaxLines = 2,
                         rendererEnabled = rendererEnabled,
-                        selectedDifficulty = previewData?.selectedDifficulty,
+                        selectedDifficultyKey = previewData?.selectedDifficultyKey,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
                         starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
                         onRendererEnabledChange = onRendererEnabledChange,
@@ -1509,14 +1527,14 @@ private fun CoverArt(
 @Composable
 private fun PlayerArtwork(
     artworkUri: Any?,
-    timeline: OsuRenderTimeline?,
-    skin: OsuSkin?,
+    preparedRender: PreparedRender?,
     musicController: MusicController,
     isExpanded: Boolean,
     currentMediaId: Long?,
     landscape: Boolean,
     rendererEnabled: Boolean,
     previewUnavailable: Boolean,
+    previewAspectRatio: Float,
     fillSlot: Boolean = false,
     innerFeather: Dp = 0.dp
 ) {
@@ -1551,16 +1569,14 @@ private fun PlayerArtwork(
         fillSlot -> Modifier.fillMaxSize()
         landscape -> Modifier
             .fillMaxHeight()
-            .aspectRatio(PREVIEW_ASPECT_RATIO)
+            .aspectRatio(previewAspectRatio)
         else -> Modifier
             .fillMaxWidth()
-            .aspectRatio(PREVIEW_ASPECT_RATIO)
+            .aspectRatio(previewAspectRatio)
     }
     val sampledShadowColor = shadowColor ?: return
 
-    val readyTimeline = timeline
-    val readySkin = skin
-    if (!rendererEnabled || readyTimeline == null || readySkin == null) {
+    if (!rendererEnabled || preparedRender == null) {
         // The raised renderer surface is a stable loading placeholder. It deliberately
         // contains no artwork, avoiding the old cover flash without making the row reflow.
         Box(modifier = sizeModifier.rendererPreviewFrame(sampledShadowColor))
@@ -1574,10 +1590,10 @@ private fun PlayerArtwork(
         }
     }
 
-    var mapTimeMs by remember(readyTimeline, currentMediaId) {
+    var mapTimeMs by remember(preparedRender, currentMediaId) {
         mutableDoubleStateOf(musicController.currentPositionMs().toDouble())
     }
-    LaunchedEffect(isExpanded, readyTimeline, currentMediaId) {
+    LaunchedEffect(isExpanded, preparedRender, currentMediaId) {
         if (!isExpanded) return@LaunchedEffect
         while (isActive) {
             withFrameNanos {
@@ -1589,18 +1605,20 @@ private fun PlayerArtwork(
         }
     }
 
-    val renderer = remember(readySkin) { OsuRenderer(readySkin) }
-
     Box(
         modifier = sizeModifier.rendererPreviewFrame(sampledShadowColor)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            renderer.draw(
+            preparedRender.draw(
                 canvas = drawContext.canvas.nativeCanvas,
-                timeline = readyTimeline,
-                mapTimeMs = mapTimeMs,
-                playfieldSize = OsuPlayfieldSize(size.width, size.height),
-                edgeInsetPx = PreviewEdgeInset.toPx()
+                frame = RenderFrame(
+                    mapTimeMs = mapTimeMs,
+                    surface = RenderSurface(
+                        widthPx = size.width,
+                        heightPx = size.height,
+                        edgeInsetPx = PreviewEdgeInset.toPx()
+                    )
+                )
             )
             drawRendererInnerFeather(innerFeather)
         }
@@ -1816,18 +1834,19 @@ private fun TrackInfo(
     title: String,
     artist: String,
     rendererEnabled: Boolean,
-    selectedDifficulty: String?,
-    difficulties: List<OsuDifficultyMap>,
+    selectedDifficultyKey: RenderDifficultyKey?,
+    difficulties: List<RenderDifficulty>,
     starRatings: BeatmapStarRatingCatalog,
     onRendererEnabledChange: (Boolean) -> Unit,
-    onDifficultySelected: (String) -> Unit,
+    onDifficultySelected: (RenderDifficultyKey) -> Unit,
     modifier: Modifier = Modifier,
     titleMaxLines: Int = 1,
     selectorAboveTitle: Boolean = false,
     compact: Boolean = false
 ) {
     val showDifficultySelector = rendererEnabled && difficulties.size > 1
-    val selectedDifficultyName = selectedDifficulty ?: difficulties.firstOrNull()?.difficultyName
+    val selectedKey = selectedDifficultyKey ?: difficulties.firstOrNull()?.key
+    val showModeLabels = difficulties.map { it.mode }.distinct().size > 1
 
     if (selectorAboveTitle) {
         Column(
@@ -1839,12 +1858,13 @@ private fun TrackInfo(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (showDifficultySelector && selectedDifficultyName != null) {
+                if (showDifficultySelector && selectedKey != null) {
                     DifficultySelector(
-                        selectedDifficulty = selectedDifficultyName,
+                        selectedDifficultyKey = selectedKey,
                         difficulties = difficulties,
                         starRatings = starRatings,
-                        onDifficultySelected = onDifficultySelected
+                        onDifficultySelected = onDifficultySelected,
+                        showModeLabels = showModeLabels
                     )
                     Spacer(Modifier.width(8.dp))
                 }
@@ -1878,12 +1898,13 @@ private fun TrackInfo(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (showDifficultySelector && selectedDifficultyName != null) {
+                if (showDifficultySelector && selectedKey != null) {
                     DifficultySelector(
-                        selectedDifficulty = selectedDifficultyName,
+                        selectedDifficultyKey = selectedKey,
                         difficulties = difficulties,
                         starRatings = starRatings,
-                        onDifficultySelected = onDifficultySelected
+                        onDifficultySelected = onDifficultySelected,
+                        showModeLabels = showModeLabels
                     )
                 }
                 RendererToggle(
@@ -1929,16 +1950,17 @@ private fun TrackMetadata(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DifficultySelector(
-    selectedDifficulty: String,
-    difficulties: List<OsuDifficultyMap>,
+    selectedDifficultyKey: RenderDifficultyKey,
+    difficulties: List<RenderDifficulty>,
     starRatings: BeatmapStarRatingCatalog,
-    onDifficultySelected: (String) -> Unit,
-    compact: Boolean = false
+    onDifficultySelected: (RenderDifficultyKey) -> Unit,
+    compact: Boolean = false,
+    showModeLabels: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     val sortedDifficulties = remember(difficulties, starRatings) {
         difficulties.sortedWith(
-            compareBy<OsuDifficultyMap> { difficulty ->
+            compareBy<RenderDifficulty> { difficulty ->
                 starRatings
                     .ratingFor(difficulty)
                     ?.takeIf(Float::isFinite)
@@ -1947,8 +1969,11 @@ private fun DifficultySelector(
         )
     }
     val selectedRating = difficulties
-        .firstOrNull { it.difficultyName == selectedDifficulty }
+        .firstOrNull { it.key == selectedDifficultyKey }
         ?.let { difficulty -> starRatings.ratingFor(difficulty) }
+    val selectedDifficulty = difficulties
+        .firstOrNull { it.key == selectedDifficultyKey }
+        ?: difficulties.firstOrNull()
     Box {
         Row(
             modifier = Modifier
@@ -1969,7 +1994,13 @@ private fun DifficultySelector(
             } else {
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = selectedDifficulty,
+                    text = selectedDifficulty?.let {
+                        if (showModeLabels) {
+                            "${it.mode.displayName} · ${it.difficultyName}"
+                        } else {
+                            it.difficultyName
+                        }
+                    }.orEmpty(),
                     modifier = Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -1999,7 +2030,11 @@ private fun DifficultySelector(
                                 starRatings.ratingFor(difficulty)
                             )
                             Text(
-                                text = difficulty.difficultyName,
+                                text = if (showModeLabels) {
+                                    "${difficulty.mode.displayName} · ${difficulty.difficultyName}"
+                                } else {
+                                    difficulty.difficultyName
+                                },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -2007,8 +2042,8 @@ private fun DifficultySelector(
                     },
                     onClick = {
                         expanded = false
-                        if (difficulty.difficultyName != selectedDifficulty) {
-                            onDifficultySelected(difficulty.difficultyName)
+                        if (difficulty.key != selectedDifficultyKey) {
+                            onDifficultySelected(difficulty.key)
                         }
                     }
                 )

@@ -7,6 +7,8 @@ import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.domain.download.BeatmapDownloader
 import com.mosu.app.domain.download.DownloadState
 import com.mosu.app.domain.render.OsuBeatmapParser
+import com.mosu.app.domain.render.OsuFileHeaderCache
+import com.mosu.app.domain.render.OsuFileHeaderReader
 import com.mosu.app.domain.render.OsuMapHeader
 import com.mosu.app.domain.render.OsuRenderCache
 import java.io.ByteArrayOutputStream
@@ -103,14 +105,14 @@ object OsuArchiveBackfillExtractor {
                     }
 
                     val header = runCatching {
-                        OsuBeatmapParser.parseHeader(bytes.toString(Charsets.UTF_8))
+                        OsuFileHeaderReader.parse(bytes.toString(Charsets.UTF_8))
                     }.getOrNull()
                     if (header == null) {
                         failure("invalid-map")
                         continue
                     }
                     if (
-                        !OsuBeatmapParser.belongsToBeatmapSet(
+                        !OsuFileHeaderReader.belongsToBeatmapSet(
                             header.beatmapSetId,
                             expectedBeatmapSetId
                         )
@@ -178,11 +180,11 @@ object OsuArchiveBackfillExtractor {
         return outputRoot.walkTopDown()
             .filter { it.isFile && it.extension.equals("osu", ignoreCase = true) }
             .mapNotNull { file ->
-                val header = runCatching { OsuBeatmapParser.parseHeader(file) }
+                val header = runCatching { OsuFileHeaderCache.header(file) }
                     .getOrNull()
                     ?: return@mapNotNull null
                 if (
-                    !OsuBeatmapParser.belongsToBeatmapSet(
+                    !OsuFileHeaderReader.belongsToBeatmapSet(
                         header.beatmapSetId,
                         expectedBeatmapSetId
                     ) ||
@@ -204,7 +206,7 @@ object OsuArchiveBackfillExtractor {
         constructor(header: OsuMapHeader) : this(
             beatmapId = header.beatmapId,
             mode = header.mode,
-            audioFilename = OsuBeatmapParser.normalizeAudioFilename(header.audioFilename),
+            audioFilename = OsuFileHeaderReader.normalizeAudioFilename(header.audioFilename),
             difficultyName = header.difficultyName
         )
 
@@ -213,7 +215,7 @@ object OsuArchiveBackfillExtractor {
                 return beatmapId == header.beatmapId
             }
             return mode == header.mode &&
-                audioFilename == OsuBeatmapParser.normalizeAudioFilename(header.audioFilename) &&
+                audioFilename == OsuFileHeaderReader.normalizeAudioFilename(header.audioFilename) &&
                 difficultyName == header.difficultyName
         }
     }
@@ -444,14 +446,14 @@ class MissingOsuBackfillService(
             directory.walkTopDown()
                 .filter { it.isFile && it.extension.equals("osu", ignoreCase = true) }
                 .mapNotNull { file ->
-                    val header = runCatching { OsuBeatmapParser.parseHeader(file) }
+                    val header = runCatching { OsuFileHeaderCache.header(file) }
                         .getOrNull()
                         ?: return@mapNotNull null
                     val hasHitObjects = runCatching {
                         OsuBeatmapParser.hasHitObjects(file)
                     }.getOrDefault(false)
                     if (
-                        !OsuBeatmapParser.belongsToBeatmapSet(
+                        !OsuFileHeaderReader.belongsToBeatmapSet(
                             header.beatmapSetId,
                             beatmapSetId
                         ) ||

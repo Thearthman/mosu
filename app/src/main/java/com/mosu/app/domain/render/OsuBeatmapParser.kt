@@ -2,19 +2,6 @@ package com.mosu.app.domain.render
 
 import java.io.File
 
-data class OsuMapHeader(
-    val beatmapSetId: Long?,
-    val beatmapId: Long? = null,
-    val mode: Int,
-    val audioFilename: String,
-    val difficultyName: String,
-    val approachRate: Float,
-    val overallDifficulty: Float,
-    val circleSize: Float,
-    val sliderMultiplier: Float,
-    val stackLeniency: Float
-)
-
 sealed class OsuRawHitObject {
     abstract val timeMs: Double
     abstract val position: RenderPoint
@@ -95,38 +82,14 @@ data class ParsedOsuMap(
     val sliderBorder: Int?
 )
 
-class OsuMapParseException(message: String, cause: Throwable? = null) : Exception(message, cause)
-
 object OsuBeatmapParser {
     private const val FIRST_LAZER_FORMAT_VERSION = 128
     private val formatVersionRegex = Regex("""osu file format v(\d+)""", RegexOption.IGNORE_CASE)
 
     /** Lightweight scan that stops before the hit-object payload. */
-    fun parseHeader(file: File): OsuMapHeader {
-        val text = try {
-            file.bufferedReader(Charsets.UTF_8).use { reader ->
-                val builder = StringBuilder()
-                var section = ""
-                while (true) {
-                    val rawLine = reader.readLine() ?: break
-                    val line = rawLine.trim()
-                    if (line.startsWith("[") && line.endsWith("]")) {
-                        section = line.substring(1, line.length - 1)
-                        if (section == "HitObjects") break
-                    }
-                    if (section != "HitObjects") {
-                        builder.append(line).append('\n')
-                    }
-                }
-                builder.toString()
-            }
-        } catch (e: Exception) {
-            throw OsuMapParseException("Unable to read ${file.name}", e)
-        }
-        return parseHeaderText(text)
-    }
+    fun parseHeader(file: File): OsuMapHeader = OsuFileHeaderReader.parse(file)
 
-    fun parseHeader(text: String): OsuMapHeader = parseHeaderText(text.removePrefix("\uFEFF"))
+    fun parseHeader(text: String): OsuMapHeader = OsuFileHeaderReader.parse(text)
 
     /**
      * Checks whether an `.osu` file contains at least one structurally valid hit
@@ -166,9 +129,6 @@ object OsuBeatmapParser {
     fun parse(text: String): ParsedOsuMap {
         val formatVersion = parseFormatVersion(text)
         var section = ""
-        val general = mutableMapOf<String, String>()
-        val metadata = mutableMapOf<String, String>()
-        val difficulty = mutableMapOf<String, String>()
         val timingPoints = mutableListOf<OsuRawTimingPoint>()
         val hitObjects = mutableListOf<OsuRawHitObject>()
         val comboColours = mutableListOf<Int>()
@@ -184,9 +144,6 @@ object OsuBeatmapParser {
             }
 
             when (section) {
-                "General" -> parseKeyValue(line)?.let { (key, value) -> general[key] = value }
-                "Metadata" -> parseKeyValue(line)?.let { (key, value) -> metadata[key] = value }
-                "Difficulty" -> parseKeyValue(line)?.let { (key, value) -> difficulty[key] = value }
                 "Events" -> Unit
                 "TimingPoints" -> {
                     parseTimingPoint(line, lineNumber + 1)?.let(timingPoints::add)
@@ -211,10 +168,8 @@ object OsuBeatmapParser {
             }
         }
 
-        val header = buildHeader(general, metadata, difficulty)
-
         return ParsedOsuMap(
-            header = header,
+            header = OsuFileHeaderReader.parse(text),
             timingPoints = timingPoints.sortedBy { it.timeMs },
             hitObjects = hitObjects.sortedBy { it.timeMs },
             comboColours = comboColours,
@@ -248,62 +203,13 @@ object OsuBeatmapParser {
     fun belongsToBeatmapSet(
         embeddedBeatmapSetId: Long?,
         expectedBeatmapSetId: Long
-    ): Boolean = embeddedBeatmapSetId == null || embeddedBeatmapSetId == expectedBeatmapSetId
+    ): Boolean = OsuFileHeaderReader.belongsToBeatmapSet(
+        embeddedBeatmapSetId,
+        expectedBeatmapSetId
+    )
 
     fun normalizeAudioFilename(value: String): String =
-        value.trim()
-            .replace('\\', '/')
-            .trimStart('/')
-            .lowercase()
-
-    private fun parseHeaderText(text: String): OsuMapHeader {
-        var section = ""
-        val general = mutableMapOf<String, String>()
-        val metadata = mutableMapOf<String, String>()
-        val difficulty = mutableMapOf<String, String>()
-        text.lineSequence().forEach { rawLine ->
-            val line = rawLine.trim()
-            if (line.isEmpty() || line.startsWith("//")) return@forEach
-            if (line.startsWith("[") && line.endsWith("]")) {
-                section = line.substring(1, line.length - 1)
-                return@forEach
-            }
-            when (section) {
-                "General" -> parseKeyValue(line)?.let { (key, value) -> general[key] = value }
-                "Metadata" -> parseKeyValue(line)?.let { (key, value) -> metadata[key] = value }
-                "Difficulty" -> parseKeyValue(line)?.let { (key, value) -> difficulty[key] = value }
-            }
-        }
-        return buildHeader(general, metadata, difficulty)
-    }
-
-    private fun buildHeader(
-        general: Map<String, String>,
-        metadata: Map<String, String>,
-        difficulty: Map<String, String>
-    ): OsuMapHeader {
-        val audioFilename = general["AudioFilename"]?.trim().orEmpty()
-        val difficultyName = metadata["Version"]?.trim().orEmpty()
-        if (audioFilename.isBlank()) throw OsuMapParseException("AudioFilename is missing")
-        if (difficultyName.isBlank()) throw OsuMapParseException("Version is missing")
-
-        val mode = general["Mode"]?.trim()?.toIntOrNull() ?: 0
-        val overallDifficulty = difficulty.floatValue("OverallDifficulty") ?: 5f
-        val approachRate = difficulty.floatValue("ApproachRate") ?: overallDifficulty
-        return OsuMapHeader(
-            beatmapSetId = metadata["BeatmapSetID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
-            beatmapId = metadata["BeatmapID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
-            mode = mode,
-            audioFilename = normalizeAudioFilename(audioFilename),
-            difficultyName = difficultyName,
-            approachRate = approachRate.coerceIn(0f, 10f),
-            overallDifficulty = overallDifficulty.coerceIn(0f, 10f),
-            circleSize = (difficulty.floatValue("CircleSize") ?: 4f).coerceIn(0f, 10f),
-            sliderMultiplier = (difficulty.floatValue("SliderMultiplier") ?: 1.4f)
-                .takeIf { it > 0f } ?: 1.4f,
-            stackLeniency = (difficulty.floatValue("StackLeniency") ?: 0.7f).coerceIn(0f, 1f)
-        )
-    }
+        OsuFileHeaderReader.normalizeAudioFilename(value)
 
     private fun parseKeyValue(line: String): Pair<String, String>? {
         val separator = line.indexOf(':')
@@ -319,9 +225,6 @@ object OsuBeatmapParser {
             parts[2].trim().toDoubleOrNull() != null &&
             parts[3].trim().toIntOrNull() != null
     }
-
-    private fun Map<String, String>.floatValue(key: String): Float? =
-        this[key]?.trim()?.toFloatOrNull()
 
     private fun parseTimingPoint(line: String, lineNumber: Int): OsuRawTimingPoint? {
         val parts = line.split(',')

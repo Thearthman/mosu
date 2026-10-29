@@ -19,6 +19,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
@@ -174,6 +176,10 @@ private const val LANDSCAPE_MINI_PLAYER_BACKGROUND_BLEED_DP = 100
 private const val LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT = 2f / 3f
 private const val LANDSCAPE_SEARCH_BAR_HEIGHT_DP = 48
 private const val LANDSCAPE_EXPANSION_DRAG_GAIN = 1.2f
+private val CompactPlayerSnapSpec = spring<Float>(
+    dampingRatio = 0.85f,
+    stiffness = Spring.StiffnessMedium
+)
 
 class MainActivity : ComponentActivity() {
     private fun mediaRestorePermissions(): Array<String> {
@@ -913,7 +919,11 @@ fun MainScreen(
                     }
                     landscapeExpansionProgress.animateTo(
                         target,
-                        animationSpec = tween(300)
+                        animationSpec = if (target == 0f) {
+                            CompactPlayerSnapSpec
+                        } else {
+                            tween(300)
+                        }
                     )
                 } else {
                     val target = if (
@@ -927,7 +937,14 @@ fun MainScreen(
                     } else {
                         landscapePlayerCollapsedOffset
                     }
-                    landscapeSheetOffset.animateTo(target, animationSpec = tween(300))
+                    landscapeSheetOffset.animateTo(
+                        target,
+                        animationSpec = if (target == 0f) {
+                            CompactPlayerSnapSpec
+                        } else {
+                            tween(300)
+                        }
+                    )
                 }
             }
         }
@@ -958,7 +975,7 @@ fun MainScreen(
                 if (landscapeExpansionProgress.value > 0f) {
                     landscapeExpansionProgress.animateTo(
                         0f,
-                        animationSpec = tween(300)
+                        animationSpec = CompactPlayerSnapSpec
                     )
                 } else {
                     landscapeSheetOffset.animateTo(
@@ -1375,6 +1392,10 @@ fun MainScreen(
 
         if (isLandscape) {
             val expansionProgress = landscapeExpansionProgress.value.coerceIn(0f, 1f)
+            val compactReboundOffsetPx = landscapeExpansionProgress.value
+                .coerceAtMost(0f) * with(density) {
+                landscapeCompactPlayerWidth.toPx()
+            }
             val morphBounds = landscapePlayerMorphBounds(
                 compactSize = DpSize(
                     landscapeCompactPlayerWidth,
@@ -1498,7 +1519,13 @@ fun MainScreen(
                         .width(morphBounds.width)
                         .height(morphBounds.height)
                         .offset {
-                            IntOffset(landscapeSheetOffset.value.roundToInt(), 0)
+                            IntOffset(
+                                (
+                                    landscapeSheetOffset.value +
+                                        compactReboundOffsetPx
+                                    ).roundToInt(),
+                                0
+                            )
                         }
                         .graphicsLayer {
                             alpha = if (
@@ -1531,7 +1558,7 @@ fun MainScreen(
                                 if (landscapeExpansionProgress.value > 0f) {
                                     landscapeExpansionProgress.animateTo(
                                         0f,
-                                        animationSpec = tween(300)
+                                        animationSpec = CompactPlayerSnapSpec
                                     )
                                 } else {
                                     landscapeSheetOffset.animateTo(
@@ -1664,7 +1691,7 @@ fun MainScreen(
                                     scope.launch {
                                         landscapeSheetOffset.animateTo(
                                             0f,
-                                            animationSpec = tween(300)
+                                            animationSpec = CompactPlayerSnapSpec
                                         )
                                     }
                                 },

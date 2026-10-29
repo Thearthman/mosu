@@ -124,7 +124,7 @@
     <plurals name="score_pp_record_held">
         <item quantity="other">%1$d 天前，%2$s</item>
     </plurals>
-    <string name="score_length_prefix">/%1$s</string>
+    <string name="score_length_prefix">%1$s</string>
     <string name="score_cd_star_rating">星級評分</string>
     <string name="score_cd_collapse">收合 %1$s</string>
     <string name="score_cd_expand">展開 %1$s</string>

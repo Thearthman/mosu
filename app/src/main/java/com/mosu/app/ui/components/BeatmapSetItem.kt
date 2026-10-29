@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -197,26 +196,22 @@ fun BeatmapSetItem(
 
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
+                StarRatingBadge(score.starRating)
                 Text(
                     text = score.pp?.let { stringResource(id = R.string.score_pp_value, it) }
                         ?: stringResource(id = R.string.score_pp_none),
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    StarRatingBadge(score.starRating)
-                    Text(
-                        text = stringResource(
-                            id = R.string.score_length_prefix,
-                            formatLength(score.lengthSeconds)
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = stringResource(
+                        id = R.string.score_length_prefix,
+                        formatLength(score.lengthSeconds)
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 

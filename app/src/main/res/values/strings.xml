@@ -126,7 +126,7 @@
         <item quantity="one">%1$d day ago, %2$s</item>
         <item quantity="other">%1$d days ago, %2$s</item>
     </plurals>
-    <string name="score_length_prefix">/%1$s</string>
+    <string name="score_length_prefix">%1$s</string>
     <string name="score_cd_star_rating">Star rating</string>
     <string name="score_cd_collapse">Collapse %1$s</string>
     <string name="score_cd_expand">Expand %1$s</string>

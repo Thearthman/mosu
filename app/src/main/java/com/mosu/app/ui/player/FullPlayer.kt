@@ -280,6 +280,7 @@ private const val PROGRESS_BAND_WEIGHT = 0.15f  // progress bar share of the hei
 private const val H_CENTER_SPACER_WEIGHT = 0.05f
 private const val H_INFO_TOP_WEIGHT = 1f      // space above the title in the info column
 private val HorizontalMaxContentWidth = 960.dp
+private val HorizontalMetadataControlGap = 12.dp
 // Above a 3:2 aspect ratio the progress bar moves into the info column so the (now
 // full-height) cover band can grow instead of bleeding height into an empty progress band.
 private const val WIDE_HORIZONTAL_RATIO = 1.5f
@@ -1021,7 +1022,11 @@ private fun MorphingTrackMetadata(
     val titleStyle = lerpTextStyle(compactTitleStyle, fullscreenTitleStyle, progress)
     val artistStyle = lerpTextStyle(compactArtistStyle, fullscreenArtistStyle, progress)
 
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Bottom,
+        horizontalAlignment = Alignment.Start
+    ) {
         Text(
             text = title,
             style = titleStyle,
@@ -1209,9 +1214,13 @@ private fun fullscreenLandscapeMorphRects(
     val infoWidth = (innerRight - infoLeft).coerceAtLeast(1.dp)
     val infoRight = infoLeft + infoWidth
     val controlsHeight = (infoWidth * H_PLAY_BUTTON_WIDTH_FRACTION).coerceAtLeast(1.dp)
-    val trackHeight = 132.dp
-    val metadataTopOffset = 36.dp
-    val metadataHeight = 96.dp
+    // The difficulty/renderer row sits above the single-line metadata block. The metadata
+    // slot ends exactly HorizontalMetadataControlGap above the transport controls.
+    val metadataToControlsGap = HorizontalMetadataControlGap
+    val metadataHeight = 64.dp
+    val actionRowHeight = 34.dp
+    val actionRowGap = 6.dp
+    val trackHeight = actionRowHeight + actionRowGap + metadataHeight
     val progressHeight = 52.dp
     val collapseSize = 48.dp
     val collapse = LandscapeMorphRect(
@@ -1239,7 +1248,7 @@ private fun fullscreenLandscapeMorphRects(
         )
         track = LandscapeMorphRect(
             left = infoLeft,
-            top = controls.top - 16.dp - trackHeight,
+            top = controls.top - metadataToControlsGap - trackHeight,
             width = infoWidth,
             height = trackHeight
         )
@@ -1252,7 +1261,7 @@ private fun fullscreenLandscapeMorphRects(
         )
         track = LandscapeMorphRect(
             left = infoLeft,
-            top = controls.top - 20.dp - trackHeight,
+            top = controls.top - metadataToControlsGap - trackHeight,
             width = infoWidth,
             height = trackHeight
         )
@@ -1267,25 +1276,30 @@ private fun fullscreenLandscapeMorphRects(
 
     val selectorWidth = (infoWidth * 0.62f).coerceIn(120.dp, 196.dp)
     val toggleWidth = 34.dp
-    val metadataTop = track.top + metadataTopOffset
-    val metadataWidth = (infoWidth - toggleWidth - 12.dp).coerceAtLeast(1.dp)
+    val actionRowTop = track.top
+    val metadataTop = actionRowTop + actionRowHeight + actionRowGap
+    val toggleLeft = infoRight - toggleWidth
+    val selectorRight = toggleLeft - 8.dp
+    val selectorAvailableWidth = (selectorRight - infoLeft).coerceAtLeast(1.dp)
+    val fittedSelectorWidth = selectorWidth.coerceAtMost(selectorAvailableWidth)
+    val selectorLeft = selectorRight - fittedSelectorWidth
     return LandscapeMorphRects(
         artwork = artwork,
         title = LandscapeMorphRect(
             left = infoLeft,
             top = metadataTop,
-            width = metadataWidth,
+            width = infoWidth,
             height = metadataHeight
         ),
         difficulty = LandscapeMorphRect(
-            left = infoRight - selectorWidth,
-            top = track.top + 2.dp,
-            width = selectorWidth,
+            left = selectorLeft,
+            top = actionRowTop + (actionRowHeight - 32.dp) / 2f,
+            width = fittedSelectorWidth,
             height = 32.dp
         ),
         rendererToggle = LandscapeMorphRect(
-            left = infoRight - toggleWidth,
-            top = metadataTop + (metadataHeight - toggleWidth) / 2f,
+            left = toggleLeft,
+            top = actionRowTop + (actionRowHeight - toggleWidth) / 2f,
             width = toggleWidth,
             height = toggleWidth
         ),
@@ -1418,7 +1432,7 @@ private fun HorizontalPlayerLayout(
                         onDifficultySelected = onDifficultySelected,
                         selectorAboveTitle = true
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(HorizontalMetadataControlGap))
                     PlayerControls(
                         musicController = musicController,
                         isPlaying = isPlaying,
@@ -1444,7 +1458,7 @@ private fun HorizontalPlayerLayout(
                         onDifficultySelected = onDifficultySelected,
                         selectorAboveTitle = true
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(HorizontalMetadataControlGap))
                     PlayerControls(
                         musicController = musicController,
                         isPlaying = isPlaying,
@@ -1820,36 +1834,32 @@ private fun TrackInfo(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (showDifficultySelector && selectedDifficultyName != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (showDifficultySelector && selectedDifficultyName != null) {
                     DifficultySelector(
                         selectedDifficulty = selectedDifficultyName,
                         difficulties = difficulties,
                         starRatings = starRatings,
                         onDifficultySelected = onDifficultySelected
                     )
+                    Spacer(Modifier.width(8.dp))
                 }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TrackMetadata(
-                    title = title,
-                    artist = artist,
-                    titleMaxLines = titleMaxLines,
-                    compact = compact,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(12.dp))
                 RendererToggle(
                     enabled = rendererEnabled,
                     onEnabledChange = onRendererEnabledChange
                 )
             }
+            TrackMetadata(
+                title = title,
+                artist = artist,
+                titleMaxLines = titleMaxLines,
+                compact = compact,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     } else {
         Row(

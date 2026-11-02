@@ -238,6 +238,27 @@ internal fun landscapePlayerMorphBounds(
     )
 }
 
+internal fun landscapeMorphFilterIntensity(progress: Float): Float {
+    val clamped = progress.coerceIn(0f, 1f)
+    if (!clamped.isFinite()) return 0f
+    return if (clamped <= 0.5f) {
+        clamped * 2f
+    } else {
+        (1f - clamped) * 2f
+    }
+}
+
+private fun Modifier.landscapeMorphFilter(intensity: Float): Modifier {
+    val appliedIntensity = intensity.coerceIn(0f, 1f)
+    if (!appliedIntensity.isFinite() || appliedIntensity <= 0f) return this
+    return graphicsLayer {
+        alpha = 1f - appliedIntensity
+    }.blur(
+        radius = (MORPH_FILTER_MAX_BLUR_DP * appliedIntensity).dp,
+        edgeTreatment = BlurredEdgeTreatment.Unbounded
+    )
+}
+
 internal data class LandscapeMorphRect(
     val left: Dp,
     val top: Dp,
@@ -284,6 +305,7 @@ private const val H_PLAY_BUTTON_WIDTH_FRACTION = 0.20f
 // action. Removing its pointer node at that point prevents the two overlapping controls
 // from competing for the same taps during and after expansion.
 private const val FULLSCREEN_ACTION_FADE_END = 0.2f
+private const val MORPH_FILTER_MAX_BLUR_DP = 16f
 internal const val PREVIEW_ASPECT_RATIO = 7f / 6f
 private const val COMPACT_PROGRESS_WIDTH_FRACTION = 0.90f
 private const val FULL_PROGRESS_WIDTH_FRACTION = 0.97f
@@ -682,6 +704,7 @@ private fun MorphingLandscapePlayerLayout(
     modifier: Modifier = Modifier
 ) {
     val progress = morph.progress.coerceIn(0f, 1f)
+    val filterIntensity = landscapeMorphFilterIntensity(progress)
     val compactSize = morph.compactSize
     val fullscreenSize = morph.fullscreenSize
     val showDifficultySelector =
@@ -751,7 +774,7 @@ private fun MorphingLandscapePlayerLayout(
             }
         }
 
-        MorphSlot(rects.title) {
+        MorphSlot(rects.title, filterIntensity) {
             MorphingTrackMetadata(
                 title = title,
                 artist = artist,
@@ -759,7 +782,7 @@ private fun MorphingLandscapePlayerLayout(
             )
         }
 
-        MorphSlot(rects.difficulty) {
+        MorphSlot(rects.difficulty, filterIntensity) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.CenterEnd
@@ -777,7 +800,7 @@ private fun MorphingLandscapePlayerLayout(
             }
         }
 
-        MorphSlot(rects.rendererToggle) {
+        MorphSlot(rects.rendererToggle, filterIntensity) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -791,7 +814,7 @@ private fun MorphingLandscapePlayerLayout(
             }
         }
 
-        MorphSlot(rects.controls) {
+        MorphSlot(rects.controls, filterIntensity) {
             PlayerControls(
                 musicController = musicController,
                 isPlaying = isPlaying,
@@ -802,7 +825,7 @@ private fun MorphingLandscapePlayerLayout(
             )
         }
 
-        MorphSlot(rects.progress) {
+        MorphSlot(rects.progress, filterIntensity) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -824,7 +847,7 @@ private fun MorphingLandscapePlayerLayout(
         // always owns the shared endpoint.
         if (progress < FULLSCREEN_ACTION_FADE_END) {
             val visibility = 1f - progress / FULLSCREEN_ACTION_FADE_END
-            MorphSlot(rects.fullscreen) {
+            MorphSlot(rects.fullscreen, filterIntensity) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -872,17 +895,34 @@ private fun MorphingLandscapePlayerLayout(
 @Composable
 private fun MorphSlot(
     rect: LandscapeMorphRect,
+    filterIntensity: Float = 0f,
     content: @Composable () -> Unit
 ) {
+    // Modifier.blur renders into a layer clipped to its layout bounds, even when the
+    // edge treatment is unbounded. Reserve the maximum blur radius around the real
+    // slot so the blurred ink has room to spread without hitting the layer boundary.
+    val filterPadding = if (filterIntensity > 0f) MORPH_FILTER_MAX_BLUR_DP.dp else 0.dp
+    val contentWidth = rect.width.coerceAtLeast(1.dp)
+    val contentHeight = rect.height.coerceAtLeast(1.dp)
     Box(
         modifier = Modifier
-            .offset(x = rect.left, y = rect.top)
-            .size(
-                width = rect.width.coerceAtLeast(1.dp),
-                height = rect.height.coerceAtLeast(1.dp)
+            .offset(
+                x = rect.left - filterPadding,
+                y = rect.top - filterPadding
             )
+            .size(
+                width = contentWidth + filterPadding * 2f,
+                height = contentHeight + filterPadding * 2f
+            )
+            .landscapeMorphFilter(filterIntensity)
     ) {
-        content()
+        Box(
+            modifier = Modifier
+                .padding(filterPadding)
+                .fillMaxSize()
+        ) {
+            content()
+        }
     }
 }
 

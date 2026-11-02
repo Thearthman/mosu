@@ -135,6 +135,15 @@ class LandscapePlayerMorphTest {
     }
 
     @Test
+    fun morphFilterIsDisabledAtBothEndpointsAndPeaksAtMidpoint() {
+        assertEquals(0f, landscapeMorphFilterIntensity(0f), 0.0001f)
+        assertEquals(0.5f, landscapeMorphFilterIntensity(0.25f), 0.0001f)
+        assertEquals(1f, landscapeMorphFilterIntensity(0.5f), 0.0001f)
+        assertEquals(0.5f, landscapeMorphFilterIntensity(0.75f), 0.0001f)
+        assertEquals(0f, landscapeMorphFilterIntensity(1f), 0.0001f)
+    }
+
+    @Test
     fun compactLayoutFollowsVerticalOrderAndKeepsArtworkUsable() {
         val rects = compactLandscapeMorphRects(
             compactSize = DpSize(180.dp, 270.dp),

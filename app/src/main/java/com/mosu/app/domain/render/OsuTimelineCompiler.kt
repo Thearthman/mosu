@@ -4,6 +4,9 @@ import kotlin.math.abs
 
 object OsuTimelineCompiler {
     private const val DEFAULT_BEAT_LENGTH_MS = 500.0
+    private const val MIN_SLIDER_VELOCITY_MULTIPLIER = 0.1
+    private const val MAX_SLIDER_VELOCITY_MULTIPLIER = 10.0
+    private const val ZERO_LENGTH_SLIDER_EPSILON = 0.001f
     private const val MAX_STACK_DISTANCE = 3f
 
     fun compile(parsed: ParsedOsuMap, expectedBeatmapSetId: Long): OsuRenderTimeline {
@@ -27,7 +30,10 @@ object OsuTimelineCompiler {
                 beatLengthMs = it.beatLengthMs,
                 meter = it.meter,
                 uninherited = it.uninherited,
-                bpmMultiplier = inheritedBpmMultiplier(it)
+                bpmMultiplier = inheritedBpmMultiplier(it),
+                sampleBank = it.sampleBank,
+                customSampleIndex = it.customSampleIndex,
+                sampleVolume = it.sampleVolume
             )
         }
         val sliderPaths = HashMap<Int, OsuSliderPath>()
@@ -64,18 +70,24 @@ object OsuTimelineCompiler {
             val stackHeight = stackHeights[index]
 
             when (raw) {
-                is OsuRawCircle -> OsuCircleObject(
-                    startTimeMs = raw.timeMs,
-                    position = raw.position,
-                    stackHeight = stackHeight,
-                    comboNumber = comboNumber,
-                    comboColourIndex = comboColourIndex,
-                    objectScale = objectScale,
-                    preemptMs = preempt,
-                    fadeInMs = fadeIn
-                )
+                is OsuRawCircle -> {
+                    val (cues, loops) = OsuHitsoundCompiler.circle(raw, timing)
+                    OsuCircleObject(
+                        startTimeMs = raw.timeMs,
+                        position = raw.position,
+                        stackHeight = stackHeight,
+                        comboNumber = comboNumber,
+                        comboColourIndex = comboColourIndex,
+                        objectScale = objectScale,
+                        preemptMs = preempt,
+                        fadeInMs = fadeIn,
+                        hitsoundCues = cues,
+                        hitsoundLoops = loops
+                    )
+                }
                 is OsuRawSlider -> {
                     val path = sliderPaths.getValue(index)
+                    val normalizedRaw = normalizeZeroLengthSlider(raw, path)
                     val timingState = timingStateAt(timing, raw.timeMs)
                     val spanDuration = sliderDurationMs(
                         sliderMultiplier = header.sliderMultiplier,
@@ -84,9 +96,27 @@ object OsuTimelineCompiler {
                         pathLength = path.length,
                         spanCount = 1
                     )
+                    val tickDistance = if (hasActiveTickSuppression(timing, raw.timeMs)) {
+                        0.0
+                    } else {
+                        sliderTickDistance(
+                            sliderMultiplier = header.sliderMultiplier,
+                            bpmMultiplier = timingState.second,
+                            sliderTickRate = header.sliderTickRate,
+                            formatVersion = parsed.formatVersion
+                        )
+                    }
+                    val (cues, loops) = OsuHitsoundCompiler.slider(
+                        raw = normalizedRaw,
+                        objectIndex = index,
+                        timingPoints = timing,
+                        tickDistance = tickDistance,
+                        pathLength = path.length,
+                        spanDurationMs = spanDuration
+                    )
                     OsuSliderObject(
                         startTimeMs = raw.timeMs,
-                        endTimeMs = raw.timeMs + spanDuration * raw.spanCount,
+                        endTimeMs = raw.timeMs + spanDuration * normalizedRaw.spanCount,
                         position = raw.position,
                         stackHeight = stackHeight,
                         comboNumber = comboNumber,
@@ -95,20 +125,32 @@ object OsuTimelineCompiler {
                         preemptMs = preempt,
                         fadeInMs = fadeIn,
                         path = path,
-                        spanCount = raw.spanCount,
-                        spanDurationMs = spanDuration
+                        spanCount = normalizedRaw.spanCount,
+                        spanDurationMs = spanDuration,
+                        hitsoundCues = cues,
+                        hitsoundLoops = loops
                     )
                 }
-                is OsuRawSpinner -> OsuSpinnerObject(
-                    startTimeMs = raw.timeMs,
-                    endTimeMs = raw.endTimeMs,
-                    stackHeight = 0,
-                    comboNumber = comboNumber,
-                    comboColourIndex = comboColourIndex,
-                    objectScale = objectScale,
-                    preemptMs = preempt,
-                    fadeInMs = fadeIn
-                )
+                is OsuRawSpinner -> {
+                    val (cues, loops) = OsuHitsoundCompiler.spinner(
+                        raw = raw,
+                        objectIndex = index,
+                        timingPoints = timing,
+                        overallDifficulty = header.overallDifficulty
+                    )
+                    OsuSpinnerObject(
+                        startTimeMs = raw.timeMs,
+                        endTimeMs = raw.endTimeMs,
+                        stackHeight = 0,
+                        comboNumber = comboNumber,
+                        comboColourIndex = comboColourIndex,
+                        objectScale = objectScale,
+                        preemptMs = preempt,
+                        fadeInMs = fadeIn,
+                        hitsoundCues = cues,
+                        hitsoundLoops = loops
+                    )
+                }
             }
         }
 
@@ -137,9 +179,15 @@ object OsuTimelineCompiler {
     fun inheritedBpmMultiplier(point: OsuRawTimingPoint): Double {
         if (point.uninherited) return 1.0
         val beatLength = point.beatLengthMs
-        if (beatLength >= 0.0) return 1.0
-        return abs(beatLength) / 100.0
+        if (beatLength.isNaN() || beatLength >= 0.0) return 1.0
+        return (abs(beatLength) / 100.0)
+            .coerceIn(MIN_SLIDER_VELOCITY_MULTIPLIER, MAX_SLIDER_VELOCITY_MULTIPLIER)
     }
+
+    private fun hasActiveTickSuppression(
+        timingPoints: List<OsuTimingPoint>,
+        timeMs: Double
+    ): Boolean = timingPoints.lastOrNull { it.timeMs <= timeMs }?.beatLengthMs?.isNaN() == true
 
     internal fun timingStateAt(
         timingPoints: List<OsuTimingPoint>,
@@ -172,6 +220,20 @@ object OsuTimelineCompiler {
         }
         if (!foundInherited) bpmMultiplier = 1.0
         return baseBeatLength to bpmMultiplier
+    }
+
+    private fun normalizeZeroLengthSlider(
+        raw: OsuRawSlider,
+        path: OsuSliderPath
+    ): OsuRawSlider {
+        if (path.length > ZERO_LENGTH_SLIDER_EPSILON) return raw
+        if (raw.spanCount == 1 && raw.nodeSamples.size <= 2) return raw
+        val head = raw.nodeSamples.firstOrNull() ?: OsuRawHitSample()
+        val tail = raw.nodeSamples.lastOrNull() ?: head
+        return raw.copy(
+            spanCount = 1,
+            nodeSamples = listOf(head, tail)
+        )
     }
 
     private fun calculateStackHeights(

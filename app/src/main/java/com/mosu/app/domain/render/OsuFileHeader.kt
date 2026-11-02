@@ -14,7 +14,10 @@ data class OsuMapHeader(
     val overallDifficulty: Float,
     val circleSize: Float,
     val sliderMultiplier: Float,
-    val stackLeniency: Float
+    val stackLeniency: Float,
+    val defaultSampleBank: RenderSampleBank = RenderSampleBank.NORMAL,
+    val defaultSampleVolume: Int = 100,
+    val sliderTickRate: Double = 1.0
 )
 
 class OsuMapParseException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -74,6 +77,11 @@ object OsuFileHeaderReader {
         val mode = general["Mode"]?.trim()?.toIntOrNull() ?: 0
         val overallDifficulty = difficulty.floatValue("OverallDifficulty") ?: 5f
         val approachRate = difficulty.floatValue("ApproachRate") ?: overallDifficulty
+        val sliderTickRate = (difficulty.doubleValue("SliderTickRate") ?: 1.0)
+            .takeIf { it.isFinite() }
+            ?.coerceIn(0.5, 8.0)
+            ?: 1.0
+        val sliderMultiplier = difficulty.floatValue("SliderMultiplier") ?: DEFAULT_SLIDER_MULTIPLIER
         return OsuMapHeader(
             beatmapSetId = metadata["BeatmapSetID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
             beatmapId = metadata["BeatmapID"]?.trim()?.toLongOrNull()?.takeIf { it > 0L },
@@ -83,10 +91,16 @@ object OsuFileHeaderReader {
             approachRate = approachRate.coerceIn(0f, 10f),
             overallDifficulty = overallDifficulty.coerceIn(0f, 10f),
             circleSize = (difficulty.floatValue("CircleSize") ?: 4f).coerceIn(0f, 10f),
-            sliderMultiplier = (difficulty.floatValue("SliderMultiplier") ?: 1.4f)
-                .takeIf { it > 0f } ?: 1.4f,
+            sliderMultiplier = sliderMultiplier
+                .takeIf { it.isFinite() }
+                ?.coerceIn(MIN_SLIDER_MULTIPLIER, MAX_SLIDER_MULTIPLIER)
+                ?: DEFAULT_SLIDER_MULTIPLIER,
             stackLeniency = (difficulty.floatValue("StackLeniency") ?: 0.7f)
-                .coerceIn(0f, 1f)
+                .coerceIn(0f, 1f),
+            defaultSampleBank = sampleBank(general["SampleSet"]),
+            defaultSampleVolume = (general["SampleVolume"]?.trim()?.toIntOrNull() ?: 100)
+                .coerceIn(0, 100),
+            sliderTickRate = sliderTickRate
         )
     }
 
@@ -114,6 +128,19 @@ object OsuFileHeaderReader {
 
     private fun Map<String, String>.floatValue(key: String): Float? =
         this[key]?.trim()?.toFloatOrNull()
+
+    private fun Map<String, String>.doubleValue(key: String): Double? =
+        this[key]?.trim()?.toDoubleOrNull()
+
+    private fun sampleBank(value: String?): RenderSampleBank = when (value?.trim()?.lowercase()) {
+        "soft" -> RenderSampleBank.SOFT
+        "drum" -> RenderSampleBank.DRUM
+        else -> RenderSampleBank.NORMAL
+    }
+
+    private const val MIN_SLIDER_MULTIPLIER = 0.4f
+    private const val MAX_SLIDER_MULTIPLIER = 3.6f
+    private const val DEFAULT_SLIDER_MULTIPLIER = 1.4f
 }
 
 /** Process-wide immutable header cache keyed by file identity. */

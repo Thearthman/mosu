@@ -2,6 +2,35 @@ package com.mosu.app.domain.render
 
 import java.io.File
 
+/**
+ * Per-object legacy sample metadata. Null banks mean "inherit the timing
+ * point"; a zero custom index and volume mean the same.
+ */
+data class OsuRawSample(
+    val normalBank: RenderSampleBank? = null,
+    val additionBank: RenderSampleBank? = null,
+    val customSampleIndex: Int = 0,
+    val volume: Int = 0,
+    val filename: String? = null,
+    val normalBankSpecified: Boolean = normalBank != null,
+    val additionBankSpecified: Boolean = additionBank != null
+) {
+    fun overlay(other: OsuRawSample): OsuRawSample = OsuRawSample(
+        normalBank = if (other.normalBankSpecified) other.normalBank else normalBank,
+        additionBank = if (other.additionBankSpecified) other.additionBank else additionBank,
+        customSampleIndex = other.customSampleIndex.takeIf { it > 0 } ?: customSampleIndex,
+        volume = other.volume.takeIf { it > 0 } ?: volume,
+        filename = other.filename ?: filename,
+        normalBankSpecified = normalBankSpecified || other.normalBankSpecified,
+        additionBankSpecified = additionBankSpecified || other.additionBankSpecified
+    )
+}
+
+data class OsuRawHitSample(
+    val hitSound: Int = 0,
+    val sample: OsuRawSample = OsuRawSample()
+)
+
 sealed class OsuRawHitObject {
     abstract val timeMs: Double
     abstract val position: RenderPoint
@@ -13,7 +42,8 @@ data class OsuRawCircle(
     override val timeMs: Double,
     override val position: RenderPoint,
     override val newCombo: Boolean,
-    override val comboOffset: Int
+    override val comboOffset: Int,
+    val hitSample: OsuRawHitSample = OsuRawHitSample()
 ) : OsuRawHitObject()
 
 data class OsuRawSlider(
@@ -23,7 +53,11 @@ data class OsuRawSlider(
     override val comboOffset: Int,
     val pathControlPoints: List<OsuPathControlPoint>,
     val spanCount: Int,
-    val pathLength: Float
+    val pathLength: Float,
+    /** Head, repeat and tail nodes in that order. */
+    val nodeSamples: List<OsuRawHitSample> = emptyList(),
+    /** Object-wide sample settings used by ticks and the sliding body loop. */
+    val baseHitSample: OsuRawHitSample = OsuRawHitSample()
 ) : OsuRawHitObject() {
     /** Compatibility view of the first explicit segment's type. */
     val curveType: OsuCurveType
@@ -41,7 +75,9 @@ data class OsuRawSlider(
         curveType: OsuCurveType,
         controlPoints: List<RenderPoint>,
         spanCount: Int,
-        pathLength: Float
+        pathLength: Float,
+        nodeSamples: List<OsuRawHitSample> = emptyList(),
+        baseHitSample: OsuRawHitSample = OsuRawHitSample()
     ) : this(
         timeMs = timeMs,
         position = position,
@@ -52,7 +88,9 @@ data class OsuRawSlider(
             controlPoints.forEach { add(OsuPathControlPoint(it)) }
         },
         spanCount = spanCount,
-        pathLength = pathLength
+        pathLength = pathLength,
+        nodeSamples = nodeSamples,
+        baseHitSample = baseHitSample
     )
 }
 
@@ -60,7 +98,8 @@ data class OsuRawSpinner(
     override val timeMs: Double,
     val endTimeMs: Double,
     override val newCombo: Boolean,
-    override val comboOffset: Int
+    override val comboOffset: Int,
+    val hitSample: OsuRawHitSample = OsuRawHitSample()
 ) : OsuRawHitObject() {
     override val position: RenderPoint
         get() = RenderPoint(OSU_PLAYFIELD_WIDTH / 2f, OSU_PLAYFIELD_HEIGHT / 2f)
@@ -70,7 +109,10 @@ data class OsuRawTimingPoint(
     val timeMs: Double,
     val beatLengthMs: Double,
     val meter: Int,
-    val uninherited: Boolean
+    val uninherited: Boolean,
+    val sampleBank: RenderSampleBank = RenderSampleBank.NORMAL,
+    val customSampleIndex: Int = 0,
+    val sampleVolume: Int = 100
 )
 
 data class ParsedOsuMap(
@@ -79,11 +121,14 @@ data class ParsedOsuMap(
     val hitObjects: List<OsuRawHitObject>,
     val comboColours: List<Int>,
     val sliderTrackOverride: Int?,
-    val sliderBorder: Int?
+    val sliderBorder: Int?,
+    val formatVersion: Int = 14
 )
 
 object OsuBeatmapParser {
+    private const val EARLY_VERSION_TIMING_OFFSET_MS = 24.0
     private const val FIRST_LAZER_FORMAT_VERSION = 128
+    private const val ZERO_LENGTH_SLIDER_EPSILON = 0.001f
     private val formatVersionRegex = Regex("""osu file format v(\d+)""", RegexOption.IGNORE_CASE)
 
     /** Lightweight scan that stops before the hit-object payload. */
@@ -128,6 +173,8 @@ object OsuBeatmapParser {
 
     fun parse(text: String): ParsedOsuMap {
         val formatVersion = parseFormatVersion(text)
+        val timingOffsetMs = if (formatVersion < 5) EARLY_VERSION_TIMING_OFFSET_MS else 0.0
+        val header = OsuFileHeaderReader.parse(text)
         var section = ""
         val timingPoints = mutableListOf<OsuRawTimingPoint>()
         val hitObjects = mutableListOf<OsuRawHitObject>()
@@ -146,7 +193,13 @@ object OsuBeatmapParser {
             when (section) {
                 "Events" -> Unit
                 "TimingPoints" -> {
-                    parseTimingPoint(line, lineNumber + 1)?.let(timingPoints::add)
+                    parseTimingPoint(
+                        line = line,
+                        lineNumber = lineNumber + 1,
+                        defaultSampleBank = header.defaultSampleBank,
+                        defaultSampleVolume = header.defaultSampleVolume,
+                        timeOffsetMs = timingOffsetMs
+                    )?.let(timingPoints::add)
                 }
                 "Colours" -> {
                     val pair = parseKeyValue(line) ?: return@forEachIndexed
@@ -163,18 +216,24 @@ object OsuBeatmapParser {
                     }
                 }
                 "HitObjects" -> {
-                    hitObjects += parseHitObject(line, lineNumber + 1, formatVersion)
+                    hitObjects += parseHitObject(
+                        line = line,
+                        lineNumber = lineNumber + 1,
+                        formatVersion = formatVersion,
+                        timeOffsetMs = timingOffsetMs
+                    )
                 }
             }
         }
 
         return ParsedOsuMap(
-            header = OsuFileHeaderReader.parse(text),
+            header = header,
             timingPoints = timingPoints.sortedBy { it.timeMs },
             hitObjects = hitObjects.sortedBy { it.timeMs },
             comboColours = comboColours,
             sliderTrackOverride = sliderTrackOverride,
-            sliderBorder = sliderBorder
+            sliderBorder = sliderBorder,
+            formatVersion = formatVersion
         )
     }
 
@@ -226,23 +285,51 @@ object OsuBeatmapParser {
             parts[3].trim().toIntOrNull() != null
     }
 
-    private fun parseTimingPoint(line: String, lineNumber: Int): OsuRawTimingPoint? {
+    private fun parseTimingPoint(
+        line: String,
+        lineNumber: Int,
+        defaultSampleBank: RenderSampleBank,
+        defaultSampleVolume: Int,
+        timeOffsetMs: Double
+    ): OsuRawTimingPoint? {
         val parts = line.split(',')
         if (parts.size < 2) return null
-        val time = parts[0].trim().toDoubleOrNull()
+        val time = parts[0].trim().toDoubleOrNull()?.plus(timeOffsetMs)
             ?: throw OsuMapParseException("Invalid timing point time on line $lineNumber")
         val beatLength = parts[1].trim().toDoubleOrNull()
             ?: throw OsuMapParseException("Invalid timing point beat length on line $lineNumber")
-        if (beatLength == 0.0 || !beatLength.isFinite()) return null
+        if (beatLength == 0.0 || beatLength.isInfinite()) return null
         val meter = parts.getOrNull(2)?.trim()?.toIntOrNull() ?: 4
-        val uninherited = parts.getOrNull(6)?.trim()?.let { it != "0" } ?: true
-        return OsuRawTimingPoint(time, beatLength, meter, uninherited)
+        val uninherited = parts.getOrNull(6)?.trim()?.let { it.startsWith("1") } ?: true
+        if (uninherited && beatLength.isNaN()) {
+            throw OsuMapParseException(
+                "Beat length cannot be NaN in a timing control point on line $lineNumber"
+            )
+        }
+        val sampleBank = if (parts.size >= 4) {
+            legacySampleBank(parts[3].trim().toIntOrNull()) ?: RenderSampleBank.NORMAL
+        } else {
+            defaultSampleBank
+        }
+        val customSampleIndex = parts.getOrNull(4)?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val sampleVolume = (parts.getOrNull(5)?.trim()?.toIntOrNull() ?: defaultSampleVolume)
+            .coerceIn(0, 100)
+        return OsuRawTimingPoint(
+            timeMs = time,
+            beatLengthMs = beatLength,
+            meter = meter,
+            uninherited = uninherited,
+            sampleBank = sampleBank,
+            customSampleIndex = customSampleIndex,
+            sampleVolume = sampleVolume
+        )
     }
 
     private fun parseHitObject(
         line: String,
         lineNumber: Int,
-        formatVersion: Int
+        formatVersion: Int,
+        timeOffsetMs: Double
     ): OsuRawHitObject {
         val parts = line.split(',')
         if (parts.size < 5) throw OsuMapParseException("Malformed hit object on line $lineNumber")
@@ -250,7 +337,7 @@ object OsuBeatmapParser {
             ?: throw OsuMapParseException("Invalid hit object x on line $lineNumber")
         val y = parts[1].trim().toFloatOrNull()
             ?: throw OsuMapParseException("Invalid hit object y on line $lineNumber")
-        val time = parts[2].trim().toDoubleOrNull()
+        val time = parts[2].trim().toDoubleOrNull()?.plus(timeOffsetMs)
             ?: throw OsuMapParseException("Invalid hit object time on line $lineNumber")
         val type = parts[3].trim().toIntOrNull()
             ?: throw OsuMapParseException("Invalid hit object type on line $lineNumber")
@@ -263,9 +350,19 @@ object OsuBeatmapParser {
         val newCombo = type and 4 != 0
         val comboOffset = (type shr 4) and 7
         val position = RenderPoint(x, y)
+        val hitSound = parts[4].trim().toIntOrNull() ?: 0
 
         return when (baseType) {
-            1 -> OsuRawCircle(time, position, newCombo, comboOffset)
+            1 -> OsuRawCircle(
+                timeMs = time,
+                position = position,
+                newCombo = newCombo,
+                comboOffset = comboOffset,
+                hitSample = OsuRawHitSample(
+                    hitSound = hitSound,
+                    sample = parseSample(parts.getOrNull(5))
+                )
+            )
             2 -> {
                 if (parts.size < 8) {
                     throw OsuMapParseException("Malformed slider on line $lineNumber")
@@ -284,26 +381,137 @@ object OsuBeatmapParser {
                 if (length < 0f || !length.isFinite()) {
                     throw OsuMapParseException("Invalid slider length on line $lineNumber")
                 }
+                val nodeCount = spans + 1
+                val commonSample = parseSample(parts.getOrNull(10), banksOnly = true)
+                val edgeSounds = parseIntegerList(parts.getOrNull(8))
+                val edgeSets = parseStringList(parts.getOrNull(9))
+                val nodeSamples = List(nodeCount) { nodeIndex ->
+                    OsuRawHitSample(
+                        hitSound = edgeSounds.getOrNull(nodeIndex) ?: hitSound,
+                        sample = commonSample.overlay(
+                            parseSample(edgeSets.getOrNull(nodeIndex))
+                        )
+                    )
+                }
+                val effectiveSpanCount = if (
+                    isZeroLengthSlider(pathControlPoints, length)
+                ) {
+                    1
+                } else {
+                    spans
+                }
+                val effectiveNodeSamples = if (effectiveSpanCount == 1) {
+                    listOf(nodeSamples.first(), nodeSamples.last())
+                } else {
+                    nodeSamples
+                }
                 OsuRawSlider(
                     timeMs = time,
                     position = position,
                     newCombo = newCombo,
                     comboOffset = comboOffset,
                     pathControlPoints = pathControlPoints,
-                    spanCount = spans,
-                    pathLength = length
+                    spanCount = effectiveSpanCount,
+                    pathLength = length,
+                    nodeSamples = effectiveNodeSamples,
+                    baseHitSample = OsuRawHitSample(
+                        hitSound = hitSound,
+                        sample = commonSample
+                    )
                 )
             }
             else -> {
                 if (parts.size < 6) {
                     throw OsuMapParseException("Malformed spinner on line $lineNumber")
                 }
-                val endTime = parts[5].trim().toDoubleOrNull()
+                val endTime = parts[5].trim().toDoubleOrNull()?.plus(timeOffsetMs)
                     ?: throw OsuMapParseException("Invalid spinner end time on line $lineNumber")
                 if (endTime < time) throw OsuMapParseException("Spinner ends before it starts")
-                OsuRawSpinner(time, endTime, newCombo, comboOffset)
+                OsuRawSpinner(
+                    timeMs = time,
+                    endTimeMs = endTime,
+                    newCombo = newCombo,
+                    comboOffset = comboOffset,
+                    hitSample = OsuRawHitSample(
+                        hitSound = hitSound,
+                        sample = parseSample(parts.getOrNull(6))
+                    )
+                )
             }
         }
+    }
+
+    /**
+     * lazer collapses sliders whose resolved path distance is zero to one span
+     * and keeps only the head and original tail samples.
+     */
+    private fun isZeroLengthSlider(
+        pathControlPoints: List<OsuPathControlPoint>,
+        declaredLength: Float
+    ): Boolean {
+        if (pathControlPoints.isEmpty()) return true
+        val firstPosition = pathControlPoints.first().position
+        if (pathControlPoints.all { it.position == firstPosition }) return true
+        if (declaredLength != 0f) return false
+        return OsuSliderGeometry.build(pathControlPoints, declaredLength).length <=
+            ZERO_LENGTH_SLIDER_EPSILON
+    }
+
+    /**
+     * Parses `normalSet:additionSet:customIndex:volume:filename`. Bank zero
+     * explicitly means "none", while an invalid enum value becomes Normal,
+     * matching `ConvertHitObjectParser.readCustomSampleBanks()`.
+     */
+    private fun parseSample(value: String?, banksOnly: Boolean = false): OsuRawSample {
+        if (value.isNullOrBlank()) return OsuRawSample()
+        val parts = value.split(':', limit = 5)
+        val normalBank = parseObjectSampleBank(parts.getOrNull(0))
+        val additionBank = parseObjectSampleBank(parts.getOrNull(1))
+        if (banksOnly) {
+            return OsuRawSample(
+                normalBank = normalBank.first,
+                additionBank = additionBank.first,
+                normalBankSpecified = normalBank.second,
+                additionBankSpecified = additionBank.second
+            )
+        }
+        return OsuRawSample(
+            normalBank = normalBank.first,
+            additionBank = additionBank.first,
+            customSampleIndex = parts.getOrNull(2)?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+            volume = parts.getOrNull(3)?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+            filename = parts.getOrNull(4)?.trim()?.takeIf { it.isNotEmpty() },
+            normalBankSpecified = normalBank.second,
+            additionBankSpecified = additionBank.second
+        )
+    }
+
+    private fun parseObjectSampleBank(value: String?): Pair<RenderSampleBank?, Boolean> {
+        if (value == null) return null to false
+        return when (value.trim().toIntOrNull()) {
+            0 -> null to true
+            1 -> RenderSampleBank.NORMAL to true
+            2 -> RenderSampleBank.SOFT to true
+            3 -> RenderSampleBank.DRUM to true
+            else -> RenderSampleBank.NORMAL to true
+        }
+    }
+
+    private fun legacySampleBank(value: Int?): RenderSampleBank? = when (value) {
+        1 -> RenderSampleBank.NORMAL
+        2 -> RenderSampleBank.SOFT
+        3 -> RenderSampleBank.DRUM
+        else -> null
+    }
+
+    private fun parseIntegerList(value: String?): List<Int> {
+        if (value.isNullOrEmpty()) return emptyList()
+        return value.split('|').map { it.trim().toIntOrNull() ?: 0 }
+    }
+
+    private fun parseStringList(value: String?): List<String> {
+        if (value.isNullOrEmpty()) return emptyList()
+        return value.split('|')
     }
 
     /**

@@ -19,6 +19,7 @@ import com.mosu.app.utils.MediaPathUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,6 +62,15 @@ class MusicController(
     private val _playbackMod = PlaybackModSession.selection
     val playbackMod = _playbackMod.asStateFlow()
 
+    private val _playbackEpoch = MutableStateFlow(0L)
+
+    /**
+     * Monotonic discontinuity generation for frame consumers. Unlike the private
+     * position-sampling epoch, this only changes when the media timeline itself
+     * is replaced or jumps.
+     */
+    val playbackEpoch = _playbackEpoch.asStateFlow()
+
     private var positionSamplingJob: Job? = null
     private var positionRequestInFlight = false
     private var positionRequestToken = 0L
@@ -79,6 +89,7 @@ class MusicController(
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     _nowPlaying.value = mediaItem?.mediaMetadata
                     _currentMediaId.value = mediaItem?.mediaId?.toLongOrNull()
+                    _playbackEpoch.value++
                     playbackClockEpoch++
                     playbackClockAnchor = null
                     lastPositionSample = null
@@ -95,6 +106,7 @@ class MusicController(
                     reason: Int
                 ) {
                     val positionMs = newPosition.positionMs.coerceAtLeast(0L)
+                    _playbackEpoch.value++
                     playbackClockEpoch++
                     lastPositionSample = null
                     awaitingClockAdvance = true
@@ -397,6 +409,7 @@ class MusicController(
         val targetMs = positionMs.coerceAtLeast(0L)
         val controller = this.controller ?: return
         val requestedAtMs = SystemClock.elapsedRealtime()
+        _playbackEpoch.value++
         pendingSeek = PendingSeek(
             fromPositionMs = currentPositionMs(),
             targetPositionMs = targetMs,
@@ -498,6 +511,7 @@ class MusicController(
     fun release() {
         stopPositionSampling()
         MediaController.releaseFuture(controllerFuture)
+        scope.cancel()
     }
 
     private companion object {

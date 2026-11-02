@@ -122,7 +122,10 @@ data class OsuTimingPoint(
     val meter: Int,
     val uninherited: Boolean,
     /** Reciprocal inherited speed adjustment (see [sliderDurationMs]). */
-    val bpmMultiplier: Double
+    val bpmMultiplier: Double,
+    val sampleBank: RenderSampleBank = RenderSampleBank.NORMAL,
+    val customSampleIndex: Int = 0,
+    val sampleVolume: Int = 100
 )
 
 sealed class OsuRenderObject {
@@ -135,6 +138,8 @@ sealed class OsuRenderObject {
     abstract val objectScale: Float
     abstract val preemptMs: Double
     abstract val fadeInMs: Double
+    open val hitsoundCues: List<OsuHitsoundCue> = emptyList()
+    open val hitsoundLoops: List<OsuHitsoundLoop> = emptyList()
 
     open val activeStartMs: Double
         get() = startTimeMs - preemptMs
@@ -166,7 +171,9 @@ data class OsuCircleObject(
     override val comboColourIndex: Int,
     override val objectScale: Float,
     override val preemptMs: Double,
-    override val fadeInMs: Double
+    override val fadeInMs: Double,
+    override val hitsoundCues: List<OsuHitsoundCue> = emptyList(),
+    override val hitsoundLoops: List<OsuHitsoundLoop> = emptyList()
 ) : OsuRenderObject() {
     override val endTimeMs: Double get() = startTimeMs
 }
@@ -193,7 +200,9 @@ data class OsuSliderObject(
     override val fadeInMs: Double,
     val path: OsuSliderPath,
     val spanCount: Int,
-    val spanDurationMs: Double
+    val spanDurationMs: Double,
+    override val hitsoundCues: List<OsuHitsoundCue> = emptyList(),
+    override val hitsoundLoops: List<OsuHitsoundLoop> = emptyList()
 ) : OsuRenderObject() {
     val repeatCount: Int get() = (spanCount - 1).coerceAtLeast(0)
 
@@ -264,7 +273,9 @@ data class OsuSpinnerObject(
     override val comboColourIndex: Int,
     override val objectScale: Float,
     override val preemptMs: Double,
-    override val fadeInMs: Double
+    override val fadeInMs: Double,
+    override val hitsoundCues: List<OsuHitsoundCue> = emptyList(),
+    override val hitsoundLoops: List<OsuHitsoundLoop> = emptyList()
 ) : OsuRenderObject() {
     override val position: RenderPoint get() = RenderPoint(OSU_PLAYFIELD_WIDTH / 2f, OSU_PLAYFIELD_HEIGHT / 2f)
 }
@@ -290,6 +301,10 @@ data class OsuRenderTimeline(
     val sliderBorder: Int?
 ) {
     val durationMs: Double = objects.maxOfOrNull { it.endTimeMs } ?: 0.0
+    val hitsoundCues: List<OsuHitsoundCue> = objects
+        .flatMap { it.hitsoundCues }
+        .sortedBy { it.timeMs }
+    val hitsoundLoops: List<OsuHitsoundLoop> = objects.flatMap { it.hitsoundLoops }
     @PublishedApi
     internal val maxActiveDurationMs: Double = objects.maxOfOrNull {
         it.activeEndMs - it.activeStartMs
@@ -376,4 +391,28 @@ fun sliderDurationMs(
     val velocity = 100.0 * sliderMultiplier / denominator
     if (!velocity.isFinite() || velocity <= 0.0) return 0.0
     return spanCount.coerceAtLeast(1) * pathLength / velocity
+}
+
+/**
+ * Official slider tick spacing. Pre-v8 maps receive an additional reciprocal
+ * SV multiplier for stable compatibility.
+ */
+fun sliderTickDistance(
+    sliderMultiplier: Float,
+    bpmMultiplier: Double,
+    sliderTickRate: Double,
+    formatVersion: Int
+): Double {
+    if (
+        sliderMultiplier <= 0f ||
+        bpmMultiplier <= 0.0 ||
+        !bpmMultiplier.isFinite() ||
+        sliderTickRate <= 0.0 ||
+        !sliderTickRate.isFinite()
+    ) {
+        return 0.0
+    }
+    val distance = 100.0 * sliderMultiplier / (bpmMultiplier * sliderTickRate)
+    val legacyMultiplier = if (formatVersion < 8) 1.0 / bpmMultiplier else 1.0
+    return distance * legacyMultiplier
 }

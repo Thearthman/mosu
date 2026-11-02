@@ -7,8 +7,11 @@ import com.mosu.app.domain.render.OsuPlayfieldSize
 import com.mosu.app.domain.render.OsuRenderCache
 import com.mosu.app.domain.render.OsuRenderTimeline
 import com.mosu.app.domain.render.OsuRenderer
+import com.mosu.app.domain.render.OsuHitsoundScheduler
 import com.mosu.app.domain.render.OsuSkinLoader
 import com.mosu.app.domain.render.PreparedRender
+import com.mosu.app.domain.render.RenderAudioFrame
+import com.mosu.app.domain.render.RenderAudioSink
 import com.mosu.app.domain.render.RenderDifficulty
 import com.mosu.app.domain.render.RenderFrame
 import com.mosu.app.domain.render.RenderMode
@@ -50,6 +53,7 @@ private class PreparedOsuStandardRender(
     private val renderer: OsuRenderer
 ) : PreparedRender {
     override val mode: RenderMode = RenderMode.OSU
+    private val hitsoundScheduler = OsuHitsoundScheduler(timeline)
 
     override fun draw(canvas: Canvas, frame: RenderFrame) {
         renderer.draw(
@@ -64,5 +68,21 @@ private class PreparedOsuStandardRender(
             edgeInsetPx = frame.surface.edgeInsetPx,
             borderWidthPx = frame.surface.borderWidthPx
         )
+    }
+
+    override fun preloadAudio(sink: RenderAudioSink) {
+        sink.preloadSamples(
+            timeline.hitsoundCues
+                .flatMap { it.samples }
+                .plus(timeline.hitsoundLoops.map { it.sample })
+        )
+    }
+
+    override fun updateAudio(frame: RenderAudioFrame, sink: RenderAudioSink) {
+        hitsoundScheduler.update(frame, sink)
+    }
+
+    override fun close() {
+        hitsoundScheduler.close()
     }
 }

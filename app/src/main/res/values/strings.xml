@@ -141,6 +141,8 @@
     <string name="player_select_difficulty">Select difficulty</string>
     <string name="player_show_cover">Show cover art</string>
     <string name="player_show_renderer">Show beatmap renderer</string>
+    <string name="player_mute_hitsounds">Mute hitsounds</string>
+    <string name="player_unmute_hitsounds">Unmute hitsounds</string>
 
     <!-- Account -->
     <string name="profile_login_title">Not signed in</string>
@@ -171,6 +173,13 @@
     <string name="profile_equalizer_title">Equalizer</string>
     <string name="profile_recent_activity_heatmap_title">Recent Activity Heatmap</string>
     <string name="profile_coming_soon">Coming Soon</string>
+    <string name="profile_hitsound_title">Hitsounds</string>
+    <string name="profile_hitsound_desc">Play renderer-linked hitsounds during beatmap playback.</string>
+    <string name="profile_hitsound_volume">Volume</string>
+    <string name="profile_hitsound_volume_value">%1$d%%</string>
+    <string name="profile_hitsound_latency">Latency</string>
+    <string name="profile_hitsound_latency_desc">Positive values trigger hitsounds earlier.</string>
+    <string name="profile_hitsound_latency_value">%1$+d ms</string>
     <string name="profile_region_title">Region</string>
     <string name="profile_region_unknown">Unknown</string>
 

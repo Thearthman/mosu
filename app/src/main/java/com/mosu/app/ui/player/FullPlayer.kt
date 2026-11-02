@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -56,14 +58,12 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
@@ -103,18 +103,12 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.mosu.app.R
-import com.mosu.app.data.SettingsManager
-import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.domain.render.PreparedRender
-import com.mosu.app.domain.render.RenderCatalog
-import com.mosu.app.domain.render.RenderCatalogLoader
 import com.mosu.app.domain.render.RenderDifficulty
 import com.mosu.app.domain.render.RenderDifficultyKey
 import com.mosu.app.domain.render.RenderFrame
 import com.mosu.app.domain.render.RenderSurface
-import com.mosu.app.domain.render.RendererRegistry
 import com.mosu.app.domain.rating.BeatmapStarRatingCatalog
-import com.mosu.app.domain.rating.BeatmapStarRatingService
 import com.mosu.app.domain.rating.DifficultyRatingQuery
 import com.mosu.app.player.MusicController
 import com.mosu.app.player.PlaybackMod
@@ -124,7 +118,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlinx.coroutines.flow.collect
@@ -291,7 +284,7 @@ private const val H_PLAY_BUTTON_WIDTH_FRACTION = 0.20f
 // action. Removing its pointer node at that point prevents the two overlapping controls
 // from competing for the same taps during and after expansion.
 private const val FULLSCREEN_ACTION_FADE_END = 0.2f
-private const val PREVIEW_ASPECT_RATIO = 7f / 6f
+internal const val PREVIEW_ASPECT_RATIO = 7f / 6f
 private const val COMPACT_PROGRESS_WIDTH_FRACTION = 0.90f
 private const val FULL_PROGRESS_WIDTH_FRACTION = 0.97f
 private val PreviewEdgeInset = 8.dp
@@ -306,15 +299,6 @@ private const val PREVIEW_SHADOW_RAMP_END = 0.78f
 private const val SHADOW_COLOR_SAMPLE_SIZE = 48
 private const val SHADOW_MAX_BRIGHTNESS = 0.34f
 private val DefaultPreviewShadowColor = Color(0xFF05050A)
-
-private data class RenderPreviewData(
-    val mediaId: Long,
-    val catalog: RenderCatalog,
-    val selectedDifficultyKey: RenderDifficultyKey,
-    val starRatings: BeatmapStarRatingCatalog = BeatmapStarRatingCatalog.Empty,
-    val preparedRender: PreparedRender?,
-    val preparationAttempted: Boolean = false
-)
 
 private fun BeatmapStarRatingCatalog.ratingFor(difficulty: RenderDifficulty): Float? =
     ratingFor(
@@ -394,8 +378,7 @@ private suspend fun loadDominantShadowColor(
 @Composable
 fun FullPlayer(
     musicController: MusicController,
-    settingsManager: SettingsManager,
-    db: AppDatabase,
+    renderPlaybackSession: RenderPlaybackSession,
     isExpanded: Boolean,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
@@ -407,145 +390,15 @@ fun FullPlayer(
     val duration by musicController.duration.collectAsState()
     val playbackMod by musicController.playbackMod.collectAsState()
     val currentMediaId by musicController.currentMediaId.collectAsState()
-    val rendererPreference by settingsManager.rendererEnabled.collectAsState(initial = null)
-    val rendererEnabled = rendererPreference ?: true
-    val preferenceLoaded = rendererPreference != null
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val rendererRegistry = remember { RendererRegistry.default() }
-    val catalogLoader = remember(context, db, rendererRegistry) {
-        RenderCatalogLoader(context, db, rendererRegistry.supportedModes)
-    }
-    val ratingService = remember(db) { BeatmapStarRatingService(db) }
-    var previewData by remember { mutableStateOf<RenderPreviewData?>(null) }
-    var catalogUnavailableMediaId by remember { mutableStateOf<Long?>(null) }
-
-    LaunchedEffect(
-        preferenceLoaded,
-        rendererEnabled,
-        currentMediaId,
-        catalogLoader,
-        ratingService
-    ) {
-        val mediaId = currentMediaId
-        if (!preferenceLoaded || !rendererEnabled || mediaId == null) {
-            return@LaunchedEffect
-        }
-        val existing = previewData?.takeIf { it.mediaId == mediaId }
-        if (previewData?.mediaId != mediaId) previewData = null
-        catalogUnavailableMediaId = null
-        val catalog = existing?.catalog
-            ?: catalogLoader.loadCatalog(mediaId)
-            ?: run {
-                if (currentMediaId == mediaId) catalogUnavailableMediaId = mediaId
-                return@LaunchedEffect
-            }
-        val cachedRatings = ratingService.getCachedRatings(catalog.beatmapSetId)
-        val selectedDifficultyKey = existing?.selectedDifficultyKey
-            ?: catalog.resolveSavedDifficulty(
-                settingsManager.getSelectedDifficulty(catalog.selectionKey)
-            )
-        previewData = RenderPreviewData(
-            mediaId = mediaId,
-            catalog = catalog,
-            selectedDifficultyKey = selectedDifficultyKey,
-            starRatings = cachedRatings,
-            preparedRender = existing?.preparedRender,
-            preparationAttempted = existing?.preparationAttempted ?: false
-        )
-
-        val requiredDifficulties = catalog.difficulties.map { difficulty ->
-            DifficultyRatingQuery(
-                beatmapId = difficulty.beatmapId,
-                mode = difficulty.mode.osuMode,
-                difficultyName = difficulty.difficultyName
-            )
-        }
-        if (requiredDifficulties.any { !cachedRatings.hasRatingFor(it) }) {
-            val refreshed = ratingService.refreshMissingRatings(
-                beatmapSetId = catalog.beatmapSetId,
-                requiredDifficulties = requiredDifficulties
-            )
-            val latest = previewData
-            if (
-                latest?.mediaId == mediaId &&
-                latest.catalog.beatmapSetId == catalog.beatmapSetId
-            ) {
-                previewData = latest.copy(starRatings = refreshed)
-            }
-        }
-    }
-
-    LaunchedEffect(
-        previewData?.mediaId,
-        previewData?.selectedDifficultyKey,
-        rendererEnabled,
-        isExpanded
-    ) {
-        val data = previewData ?: return@LaunchedEffect
-        if (
-            !preferenceLoaded ||
-            !rendererEnabled ||
-            !isExpanded ||
-            data.preparedRender != null
-        ) {
-            return@LaunchedEffect
-        }
-        val difficulty = data.catalog.difficulty(data.selectedDifficultyKey)
-            ?: return@LaunchedEffect
-        val preparedRender = rendererRegistry.prepare(context, difficulty)
-        val latest = previewData
-        if (
-            latest?.mediaId == data.mediaId &&
-            latest.selectedDifficultyKey == data.selectedDifficultyKey
-        ) {
-            previewData = latest.copy(
-                preparedRender = preparedRender,
-                preparationAttempted = true
-            )
-        } else {
-            preparedRender?.close()
-        }
-    }
-
-    val activePreview = previewData?.takeIf { it.mediaId == currentMediaId }
-    DisposableEffect(activePreview?.preparedRender) {
-        val prepared = activePreview?.preparedRender
-        onDispose { prepared?.close() }
-    }
-    val previewUnavailable = when {
-        !rendererEnabled -> true
-        currentMediaId == null -> true
-        activePreview == null -> catalogUnavailableMediaId == currentMediaId
-        activePreview.preparedRender == null -> activePreview.preparationAttempted
-        else -> false
-    }
-    val previewAspectRatio = activePreview
-        ?.catalog
-        ?.difficulty(activePreview.selectedDifficultyKey)
-        ?.mode
-        ?.let(rendererRegistry::rendererFor)
-        ?.preferredAspectRatio
-        ?: PREVIEW_ASPECT_RATIO
-    val onRendererEnabledChange: (Boolean) -> Unit = { enabled ->
-        scope.launch { settingsManager.saveRendererEnabled(enabled) }
-    }
-    val onDifficultySelected: (RenderDifficultyKey) -> Unit = { difficultyKey ->
-        val current = previewData
-        if (current != null && current.mediaId == currentMediaId) {
-            previewData = current.copy(
-                selectedDifficultyKey = difficultyKey,
-                preparedRender = null,
-                preparationAttempted = false
-            )
-            scope.launch {
-                settingsManager.saveSelectedDifficulty(
-                    songKey = current.catalog.selectionKey,
-                    selection = difficultyKey.encode()
-                )
-            }
-        }
-    }
+    val rendererEnabled = renderPlaybackSession.rendererEnabled
+    val hitsoundEnabled = renderPlaybackSession.hitsoundEnabled
+    val activePreview = renderPlaybackSession.previewData
+        ?.takeIf { it.mediaId == currentMediaId }
+    val previewUnavailable = renderPlaybackSession.previewUnavailable
+    val previewAspectRatio = renderPlaybackSession.previewAspectRatio
+    val onRendererEnabledChange = renderPlaybackSession::updateRendererEnabled
+    val onHitsoundEnabledChange = renderPlaybackSession::updateHitsoundEnabled
+    val onDifficultySelected = renderPlaybackSession::selectDifficulty
 
     if (nowPlaying != null) {
         BoxWithConstraints(
@@ -612,10 +465,12 @@ fun FullPlayer(
                     isExpanded = isExpanded,
                     currentMediaId = currentMediaId,
                     rendererEnabled = rendererEnabled,
+                    hitsoundEnabled = hitsoundEnabled,
                     previewUnavailable = previewUnavailable,
                     previewData = activePreview,
                     previewAspectRatio = previewAspectRatio,
                     onRendererEnabledChange = onRendererEnabledChange,
+                    onHitsoundEnabledChange = onHitsoundEnabledChange,
                     onDifficultySelected = onDifficultySelected,
                     morph = landscapeMorph,
                     modifier = Modifier
@@ -634,10 +489,12 @@ fun FullPlayer(
                     isExpanded = isExpanded,
                     currentMediaId = currentMediaId,
                     rendererEnabled = rendererEnabled,
+                    hitsoundEnabled = hitsoundEnabled,
                     previewUnavailable = previewUnavailable,
                     previewData = activePreview,
                     previewAspectRatio = previewAspectRatio,
                     onRendererEnabledChange = onRendererEnabledChange,
+                    onHitsoundEnabledChange = onHitsoundEnabledChange,
                     onDifficultySelected = onDifficultySelected,
                     wideMode = isWideHorizontal,
                     modifier = Modifier
@@ -655,10 +512,12 @@ fun FullPlayer(
                     isExpanded = isExpanded,
                     currentMediaId = currentMediaId,
                     rendererEnabled = rendererEnabled,
+                    hitsoundEnabled = hitsoundEnabled,
                     previewUnavailable = previewUnavailable,
                     previewData = activePreview,
                     previewAspectRatio = previewAspectRatio,
                     onRendererEnabledChange = onRendererEnabledChange,
+                    onHitsoundEnabledChange = onHitsoundEnabledChange,
                     onDifficultySelected = onDifficultySelected,
                     modifier = Modifier
                 )
@@ -702,10 +561,12 @@ private fun VerticalPlayerLayout(
     isExpanded: Boolean,
     currentMediaId: Long?,
     rendererEnabled: Boolean,
+    hitsoundEnabled: Boolean,
     previewUnavailable: Boolean,
     previewData: RenderPreviewData?,
     previewAspectRatio: Float,
     onRendererEnabledChange: (Boolean) -> Unit,
+    onHitsoundEnabledChange: (Boolean) -> Unit,
     onDifficultySelected: (RenderDifficultyKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -757,10 +618,12 @@ private fun VerticalPlayerLayout(
             title = title,
             artist = artist,
             rendererEnabled = rendererEnabled,
+            hitsoundEnabled = hitsoundEnabled,
             selectedDifficultyKey = previewData?.selectedDifficultyKey,
             difficulties = previewData?.catalog?.difficulties.orEmpty(),
             starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
             onRendererEnabledChange = onRendererEnabledChange,
+            onHitsoundEnabledChange = onHitsoundEnabledChange,
             onDifficultySelected = onDifficultySelected
         )
 
@@ -808,10 +671,12 @@ private fun MorphingLandscapePlayerLayout(
     isExpanded: Boolean,
     currentMediaId: Long?,
     rendererEnabled: Boolean,
+    hitsoundEnabled: Boolean,
     previewUnavailable: Boolean,
     previewData: RenderPreviewData?,
     previewAspectRatio: Float,
     onRendererEnabledChange: (Boolean) -> Unit,
+    onHitsoundEnabledChange: (Boolean) -> Unit,
     onDifficultySelected: (RenderDifficultyKey) -> Unit,
     morph: LandscapePlayerMorph,
     modifier: Modifier = Modifier
@@ -917,9 +782,11 @@ private fun MorphingLandscapePlayerLayout(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                RendererToggle(
-                    enabled = rendererEnabled,
-                    onEnabledChange = onRendererEnabledChange
+                PlayerFeatureToggles(
+                    rendererEnabled = rendererEnabled,
+                    hitsoundEnabled = hitsoundEnabled,
+                    onRendererEnabledChange = onRendererEnabledChange,
+                    onHitsoundEnabledChange = onHitsoundEnabledChange
                 )
             }
         }
@@ -1090,6 +957,8 @@ internal fun compactLandscapeMorphRects(
     val selectorHeight = 28.dp
     val selectorGap = 4.dp
     val toggleSize = 34.dp
+    val toggleGap = 4.dp
+    val featureToggleWidth = toggleSize * 2 + toggleGap
     val contentWidth = (compactSize.width - horizontalPadding * 2f).coerceAtLeast(1.dp)
     val contentLeft = horizontalPadding
     val contentRight = contentLeft + contentWidth
@@ -1129,7 +998,7 @@ internal fun compactLandscapeMorphRects(
     } else {
         0.dp
     }
-    val difficultyRight = contentRight - toggleSize - selectorGap
+    val difficultyRight = contentRight - featureToggleWidth - selectorGap
     val difficultyLeft = (difficultyRight - selectorWidth).coerceAtLeast(contentLeft)
     // Match the centered progress bar's left edge so the two rows read as one column.
     val titleLeft = contentLeft + contentWidth * (
@@ -1138,7 +1007,7 @@ internal fun compactLandscapeMorphRects(
     val titleWidth = (
         (
             if (showDifficultySelector) difficultyLeft - selectorGap
-            else contentRight - toggleSize - selectorGap
+            else contentRight - featureToggleWidth - selectorGap
             ) - titleLeft
         ).coerceAtLeast(1.dp)
     val collapseLeft = (compactSize.width - actionSize) / 2f
@@ -1163,9 +1032,9 @@ internal fun compactLandscapeMorphRects(
             height = selectorHeight
         ),
         rendererToggle = LandscapeMorphRect(
-            left = contentRight - toggleSize,
+            left = contentRight - featureToggleWidth,
             top = trackTop + (metadataHeight - toggleSize) / 2f,
-            width = toggleSize,
+            width = featureToggleWidth,
             height = toggleSize
         ),
         controls = LandscapeMorphRect(
@@ -1291,9 +1160,11 @@ private fun fullscreenLandscapeMorphRects(
 
     val selectorWidth = (infoWidth * 0.62f).coerceIn(120.dp, 196.dp)
     val toggleWidth = 34.dp
+    val toggleGap = 4.dp
+    val featureToggleWidth = toggleWidth * 2 + toggleGap
     val actionRowTop = track.top
     val metadataTop = actionRowTop + actionRowHeight + actionRowGap
-    val toggleLeft = infoRight - toggleWidth
+    val toggleLeft = infoRight - featureToggleWidth
     val selectorRight = toggleLeft - 8.dp
     val selectorAvailableWidth = (selectorRight - infoLeft).coerceAtLeast(1.dp)
     val fittedSelectorWidth = selectorWidth.coerceAtMost(selectorAvailableWidth)
@@ -1315,7 +1186,7 @@ private fun fullscreenLandscapeMorphRects(
         rendererToggle = LandscapeMorphRect(
             left = toggleLeft,
             top = actionRowTop + (actionRowHeight - toggleWidth) / 2f,
-            width = toggleWidth,
+            width = featureToggleWidth,
             height = toggleWidth
         ),
         controls = controls,
@@ -1350,10 +1221,12 @@ private fun HorizontalPlayerLayout(
     isExpanded: Boolean,
     currentMediaId: Long?,
     rendererEnabled: Boolean,
+    hitsoundEnabled: Boolean,
     previewUnavailable: Boolean,
     previewData: RenderPreviewData?,
     previewAspectRatio: Float,
     onRendererEnabledChange: (Boolean) -> Unit,
+    onHitsoundEnabledChange: (Boolean) -> Unit,
     onDifficultySelected: (RenderDifficultyKey) -> Unit,
     wideMode: Boolean,
     modifier: Modifier = Modifier,
@@ -1440,10 +1313,12 @@ private fun HorizontalPlayerLayout(
                         artist = artist,
                         titleMaxLines = 2,
                         rendererEnabled = rendererEnabled,
+                        hitsoundEnabled = hitsoundEnabled,
                         selectedDifficultyKey = previewData?.selectedDifficultyKey,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
                         starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
                         onRendererEnabledChange = onRendererEnabledChange,
+                        onHitsoundEnabledChange = onHitsoundEnabledChange,
                         onDifficultySelected = onDifficultySelected,
                         selectorAboveTitle = true
                     )
@@ -1466,10 +1341,12 @@ private fun HorizontalPlayerLayout(
                         artist = artist,
                         titleMaxLines = 2,
                         rendererEnabled = rendererEnabled,
+                        hitsoundEnabled = hitsoundEnabled,
                         selectedDifficultyKey = previewData?.selectedDifficultyKey,
                         difficulties = previewData?.catalog?.difficulties.orEmpty(),
                         starRatings = previewData?.starRatings ?: BeatmapStarRatingCatalog.Empty,
                         onRendererEnabledChange = onRendererEnabledChange,
+                        onHitsoundEnabledChange = onHitsoundEnabledChange,
                         onDifficultySelected = onDifficultySelected,
                         selectorAboveTitle = true
                     )
@@ -1578,13 +1455,6 @@ private fun PlayerArtwork(
         // contains no artwork, avoiding the old cover flash without making the row reflow.
         Box(modifier = sizeModifier.rendererPreviewFrame(sampledShadowColor))
         return
-    }
-
-    DisposableEffect(musicController) {
-        musicController.startPositionSampling()
-        onDispose {
-            musicController.stopPositionSampling()
-        }
     }
 
     var mapTimeMs by remember(preparedRender, currentMediaId) {
@@ -1831,10 +1701,12 @@ private fun TrackInfo(
     title: String,
     artist: String,
     rendererEnabled: Boolean,
+    hitsoundEnabled: Boolean,
     selectedDifficultyKey: RenderDifficultyKey?,
     difficulties: List<RenderDifficulty>,
     starRatings: BeatmapStarRatingCatalog,
     onRendererEnabledChange: (Boolean) -> Unit,
+    onHitsoundEnabledChange: (Boolean) -> Unit,
     onDifficultySelected: (RenderDifficultyKey) -> Unit,
     modifier: Modifier = Modifier,
     titleMaxLines: Int = 1,
@@ -1865,9 +1737,11 @@ private fun TrackInfo(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
-                RendererToggle(
-                    enabled = rendererEnabled,
-                    onEnabledChange = onRendererEnabledChange
+                PlayerFeatureToggles(
+                    rendererEnabled = rendererEnabled,
+                    hitsoundEnabled = hitsoundEnabled,
+                    onRendererEnabledChange = onRendererEnabledChange,
+                    onHitsoundEnabledChange = onHitsoundEnabledChange
                 )
             }
             TrackMetadata(
@@ -1904,9 +1778,11 @@ private fun TrackInfo(
                         showModeLabels = showModeLabels
                     )
                 }
-                RendererToggle(
-                    enabled = rendererEnabled,
-                    onEnabledChange = onRendererEnabledChange
+                PlayerFeatureToggles(
+                    rendererEnabled = rendererEnabled,
+                    hitsoundEnabled = hitsoundEnabled,
+                    onRendererEnabledChange = onRendererEnabledChange,
+                    onHitsoundEnabledChange = onHitsoundEnabledChange
                 )
             }
         }
@@ -2046,6 +1922,49 @@ private fun DifficultySelector(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PlayerFeatureToggles(
+    rendererEnabled: Boolean,
+    hitsoundEnabled: Boolean,
+    onRendererEnabledChange: (Boolean) -> Unit,
+    onHitsoundEnabledChange: (Boolean) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        HitsoundToggle(
+            enabled = hitsoundEnabled,
+            onEnabledChange = onHitsoundEnabledChange
+        )
+        RendererToggle(
+            enabled = rendererEnabled,
+            onEnabledChange = onRendererEnabledChange
+        )
+    }
+}
+
+@Composable
+private fun HitsoundToggle(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit
+) {
+    IconButton(
+        onClick = { onEnabledChange(!enabled) },
+        modifier = Modifier.size(34.dp)
+    ) {
+        Icon(
+            imageVector = if (enabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+            contentDescription = stringResource(
+                if (enabled) R.string.player_mute_hitsounds
+                else R.string.player_unmute_hitsounds
+            ),
+            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 

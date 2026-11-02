@@ -33,6 +33,9 @@ class SettingsManager(private val context: Context) {
         private val GENRE_BAR_ENABLED_KEY = booleanPreferencesKey("genre_bar_enabled")
         private val RENDERER_ENABLED_KEY = booleanPreferencesKey("renderer_enabled")
         private const val RENDERER_DIFFICULTY_KEY_PREFIX = "renderer_difficulty_"
+        private val HITSOUND_ENABLED_KEY = booleanPreferencesKey("hitsound_enabled")
+        private val HITSOUND_VOLUME_KEY = intPreferencesKey("hitsound_volume")
+        private val HITSOUND_LATENCY_MS_KEY = intPreferencesKey("hitsound_latency_ms")
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
         private val SCORE_MODE_FILTER_KEY = stringPreferencesKey("score_mode_filter") // "osu", "taiko", "fruits", "mania", "all"
@@ -150,6 +153,21 @@ class SettingsManager(private val context: Context) {
             preferences[RENDERER_ENABLED_KEY] ?: true
         }
 
+    val hitsoundEnabled: Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[HITSOUND_ENABLED_KEY] ?: true
+        }
+
+    val hitsoundVolume: Flow<Int> = context.settingsDataStore.data
+        .map { preferences ->
+            (preferences[HITSOUND_VOLUME_KEY] ?: 100).coerceIn(0, 100)
+        }
+
+    val hitsoundLatencyMs: Flow<Int> = context.settingsDataStore.data
+        .map { preferences ->
+            (preferences[HITSOUND_LATENCY_MS_KEY] ?: 0).coerceIn(-200, 200)
+        }
+
     val shuffleModeEnabled: Flow<Boolean> = context.settingsDataStore.data
         .map { preferences ->
             preferences[SHUFFLE_MODE_KEY] ?: false
@@ -210,6 +228,24 @@ class SettingsManager(private val context: Context) {
     suspend fun saveRendererEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[RENDERER_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun saveHitsoundEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[HITSOUND_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun saveHitsoundVolume(volume: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[HITSOUND_VOLUME_KEY] = volume.coerceIn(0, 100)
+        }
+    }
+
+    suspend fun saveHitsoundLatencyMs(latencyMs: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[HITSOUND_LATENCY_MS_KEY] = latencyMs.coerceIn(-200, 200)
         }
     }
 

@@ -197,10 +197,10 @@ restore-after-reinstall work even when local audio is unreadable.
 
 ## Renderer architecture (standard implemented; other modes TBD)
 
-Only osu!standard has a parser/compiler/renderer today. Taiko, catch, and mania
-are intentionally **not implemented and have no visible UI stubs**; the neutral
-contracts exist so adding them does not require reworking Full Player,
-discovery, or preference persistence.
+Only osu!standard has a parser/compiler/renderer and audible hitsounds today.
+Taiko, catch, and mania are intentionally **not implemented and have no visible
+UI stubs**; the neutral contracts exist so adding them does not require
+reworking Full Player, discovery, or preference persistence.
 
 | Piece | File | Contract |
 |-------|------|----------|
@@ -211,6 +211,7 @@ discovery, or preference persistence.
 | Matching | `domain/render/RenderDifficultyMatcher.kt` | Selects the audio group using all scanned modes, then filters to `RendererRegistry.supportedModes`, deduplicates by `(mode, normalized difficulty name)`, and rejects sets with no renderable map. |
 | Registry | `domain/render/RendererRegistry.kt` | Enforces one renderer per mode and exposes failure-safe preparation. `RendererRegistry.default()` currently registers only `OSU`. |
 | Standard renderer | `domain/render/osu/OsuStandardBeatmapRenderer.kt` | Adapter that prepares the existing standard timeline/skin and forwards neutral frames to `OsuRenderer`. |
+| Renderer audio | `domain/render/RenderContracts.kt` | `PreparedRender.updateAudio(RenderAudioFrame, RenderAudioSink)` is the ruleset-neutral hitsound hook. Renderers own cue scheduling and attach cues to their circle/slider/spinner objects; the sink only plays one-shots and keyed loops. |
 
 ### Renderer API lifecycle
 
@@ -223,6 +224,47 @@ the frame-loop entry point: it must be pure with respect to `RenderFrame` and
 must not perform I/O. `PreparedRender.close()` releases renderer-owned resources
 and is called when the media/selection changes or the player leaves composition.
 
+The player session serializes `preloadAudio`, renderer replacement, and `close`
+with one lifecycle mutex. A session-owned audio lock serializes a queued `close`
+against any in-flight `updateAudio` call from the frame loop. `preloadAudio`
+runs on `Dispatchers.IO`; `updateAudio` does not start until preload has completed
+for that prepared renderer and then runs from the frame loop. Renderers
+therefore do not need synchronization for their own scheduler state.
+Preparation closes an unpublished renderer if the coroutine is cancelled or its
+selection/media changes before publication.
+
+### Renderer audio and hitsounds
+
+`PreparedRender.updateAudio` receives map time, a semantic `clockEpoch`,
+playback state, and the user's latency adjustment. Cues are driven from the
+renderer's object timeline rather than a separate audio clock: when the media
+clock crosses a cue's effective time, the renderer asks the passive
+`RenderAudioSink` to play it. Positive latency fires cues earlier, so renderers
+compare `mapTimeMs + latencyMs` with the cue time. `clockEpoch` changes on
+seeks, media transitions, and restarts; renderers must reset cue state and stop
+loops without replaying missed one-shots. Repeated updates at the same time
+must be deduplicated, and a large forward jump must not dump stale one-shots.
+One-shot cues fire once per timeline crossing. Slider-slide and spinner-spin
+loops use stable keys and stop on pause, reset, and discontinuity.
+
+The Android mixer uses BASS behind `RenderAudioSink`; BASS owns playback only,
+not the map clock or cue decisions. V1 bundles osu!'s default normal, soft, and
+drum sample bank. Changing playback rate for DT/NC changes the map clock but
+must not pitch-shift hitsounds.
+
+`RenderAudioSink.preloadSamples` is the only sink entry point allowed to load
+assets or native samples. The session calls it off the frame thread before
+marking the prepared renderer's audio ready. `playSample`/`startLoop` run from
+the frame loop and must use only preloaded resources; a cache miss is silent
+rather than synchronous I/O.
+
+Per-beatmap custom-sample extraction/storage is **TBD**; V1 uses only the
+bundled default bank. Keep sample resolution behind an extensible lookup so
+future support can prefer an explicit custom filename, then the custom-index
+bank sample, then the unsuffixed bank sample, then a universal fallback, with
+custom skins able to override the same resolution path without changing
+renderer contracts.
+
 Full Player passes only neutral catalog/difficulty/key, `PreparedRender`, and
 the selected renderer's `preferredAspectRatio` into its layouts. The selection
 preference remains a string: new writes use `RenderDifficultyKey.encode()`, while
@@ -233,12 +275,14 @@ legacy name-only values remain readable when unambiguous.
 1. Implement that mode's parser/compiler and `BeatmapRenderer` under
    `domain/render/<mode>/`; return a `PreparedRender` whose `mode` matches.
 2. Declare the renderer's content aspect ratio with `preferredAspectRatio`.
-3. Register the renderer exactly once in `RendererRegistry.default()`.
-4. Add mode-specific unit tests for its parser/compiler/renderer.
+3. Attach that ruleset's sample cues to its objects and schedule them in
+   `PreparedRender.updateAudio`.
+4. Register the renderer exactly once in `RendererRegistry.default()`.
+5. Add mode-specific unit tests for its parser/compiler/renderer and audio cues.
 
 Discovery, matching, Full Player orchestration, aspect selection, and preference
 persistence should need no mode-specific changes. **TBD:** taiko, catch, and
-mania parsing, compilation, rendering, and runtime registration.
+mania parsing, compilation, cue generation, rendering, and runtime registration.
 
 ## Heuristics
 

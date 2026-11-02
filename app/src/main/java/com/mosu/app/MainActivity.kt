@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.mosu.app.ui.player.FullPlayer
+import com.mosu.app.ui.player.rememberRenderPlaybackSession
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Download
@@ -575,6 +576,12 @@ fun MainScreen(
 
     // Music Controller stays alive at MainScreen level
     val musicController = remember { MusicController(context, settingsManager) }
+    val renderPlaybackSession = rememberRenderPlaybackSession(
+        context = context,
+        db = db,
+        settingsManager = settingsManager,
+        musicController = musicController
+    )
 
     // SearchViewModel stays alive at MainScreen level to survive navigation
     val searchViewModel: SearchViewModel = viewModel(
@@ -1118,8 +1125,7 @@ fun MainScreen(
             ) {
                 FullPlayer(
                     musicController = musicController,
-                    settingsManager = settingsManager,
-                    db = db,
+                    renderPlaybackSession = renderPlaybackSession,
                     isExpanded = isSheetOpen,
                     onCollapse = {
                         isFullPlayerOpen = false
@@ -1488,8 +1494,7 @@ fun MainScreen(
                 ) {
                     FullPlayer(
                         musicController = musicController,
-                        settingsManager = settingsManager,
-                        db = db,
+                        renderPlaybackSession = renderPlaybackSession,
                         isExpanded = isLandscapePlayerOpen,
                         onCollapse = {
                             isFullPlayerOpen = false

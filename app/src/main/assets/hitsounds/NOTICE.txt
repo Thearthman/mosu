@@ -1,0 +1,22 @@
+Default osu! hitsound resources
+================================
+
+The audio files in this directory are copied unmodified from the official
+osu! resources repository:
+
+  https://github.com/ppy/osu-resources
+  Commit b86b30a9c1109f612fead25c269f8ad6cae4a1c1
+  Directory osu.Game.Resources/Samples/Gameplay/
+
+Bundled files:
+  normal/soft/drum hitnormal, hitwhistle, hitfinish, hitclap,
+  slidertick, sliderslide, and sliderwhistle
+  spinnerspin.wav
+  spinnerbonus.wav
+
+These resources are licensed under Creative Commons
+Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0). The full
+license text is included in CC-BY-NC-4.0.md.
+
+Mosu is a non-commercial project. The osu! and ppy names and branding are
+not licensed under CC-BY-NC 4.0 and remain their owners' trademarks.

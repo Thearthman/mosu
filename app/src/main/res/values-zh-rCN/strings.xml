@@ -139,6 +139,8 @@
     <string name="player_select_difficulty">选择难度</string>
     <string name="player_show_cover">显示封面</string>
     <string name="player_show_renderer">显示谱面渲染</string>
+    <string name="player_mute_hitsounds">静音打击音</string>
+    <string name="player_unmute_hitsounds">取消打击音静音</string>
 
     <!-- 账户 -->
     <string name="profile_login_title">未登录</string>
@@ -169,6 +171,13 @@
     <string name="profile_equalizer_title">均衡器</string>
     <string name="profile_recent_activity_heatmap_title">近期活动热力图</string>
     <string name="profile_coming_soon">即将推出</string>
+    <string name="profile_hitsound_title">打击音</string>
+    <string name="profile_hitsound_desc">在谱面播放时播放与渲染对象关联的打击音。</string>
+    <string name="profile_hitsound_volume">音量</string>
+    <string name="profile_hitsound_volume_value">%1$d%%</string>
+    <string name="profile_hitsound_latency">延迟</string>
+    <string name="profile_hitsound_latency_desc">正值会让打击音提前触发。</string>
+    <string name="profile_hitsound_latency_value">%1$+d 毫秒</string>
     <string name="profile_region_title">检测到</string>
     <string name="profile_region_unknown">未知</string>
 

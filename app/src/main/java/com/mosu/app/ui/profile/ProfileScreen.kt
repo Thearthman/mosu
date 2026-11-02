@@ -61,6 +61,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @Composable
 private fun MissingOsuRepairProgress(
@@ -273,6 +274,9 @@ fun ProfileScreen(
     val preferredMirror: String by settingsManager.preferredMirror.collectAsState(initial = "nerinyan")
     val infoCoverEnabled by settingsManager.infoCoverEnabled.collectAsState(initial = true)
     val genreBarEnabled by settingsManager.genreBarEnabled.collectAsState(initial = true)
+    val hitsoundEnabled by settingsManager.hitsoundEnabled.collectAsState(initial = true)
+    val hitsoundVolume by settingsManager.hitsoundVolume.collectAsState(initial = 100)
+    val hitsoundLatencyMs by settingsManager.hitsoundLatencyMs.collectAsState(initial = 0)
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val languageOptions = listOf(
         "en" to stringResource(R.string.language_english),
@@ -677,6 +681,21 @@ fun ProfileScreen(
             GenreBarToggleCard(genreBarEnabled = genreBarEnabled) { checked ->
                 scope.launch { settingsManager.saveGenreBarEnabled(checked) }
             }
+
+            HitsoundSettingsCard(
+                enabled = hitsoundEnabled,
+                volume = hitsoundVolume,
+                latencyMs = hitsoundLatencyMs,
+                onEnabledChange = { enabled ->
+                    scope.launch { settingsManager.saveHitsoundEnabled(enabled) }
+                },
+                onVolumeChange = { volume ->
+                    scope.launch { settingsManager.saveHitsoundVolume(volume) }
+                },
+                onLatencyChange = { latencyMs ->
+                    scope.launch { settingsManager.saveHitsoundLatencyMs(latencyMs) }
+                }
+            )
 
 
             // Include Unranked/Loved/Any Status - Fixed layout with consistent max width for text
@@ -1311,6 +1330,112 @@ private fun GenreBarToggleCard(
             Switch(
                 checked = genreBarEnabled,
                 onCheckedChange = onToggle
+            )
+        }
+    }
+}
+
+@Composable
+private fun HitsoundSettingsCard(
+    enabled: Boolean,
+    volume: Int,
+    latencyMs: Int,
+    onEnabledChange: (Boolean) -> Unit,
+    onVolumeChange: (Int) -> Unit,
+    onLatencyChange: (Int) -> Unit
+) {
+    var volumeValue by remember(volume) { mutableStateOf(volume) }
+    var latencyValue by remember(latencyMs) { mutableStateOf(latencyMs) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(0.7f)
+                ) {
+                    Text(
+                        stringResource(R.string.profile_hitsound_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.profile_hitsound_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.profile_hitsound_volume),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = stringResource(R.string.profile_hitsound_volume_value, volumeValue),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            Slider(
+                value = volumeValue.toFloat(),
+                onValueChange = { volumeValue = it.roundToInt() },
+                onValueChangeFinished = { onVolumeChange(volumeValue) },
+                valueRange = 0f..100f,
+                enabled = enabled
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.profile_hitsound_latency),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(R.string.profile_hitsound_latency_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                Text(
+                    text = stringResource(
+                        R.string.profile_hitsound_latency_value,
+                        latencyValue
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            Slider(
+                value = latencyValue.toFloat(),
+                onValueChange = { latencyValue = it.roundToInt() },
+                onValueChangeFinished = { onLatencyChange(latencyValue) },
+                valueRange = -200f..200f,
+                steps = 79,
+                enabled = enabled
             )
         }
     }

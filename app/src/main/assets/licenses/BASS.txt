@@ -1,0 +1,17 @@
+BASS audio library
+==================
+
+BASS 2.4.18.3
+Copyright (c) 1999-2025 Un4seen Developments Ltd. All rights reserved.
+
+https://www.un4seen.com/
+
+BASS is free for non-commercial use. If you are a non-commercial entity
+(for example, an individual) and you are not making money from your product
+through sales, advertising, or equivalent means, you may use BASS in it for
+free. Commercial use requires an appropriate BASS commercial license from
+Un4seen Developments Ltd.
+
+The Java wrapper is distributed by Un4seen Developments Ltd. as part of BASS.
+The bundled native libraries are unmodified copies from the BASS Android
+package.

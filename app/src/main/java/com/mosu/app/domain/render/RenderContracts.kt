@@ -97,6 +97,57 @@ data class RenderFrame(
     val replayInput: ReplayInput? = null
 )
 
+enum class RenderSampleBank {
+    NORMAL,
+    SOFT,
+    DRUM
+}
+
+/**
+ * A ruleset-neutral request for one hit sample.
+ *
+ * [customFilename] and [customSampleIndex] are retained even while custom
+ * beatmap samples are unsupported, so extracting and playing them later does
+ * not require changing renderer contracts.
+ */
+data class RenderSample(
+    val sampleName: String,
+    val bank: RenderSampleBank,
+    val customSampleIndex: Int = 0,
+    val customFilename: String? = null,
+    val volume: Int = 100
+)
+
+/**
+ * Playback state passed to a prepared renderer's audio scheduler.
+ *
+ * Cues are early by [latencyMs]: renderers should compare
+ * `mapTimeMs + latencyMs` against their timeline's cue times. [clockEpoch]
+ * changes on discontinuities such as a seek, media transition or restart.
+ */
+data class RenderAudioFrame(
+    val mapTimeMs: Double,
+    val clockEpoch: Long,
+    val isPlaying: Boolean,
+    val latencyMs: Int = 0
+)
+
+/**
+ * Passive audio output. Renderers decide when a cue is due; the sink only
+ * starts, updates and stops native channels.
+ *
+ * [preloadSamples] may perform asset or native I/O and must be called before
+ * the first audible cue. [playSample] and [startLoop] are called from the
+ * renderer frame loop and must only use already-preloaded resources.
+ */
+interface RenderAudioSink {
+    fun preloadSamples(samples: Iterable<RenderSample>) = Unit
+    fun playSample(sample: RenderSample)
+    fun startLoop(key: String, sample: RenderSample)
+    fun stopLoop(key: String)
+    fun stopAll()
+}
+
 data class ReplayPosition(val x: Float, val y: Float)
 
 data class ReplayFrame(
@@ -126,8 +177,20 @@ interface BeatmapRenderer {
     ): PreparedRender?
 }
 
+/**
+ * A renderer instance that has finished its expensive preparation.
+ *
+ * The player session serializes lifecycle calls: [preloadAudio] runs off the
+ * frame thread, [updateAudio] runs on the frame thread and only after preload
+ * completes, and [close] runs only after in-flight preload/update work has
+ * stopped. Implementations may therefore keep mutable scheduler state without
+ * adding their own locks, but must not perform I/O or block in [draw] or
+ * [updateAudio].
+ */
 interface PreparedRender {
     val mode: RenderMode
     fun draw(canvas: Canvas, frame: RenderFrame)
+    fun preloadAudio(sink: RenderAudioSink) = Unit
+    fun updateAudio(frame: RenderAudioFrame, sink: RenderAudioSink) = Unit
     fun close() = Unit
 }

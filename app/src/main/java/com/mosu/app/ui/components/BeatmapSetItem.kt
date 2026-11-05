@@ -196,13 +196,33 @@ fun BeatmapSetItem(
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
                 StarRatingBadge(score.starRating)
-                Text(
-                    text = score.pp?.let { stringResource(id = R.string.score_pp_value, it) }
-                        ?: stringResource(id = R.string.score_pp_none),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 2.dp)
-                )
+                ) {
+                    Text(
+                        text = score.pp?.let { stringResource(id = R.string.score_pp_value, it) }
+                            ?: stringResource(id = R.string.score_pp_none),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    score.accuracy?.let { accuracy ->
+                        Text(
+                            text = "/",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                        Text(
+                            text = stringResource(
+                                id = R.string.score_accuracy_value,
+                                accuracy.toDisplayAccuracyPercent()
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
                 Text(
                     text = stringResource(
                         id = R.string.score_length_prefix,

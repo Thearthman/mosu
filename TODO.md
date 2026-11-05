@@ -63,6 +63,7 @@
 
 #### Score
 - [ ] [v1.2] Add Top Play(top 200) with detailed stats (different from the search/download focused view in search top play filter mode)
+- [x] [v1.2] Preserve cached score accuracy and show it to the right of pp on scored `BeatmapSetItem` rows.
 
 ## Completed
 

@@ -3,6 +3,8 @@ package com.mosu.app.ui.components
 import com.mosu.app.data.api.model.BestScore
 import com.mosu.app.data.db.RecentPlayEntity
 
+internal fun Float.toDisplayAccuracyPercent(): Float = this * 100f
+
 internal fun RecentPlayEntity.toBeatmapSetData(): BeatmapSetData {
     return BeatmapSetData(
         id = beatmapSetId,
@@ -16,6 +18,7 @@ internal fun RecentPlayEntity.toBeatmapSetData(): BeatmapSetData {
             mode = mode,
             difficultyName = difficultyName,
             pp = pp,
+            accuracy = accuracy,
             starRating = starRating,
             lengthSeconds = lengthSeconds
         )
@@ -28,6 +31,7 @@ internal fun BestScore.toBeatmapSetScoreData(): BeatmapSetScoreData {
         mode = beatmap?.mode ?: mode,
         difficultyName = beatmap?.version,
         pp = pp,
+        accuracy = accuracy,
         starRating = beatmap?.difficultyRating,
         lengthSeconds = beatmap?.totalLength
     )

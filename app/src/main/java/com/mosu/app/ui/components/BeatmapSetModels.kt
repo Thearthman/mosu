@@ -53,6 +53,7 @@ data class BeatmapSetScoreData(
     val mode: String? = null,
     val difficultyName: String? = null,
     val pp: Float? = null,
+    val accuracy: Float? = null,
     val starRating: Float? = null,
     val lengthSeconds: Int? = null
 )

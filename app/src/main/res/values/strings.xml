@@ -128,6 +128,7 @@
     <string name="score_cs_value">CS %1$.1f</string>
     <string name="score_pp_value">%1$.0fpp</string>
     <string name="score_pp_none">--pp</string>
+    <string name="score_accuracy_value">%1$.2f%%</string>
     <plurals name="score_pp_record_held">
         <item quantity="one">%1$d day ago, %2$s</item>
         <item quantity="other">%1$d days ago, %2$s</item>

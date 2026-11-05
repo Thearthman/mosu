@@ -54,12 +54,18 @@ import com.mosu.app.domain.repair.MissingOsuBackfillPhase
 import com.mosu.app.domain.repair.MissingOsuBackfillRunState
 import com.mosu.app.domain.repair.MissingOsuBackfillUiState
 import com.mosu.app.domain.restore.RestoreDownloadsService
+import com.mosu.app.domain.skin.CustomSkinLibrary
+import com.mosu.app.domain.skin.CustomSkinRecord
+import com.mosu.app.ui.skin.importSkinFromUri
+import com.mosu.app.ui.skin.skinImportMessage
 import com.mosu.app.utils.RegionUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -237,6 +243,7 @@ fun ProfileScreen(
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
+    customSkinLibrary: CustomSkinLibrary,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
     isLandscape: Boolean = false,
     onLoginClick: () -> Unit,
@@ -277,6 +284,10 @@ fun ProfileScreen(
     val hitsoundEnabled by settingsManager.hitsoundEnabled.collectAsState(initial = true)
     val hitsoundVolume by settingsManager.hitsoundVolume.collectAsState(initial = 100)
     val hitsoundLatencyMs by settingsManager.hitsoundLatencyMs.collectAsState(initial = 0)
+    val customSkins by settingsManager.customSkins.collectAsState(initial = emptyList())
+    val activeCustomSkinId by settingsManager.activeCustomSkinId.collectAsState(initial = null)
+    var isImportingSkin by remember { mutableStateOf(false) }
+    var skinDeleteCandidate by remember { mutableStateOf<CustomSkinRecord?>(null) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val languageOptions = listOf(
         "en" to stringResource(R.string.language_english),
@@ -297,6 +308,32 @@ fun ProfileScreen(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val skinImportMutex = remember { Mutex() }
+
+    suspend fun importSkin(uri: android.net.Uri) {
+        skinImportMutex.withLock {
+            isImportingSkin = true
+            try {
+                val result = importSkinFromUri(context, uri, customSkinLibrary)
+                android.widget.Toast.makeText(
+                    context,
+                    skinImportMessage(context, result),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                isImportingSkin = false
+            }
+        }
+    }
+
+    val skinImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch { importSkin(uri) }
+        }
+    }
+
     val missingOsuBackfillManager = remember(context.applicationContext) {
         MissingOsuBackfillManager.getInstance(context)
     }
@@ -686,6 +723,9 @@ fun ProfileScreen(
                 enabled = hitsoundEnabled,
                 volume = hitsoundVolume,
                 latencyMs = hitsoundLatencyMs,
+                customSkins = customSkins,
+                activeCustomSkinId = activeCustomSkinId,
+                isImportingSkin = isImportingSkin,
                 onEnabledChange = { enabled ->
                     scope.launch { settingsManager.saveHitsoundEnabled(enabled) }
                 },
@@ -694,6 +734,15 @@ fun ProfileScreen(
                 },
                 onLatencyChange = { latencyMs ->
                     scope.launch { settingsManager.saveHitsoundLatencyMs(latencyMs) }
+                },
+                onImportSkin = {
+                    skinImportLauncher.launch(arrayOf("*/*"))
+                },
+                onSelectSkin = { skinId ->
+                    scope.launch { customSkinLibrary.select(skinId) }
+                },
+                onDeleteSkin = { skin ->
+                    skinDeleteCandidate = skin
                 }
             )
 
@@ -1173,6 +1222,52 @@ fun ProfileScreen(
         )
     }
 
+    skinDeleteCandidate?.let { skin ->
+        AlertDialog(
+            onDismissRequest = { skinDeleteCandidate = null },
+            title = { Text(stringResource(R.string.profile_skin_delete_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.profile_skin_delete_message,
+                        skin.name
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        skinDeleteCandidate = null
+                        scope.launch {
+                            val deleted = customSkinLibrary.delete(skin.id)
+                            val message = if (deleted) {
+                                context.getString(R.string.profile_skin_deleted, skin.name)
+                            } else {
+                                context.getString(R.string.profile_skin_delete_failed, skin.name)
+                            }
+                            android.widget.Toast.makeText(
+                                context,
+                                message,
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text(stringResource(R.string.profile_skin_delete_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { skinDeleteCandidate = null }) {
+                    Text(stringResource(R.string.profile_skin_delete_cancel))
+                }
+            }
+        )
+    }
+
     // Token Debug Dialog
     if (showTokenDialog) {
         AlertDialog(
@@ -1340,12 +1435,20 @@ private fun HitsoundSettingsCard(
     enabled: Boolean,
     volume: Int,
     latencyMs: Int,
+    customSkins: List<CustomSkinRecord>,
+    activeCustomSkinId: String?,
+    isImportingSkin: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onVolumeChange: (Int) -> Unit,
-    onLatencyChange: (Int) -> Unit
+    onLatencyChange: (Int) -> Unit,
+    onImportSkin: () -> Unit,
+    onSelectSkin: (String?) -> Unit,
+    onDeleteSkin: (CustomSkinRecord) -> Unit
 ) {
     var volumeValue by remember(volume) { mutableStateOf(volume) }
     var latencyValue by remember(latencyMs) { mutableStateOf(latencyMs) }
+    var skinMenuExpanded by remember { mutableStateOf(false) }
+    val activeSkin = customSkins.firstOrNull { it.id == activeCustomSkinId }
 
     Card(
         modifier = Modifier
@@ -1437,6 +1540,141 @@ private fun HitsoundSettingsCard(
                 steps = 79,
                 enabled = enabled
             )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = stringResource(R.string.profile_skin_title),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.profile_skin_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { skinMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = activeSkin?.name
+                                ?: stringResource(R.string.profile_skin_bundled),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = skinMenuExpanded,
+                        onDismissRequest = { skinMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (activeCustomSkinId == null) {
+                                        stringResource(R.string.profile_skin_bundled_selected)
+                                    } else {
+                                        stringResource(R.string.profile_skin_bundled)
+                                    }
+                                )
+                            },
+                            onClick = {
+                                skinMenuExpanded = false
+                                onSelectSkin(null)
+                            }
+                        )
+                        customSkins.forEach { skin ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            text = if (skin.id == activeCustomSkinId) {
+                                                stringResource(
+                                                    R.string.profile_skin_selected_name,
+                                                    skin.name
+                                                )
+                                            } else {
+                                                skin.name
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (skin.author.isNotBlank()) {
+                                            Text(
+                                                text = stringResource(
+                                                    R.string.profile_skin_author,
+                                                    skin.author
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    skinMenuExpanded = false
+                                    onSelectSkin(skin.id)
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = onImportSkin,
+                    enabled = !isImportingSkin
+                ) {
+                    if (isImportingSkin) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(stringResource(R.string.profile_skin_import))
+                    }
+                }
+            }
+
+            if (customSkins.isEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.profile_skin_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+
+            activeSkin?.let { skin ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (skin.author.isBlank()) {
+                            stringResource(R.string.profile_skin_active)
+                        } else {
+                            stringResource(R.string.profile_skin_active_by, skin.author)
+                        },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    TextButton(onClick = { onDeleteSkin(skin) }) {
+                        Text(stringResource(R.string.profile_skin_delete_action))
+                    }
+                }
+            }
         }
     }
 }

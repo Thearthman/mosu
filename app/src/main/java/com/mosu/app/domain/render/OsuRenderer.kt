@@ -42,6 +42,10 @@ class OsuRenderer(private val skin: OsuSkin) {
     private val comboDigitWidths = FloatArray(12)
     private val comboText = StringBuilder(12)
 
+    fun close() {
+        skin.close()
+    }
+
     @Suppress("UNUSED_PARAMETER")
     fun draw(
         canvas: Canvas,

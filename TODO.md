@@ -5,17 +5,19 @@
 - [ ] Album photo differs from the Search page image. Use the official osu! API to get the high-res cover image for each beatmap.
 - [x] Debug .osu file backfill may stuck at "queued, waiting for network or background worker to start"
 - [x] In landscape view, the full play's play control components will stretch to fill full width during the miliseconds it takes for renderer to show.
-- [ ] Current beatmapset data parsing structure struggle to handle when a beatmapset contains difficulties of different modes.
+- [x] Current beatmapset data parsing structure struggle to handle when a beatmapset contains difficulties of different modes.
 - [x] Seeking forward in full-player will still have a chance of causing renderer poorly synced with audio. Look into the seek sync implementation, compare to pause and play because the later works fine. it might have something to do with how we implemented the audio side of the seek as well.
+- [ ] Fix bugged state after importing skins through android open with method. (can't go to library becuase it's overwritten forcefully with profile screen, and no hitsound unless restart the app)
+- [ ] Fix slider repeater position.
 
 ### UIUX
 - [ ] Add frosted glass fade to most of the components that involves scrolling. 
 - [ ] Fix the UI scaling issue.
-- [ ] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
-- [ ] [v1.3] Reimagine the entire Landscape UI.
+- [x] The number displayed inside the download list button is cut off by the button's round border, so when there are two digit of downloads going on, the number gets cut off.
+- [x] [v1.3] Reimagine the entire Landscape UI.
 - [ ] redesign how scores are presented on search page. Right now cover art takes up too much space and titles are clipped aggressively especially in topplay and recent play mode.
 - [x] Make genre bar a generic pill shaped slide out menu composable just like the osu mode switcher.
-- [ ] Find a good placement for the genre filter on both the Library and Search screens.
+- [x] Find a good placement for the genre filter on both the Library and Search screens.
 
 ### Features
 
@@ -25,8 +27,9 @@
 - [ ] [v1.3] Implement song recommendations based on tags, genre, and related metadata.
 - [ ] [v1.3] Implement smart playlist generation based on how long the user stays on songs in random play mode.
 - [ ] [v1.4] Implement DJ mixing for smooth transition
-- [ ] [v1.2] Add the homepage widget
+- [ ] [v1.3] Add the homepage widget
 - [ ] [v1.2] Add import to Mosu option for downloaded .osz file.
+- [x] [v1.2] Add import to Mosu option for downloaded .osk file.
 - [ ] [v1.2] Add general offset tuning for hit-sound
 - [x] [v1.2] albums that have only one diff left(through deletion of diffs) should be convered into songs.
 
@@ -50,9 +53,10 @@
 - [ ] [v1.3] Add slider ticks and inter-object follow points to the Full Player renderer.
 - [ ] [v1.3] Add replay parsing and cursor rendering using the existing `ReplayInput` extension point.
 - [ ] [v1.2] Add support for other three modes in renderer (mania: https://github.com/HecticKiwi/Web-Osu-Mania)
-- [ ] [v1.2] Add general/skin hit-sound support
+- [x] [v1.2] Add general/prebuilt-skin hit-sound support
+- [x] [v1.2] Add custom skin hit-sound support
 - [ ] [v1.2] Add beatmap hit-sound support
-- [ ] [v1.2] Add per beatmapid local hit-sound offset for individual diffs. Require persistent storage, maybe in a new table
+- [ ] [v1.3] Add per beatmapid local hit-sound offset for individual diffs. Require persistent storage, maybe in a new table
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.

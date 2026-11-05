@@ -7,10 +7,17 @@ package com.mosu.app.domain.render
  * cursor over immutable cues and translates due cues into passive sink calls.
  */
 class OsuHitsoundScheduler(
-    timeline: OsuRenderTimeline
+    timeline: OsuRenderTimeline,
+    layeredHitSounds: Boolean = true
 ) {
-    private val cues = timeline.hitsoundCues
-    private val loops = timeline.hitsoundLoops
+    private val cues = OsuHitsoundLayering.filterCues(
+        timeline.hitsoundCues,
+        layeredHitSounds
+    )
+    private val loops = OsuHitsoundLayering.filterLoops(
+        timeline.hitsoundLoops,
+        layeredHitSounds
+    )
     private val activeLoopKeys = mutableSetOf<String>()
     private var previousEffectiveTimeMs: Double? = null
     private var previousClockEpoch: Long? = null
@@ -142,5 +149,45 @@ class OsuHitsoundScheduler(
     private companion object {
         const val MAX_FORWARD_JUMP_MS = 250.0
         const val TIME_EPSILON_MS = 0.01
+    }
+}
+
+/**
+ * Applies osu!'s legacy `LayeredHitSounds` setting to a compiled timeline.
+ *
+ * With layering disabled, a cue's normal sample is suppressed whenever that
+ * cue also contains an addition (whistle, finish, or clap). Normal-only cues
+ * remain audible. Slider body loops follow the same rule: a whistle loop
+ * suppresses the matching normal slide loop for that object.
+ */
+internal object OsuHitsoundLayering {
+    private val additions = setOf("hitfinish", "hitwhistle", "hitclap")
+
+    fun filterCues(
+        cues: List<OsuHitsoundCue>,
+        layered: Boolean
+    ): List<OsuHitsoundCue> {
+        if (layered) return cues
+        return cues.map { cue ->
+            if (cue.samples.any { it.sampleName in additions }) {
+                cue.copy(samples = cue.samples.filterNot { it.sampleName == "hitnormal" })
+            } else {
+                cue
+            }
+        }
+    }
+
+    fun filterLoops(
+        loops: List<OsuHitsoundLoop>,
+        layered: Boolean
+    ): List<OsuHitsoundLoop> {
+        if (layered) return loops
+        val whistlingObjects = loops
+            .filter { it.sample.sampleName == "sliderwhistle" }
+            .mapTo(mutableSetOf()) { it.key.substringBeforeLast(':') }
+        return loops.filterNot { loop ->
+            loop.sample.sampleName == "sliderslide" &&
+                loop.key.substringBeforeLast(':') in whistlingObjects
+        }
     }
 }

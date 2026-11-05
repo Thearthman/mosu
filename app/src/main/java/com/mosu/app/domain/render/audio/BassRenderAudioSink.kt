@@ -5,11 +5,11 @@ import android.content.res.AssetManager
 import android.util.Log
 import com.mosu.app.domain.render.RenderAudioSink
 import com.mosu.app.domain.render.RenderSample
-import com.mosu.app.domain.render.RenderSampleBank
+import com.mosu.app.domain.render.RenderSkinSelection
+import com.mosu.app.domain.render.SkinFileIndex
 import com.un4seen.bass.BASS
 import java.io.Closeable
 import java.io.IOException
-import java.util.Locale
 
 /**
  * BASS-backed sample mixer for renderer-owned hitsound cues.
@@ -33,12 +33,15 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
     private val missingSamples = mutableSetOf<RenderSample>()
     private val loops = mutableMapOf<String, ActiveLoop>()
     private val oneShotChannels = mutableSetOf<Int>()
+    private var skinSelection = RenderSkinSelection.Bundled
+    private var customSkinFiles: SkinFileIndex? = null
 
     private var masterVolume = MAX_VOLUME
     private var bassInitialized = false
-    private var bassNeedsFree = false
+    private var bassLeaseHeld = false
     private var bassUnavailable = false
     private var released = false
+    private val tracedPlayedSamples = mutableSetOf<RenderSample>()
 
     /**
      * Sets the global sample volume. Values outside 0..100 are clamped.
@@ -56,6 +59,34 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
 
             masterVolume = clamped
             if (bassActiveLocked()) applyMasterVolumeLocked()
+        }
+    }
+
+    /**
+     * Switches sample lookup to [selection]. Cached native samples are tied to
+     * their source skin, so they are freed before the next preload pass.
+     */
+    fun setSkinSelection(selection: RenderSkinSelection) {
+        synchronized(preloadGate) {
+            val files = selection.directory
+                ?.takeIf { !selection.isBundled && it.isDirectory }
+                ?.let(SkinFileIndex::build)
+            synchronized(lock) {
+                if (released || skinSelection == selection) return
+                skinSelection = selection
+                customSkinFiles = files
+                Log.d(
+                    SKIN_TRACE_TAG,
+                    "setSkinSelection id=${selection.id}/${selection.name} " +
+                        "files=${files?.size ?: 0}"
+                )
+                stopAllLocked()
+                if (bassActiveLocked()) {
+                    samples.values.toList().forEach(::freeSampleLocked)
+                }
+                samples.clear()
+                missingSamples.clear()
+            }
         }
     }
 
@@ -78,6 +109,13 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
 
             val sampleHandle = samples[sample.copy(volume = DEFAULT_SAMPLE_VOLUME)] ?: return
             val channel = createChannelLocked(sampleHandle, sample.volume) ?: return
+            if (tracedPlayedSamples.add(sample) && tracedPlayedSamples.size <= TRACE_PLAY_LIMIT) {
+                Log.d(
+                    SKIN_TRACE_TAG,
+                    "play sample=${sample.sampleName} bank=${sample.bank} " +
+                        "skin=${skinSelection.id}/${skinSelection.name}"
+                )
+            }
 
             val started = guardBass("start one-shot channel") {
                 BASS.BASS_ChannelPlay(channel, false)
@@ -186,9 +224,14 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
                 if (bassActiveLocked()) {
                     samples.values.toList().forEach(::freeSampleLocked)
                 }
-                if (bassActiveLocked() || bassNeedsFree) {
-                    guardBass("free BASS") {
-                        BASS.BASS_Free()
+                if (bassLeaseHeld) {
+                    bassLeaseHeld = false
+                    val result = BassDeviceLease.release()
+                    result.errorCode?.let { errorCode ->
+                        Log.w(TAG, "BASS device release failed (error $errorCode)")
+                    }
+                    result.failure?.let { error ->
+                        Log.e(TAG, "BASS device release failed", error)
                     }
                 }
 
@@ -197,7 +240,6 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
                 loops.clear()
                 oneShotChannels.clear()
                 bassInitialized = false
-                bassNeedsFree = false
                 released = true
             }
         }
@@ -215,12 +257,18 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
             if (released || bassUnavailable) return false
         }
 
-        val initialized = guardBass("initialize BASS") {
-            BASS.BASS_Init(BASS_DEVICE_DEFAULT, SAMPLE_RATE, 0)
-        } ?: return false
-        if (!initialized) {
-            val errorCode = BASS.BASS_ErrorGetCode()
-            Log.w(TAG, "BASS initialization failed (error $errorCode); hitsounds disabled")
+        val acquisition = BassDeviceLease.acquire()
+        acquisition.failure?.let { error ->
+            synchronized(lock) {
+                disableBassLocked("initialize BASS", error)
+            }
+            return false
+        }
+        if (!acquisition.acquired) {
+            Log.w(
+                TAG,
+                "BASS initialization failed (error ${acquisition.errorCode}); hitsounds disabled"
+            )
             synchronized(lock) {
                 if (!released) bassUnavailable = true
             }
@@ -232,9 +280,10 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
             // no sample handles can have failed before this initialization is
             // published.
             bassInitialized = true
-            bassNeedsFree = false
+            bassLeaseHeld = true
             applyMasterVolumeLocked()
         }
+        Log.d(TAG, "BASS initialized for hitsounds")
 
         return synchronized(lock) { bassActiveLocked() }
     }
@@ -261,39 +310,77 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
             if (sample in samples || sample in missingSamples) return
         }
 
-        for (assetPath in sampleAssetCandidates(sample)) {
-            if (!assetExists(assetPath)) continue
-
-            val handle = guardBass("load sample $assetPath") {
-                BASS.BASS_SampleLoad(
-                    BASS.Asset(assets, assetPath),
-                    0,
-                    0,
-                    MAX_SAMPLE_CHANNELS,
-                    BASS.BASS_SAMPLE_OVER_POS
-                )
-            } ?: return
-            if (handle == 0) continue
-
-            val accepted = synchronized(lock) {
-                if (released || !bassActiveLocked()) {
-                    false
-                } else {
-                    samples.putIfAbsent(sample, handle) == null
+        val customFiles = customSkinFiles
+        if (customFiles != null) {
+            for (filename in HitSampleResolver.userSkinCandidates(sample)) {
+                val file = customFiles.find(filename) ?: continue
+                if (!file.isFile) continue
+                if (tryLoadSample(sample, file.absolutePath) { path ->
+                        BASS.BASS_SampleLoad(
+                            path,
+                            0,
+                            0,
+                            MAX_SAMPLE_CHANNELS,
+                            BASS.BASS_SAMPLE_OVER_POS
+                        )
+                    }
+                ) {
+                    return
                 }
             }
-            if (accepted) return
+        }
 
-            synchronized(lock) {
-                freeSampleLocked(handle)
+        for (assetPath in HitSampleResolver.bundledAssetCandidates(sample)) {
+            if (!assetExists(assetPath)) continue
+            if (tryLoadSample(sample, assetPath) { path ->
+                    BASS.BASS_SampleLoad(
+                        BASS.Asset(assets, path),
+                        0,
+                        0,
+                        MAX_SAMPLE_CHANNELS,
+                        BASS.BASS_SAMPLE_OVER_POS
+                    )
+                }
+            ) {
+                return
             }
-            return
         }
 
         synchronized(lock) {
             if (!released && bassActiveLocked()) missingSamples += sample
         }
         Log.w(TAG, "No playable hitsound asset for ${sample.sampleName} (${sample.bank})")
+    }
+
+    private fun tryLoadSample(
+        sample: RenderSample,
+        source: String,
+        load: (String) -> Int
+    ): Boolean {
+        val handle = guardBass("load sample $source") { load(source) } ?: return false
+        if (handle == 0) return false
+
+        val accepted = synchronized(lock) {
+            if (released || !bassActiveLocked()) {
+                false
+            } else {
+                samples.putIfAbsent(sample, handle) == null
+            }
+        }
+        if (accepted) {
+            if (tracedPlayedSamples.size < TRACE_PLAY_LIMIT) {
+                Log.d(
+                    SKIN_TRACE_TAG,
+                    "loaded ${sample.sampleName}/${sample.bank} from $source"
+                )
+            }
+            return true
+        }
+
+        synchronized(lock) {
+            freeSampleLocked(handle)
+        }
+        return false
     }
 
     private fun createChannelLocked(sampleHandle: Int, sampleVolume: Int): Int? {
@@ -412,8 +499,6 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
         if (!bassUnavailable) {
             Log.e(TAG, "BASS failed to $operation; hitsounds disabled", error)
         }
-        val needsDeviceCleanup = bassInitialized
-        bassNeedsFree = bassNeedsFree || needsDeviceCleanup
         bassUnavailable = true
         bassInitialized = false
         loops.clear()
@@ -430,62 +515,90 @@ class BassRenderAudioSink(context: Context) : RenderAudioSink, Closeable {
 
     private companion object {
         const val TAG = "BassRenderAudioSink"
-        const val ASSET_ROOT = "hitsounds"
+        const val SKIN_TRACE_TAG = "MosuSkinTrace"
         const val SAMPLE_RATE = 44_100
         const val MAX_SAMPLE_CHANNELS = 32
         const val MIN_VOLUME = 0
         const val MAX_VOLUME = 100
         const val DEFAULT_SAMPLE_VOLUME = 100
-        const val BASS_DEVICE_DEFAULT = -1
-
-        val SAMPLE_EXTENSIONS = listOf("wav", "mp3", "ogg")
-
-        fun sampleAssetCandidates(sample: RenderSample): List<String> {
-            val names = linkedSetOf<String>()
-            val sampleName = sample.sampleName.toAssetBaseName()
-            val sampleStem = sampleName.substringBeforeLast('.', sampleName)
-
-            sample.customFilename
-                ?.toAssetBaseName()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { names.addAll(it.withSampleExtensions()) }
-
-            if (sampleName.isNotEmpty()) {
-                val bankPrefix = sample.bank.assetPrefix
-                val index = sample.customSampleIndex.coerceAtLeast(0)
-                if (index > 0) {
-                    names.addAll("$bankPrefix-$sampleStem$index".withSampleExtensions())
-                }
-                names.addAll("$bankPrefix-$sampleStem".withSampleExtensions())
-                names.addAll(sampleStem.withSampleExtensions())
-            }
-
-            return names
-                .flatMap { name ->
-                    val lowerName = name.lowercase(Locale.ROOT)
-                    if (lowerName == name) listOf(name) else listOf(name, lowerName)
-                }
-                .distinct()
-                .map { "$ASSET_ROOT/$it" }
-        }
-
-        fun String.toAssetBaseName(): String {
-            return trim()
-                .replace('\\', '/')
-                .substringAfterLast('/')
-        }
-
-        fun String.withSampleExtensions(): List<String> {
-            val extension = substringAfterLast('.', "").lowercase(Locale.ROOT)
-            if (extension in SAMPLE_EXTENSIONS) return listOf(this)
-            return SAMPLE_EXTENSIONS.map { "$this.$it" }
-        }
-
-        val RenderSampleBank.assetPrefix: String
-            get() = when (this) {
-                RenderSampleBank.NORMAL -> "normal"
-                RenderSampleBank.SOFT -> "soft"
-                RenderSampleBank.DRUM -> "drum"
-            }
+        const val TRACE_PLAY_LIMIT = 24
     }
 }
+
+/**
+ * BASS owns one device per process, regardless of how many render sessions
+ * exist. The activity and service can briefly overlap during task handoff, so
+ * initialization is reference-counted: every sink leases the shared device,
+ * and only the last sink releases it.
+ */
+private object BassDeviceLease {
+    private val lock = Any()
+    private var owners = 0
+    private var initialized = false
+
+    fun acquire(): BassDeviceAcquisition = synchronized(lock) {
+        if (initialized) {
+            owners++
+            return@synchronized BassDeviceAcquisition(
+                acquired = true,
+                errorCode = BASS.BASS_OK,
+                reusedExistingDevice = true
+            )
+        }
+
+        try {
+            val initializedNow = BASS.BASS_Init(BASS_DEVICE_DEFAULT, SAMPLE_RATE, 0)
+            val errorCode = if (initializedNow) BASS.BASS_OK else BASS.BASS_ErrorGetCode()
+            if (initializedNow || errorCode == BASS.BASS_ERROR_ALREADY) {
+                initialized = true
+                owners++
+                BassDeviceAcquisition(
+                    acquired = true,
+                    errorCode = errorCode,
+                    reusedExistingDevice = !initializedNow
+                )
+            } else {
+                BassDeviceAcquisition(acquired = false, errorCode = errorCode)
+            }
+        } catch (error: LinkageError) {
+            BassDeviceAcquisition(acquired = false, errorCode = BASS.BASS_ERROR_INIT, failure = error)
+        } catch (error: RuntimeException) {
+            BassDeviceAcquisition(acquired = false, errorCode = BASS.BASS_ERROR_INIT, failure = error)
+        }
+    }
+
+    fun release(): BassDeviceRelease = synchronized(lock) {
+        if (owners == 0) return@synchronized BassDeviceRelease()
+
+        owners--
+        if (owners > 0 || !initialized) return@synchronized BassDeviceRelease()
+
+        initialized = false
+        try {
+            if (BASS.BASS_Free()) {
+                BassDeviceRelease()
+            } else {
+                BassDeviceRelease(errorCode = BASS.BASS_ErrorGetCode())
+            }
+        } catch (error: LinkageError) {
+            BassDeviceRelease(failure = error)
+        } catch (error: RuntimeException) {
+            BassDeviceRelease(failure = error)
+        }
+    }
+
+    private const val SAMPLE_RATE = 44_100
+    private const val BASS_DEVICE_DEFAULT = -1
+}
+
+private data class BassDeviceAcquisition(
+    val acquired: Boolean,
+    val errorCode: Int,
+    val reusedExistingDevice: Boolean = false,
+    val failure: Throwable? = null
+)
+
+private data class BassDeviceRelease(
+    val errorCode: Int? = null,
+    val failure: Throwable? = null
+)

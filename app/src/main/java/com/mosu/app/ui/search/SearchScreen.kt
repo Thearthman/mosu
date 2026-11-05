@@ -1,9 +1,16 @@
 package com.mosu.app.ui.search
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +31,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,7 +54,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +75,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -79,9 +87,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.mosu.app.R
 import com.mosu.app.data.api.model.BeatmapsetCompact
 import com.mosu.app.data.api.model.Covers
@@ -125,6 +140,210 @@ private fun Map<Long, DownloadTask>.forSong(
     return this[setId] ?: values.firstOrNull {
         it.title.equals(title, ignoreCase = true) &&
             it.artist.equals(artist, ignoreCase = true)
+    }
+}
+
+@Composable
+private fun SearchTypeFilter(
+    selectedMode: String,
+    options: List<String>,
+    menuLabels: Map<String, String>,
+    buttonLabels: Map<String, String>,
+    optionColors: Map<String, Color>,
+    contentColors: Map<String, Color>,
+    modifier: Modifier = Modifier,
+    onSelected: (String) -> Unit
+) {
+    val filterButtonTextStyle =
+        MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+    val menuTextStyle =
+        MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val filterTextStartPadding =
+        if (LocalConfiguration.current.locales[0].language == "zh") 2.dp else 0.dp
+    val filterButtonWidth = remember(
+        buttonLabels,
+        filterButtonTextStyle,
+        textMeasurer,
+        density,
+        filterTextStartPadding
+    ) {
+        val maxLabelWidthPx = buttonLabels.values.maxOf { label ->
+            textMeasurer.measure(
+                text = label,
+                style = filterButtonTextStyle,
+                maxLines = 1
+            ).size.width
+        }
+        with(density) { maxLabelWidthPx.toDp() } + 28.dp + filterTextStartPadding
+    }
+    val filterMenuWidth = remember(
+        options,
+        menuLabels,
+        menuTextStyle,
+        textMeasurer,
+        density
+    ) {
+        val maxLabelWidthPx = options.maxOf { mode ->
+            textMeasurer.measure(
+                text = menuLabels[mode] ?: mode,
+                style = menuTextStyle,
+                maxLines = 1
+            ).size.width
+        }
+        with(density) { maxLabelWidthPx.toDp() } + 32.dp
+    }
+    val filterMenuButtonHeight = 36.dp
+    val filterMenuGap = 2.dp
+    val filterMenuPadding = 2.dp
+    val filterMenuHeight =
+        filterMenuButtonHeight * options.size +
+            filterMenuGap * (options.size - 1).coerceAtLeast(0) +
+            filterMenuPadding
+    val currentColor = optionColors[selectedMode] ?: MaterialTheme.colorScheme.primary
+    val currentContentColor =
+        contentColors[selectedMode] ?: MaterialTheme.colorScheme.onPrimary
+    val orderedOptions = if (selectedMode in options) {
+        listOf(selectedMode) + options.filterNot { it == selectedMode }
+    } else {
+        options
+    }
+    val filterButtonShape = RoundedCornerShape(6.dp)
+    var expanded by remember { mutableStateOf(false) }
+    val expandedState = remember { MutableTransitionState(false) }
+    expandedState.targetState = expanded
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.width(filterButtonWidth).height(filterMenuButtonHeight),
+            shape = filterButtonShape,
+            border = null,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = currentColor,
+                contentColor = currentContentColor
+            ),
+            contentPadding = PaddingValues(horizontal = 4.dp)
+        ) {
+            Text(
+                text = buttonLabels[selectedMode]
+                    ?: menuLabels[selectedMode]
+                    ?: "",
+                style = filterButtonTextStyle,
+                modifier = Modifier.padding(start = filterTextStartPadding),
+                maxLines = 1
+            )
+            Icon(
+                Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        if (expandedState.currentState || expandedState.targetState) {
+            Popup(
+                popupPositionProvider = remember {
+                    object : PopupPositionProvider {
+                        override fun calculatePosition(
+                            anchorBounds: IntRect,
+                            windowSize: IntSize,
+                            layoutDirection: LayoutDirection,
+                            popupContentSize: IntSize
+                        ): IntOffset {
+                            val x = (anchorBounds.right - popupContentSize.width).coerceIn(
+                                0,
+                                (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+                            )
+                            // The selected row replaces the trigger while expanded.
+                            val y = anchorBounds.top.coerceIn(
+                                0,
+                                (windowSize.height - popupContentSize.height).coerceAtLeast(0)
+                            )
+                            return IntOffset(x, y)
+                        }
+                    }
+                },
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(filterMenuWidth)
+                        .height(filterMenuHeight),
+                    contentAlignment = Alignment.TopEnd
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                expanded = false
+                            }
+                    )
+                    AnimatedVisibility(
+                        visibleState = expandedState,
+                        enter = expandVertically(
+                            expandFrom = Alignment.Top,
+                            animationSpec = tween(180)
+                        ),
+                        exit = shrinkVertically(
+                            shrinkTowards = Alignment.Top,
+                            animationSpec = tween(140)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(currentColor.copy(alpha = 0.7f))
+                                .padding(
+                                    start = filterMenuPadding,
+                                    top = 0.dp,
+                                    end = filterMenuPadding,
+                                    bottom = filterMenuPadding
+                                ),
+                            verticalArrangement = Arrangement.spacedBy(filterMenuGap)
+                        ) {
+                            orderedOptions.forEach { mode ->
+                                val optionColor =
+                                    optionColors[mode] ?: MaterialTheme.colorScheme.primary
+                                val optionContentColor =
+                                    contentColors[mode] ?: MaterialTheme.colorScheme.onPrimary
+                                val optionShape = RoundedCornerShape(6.dp)
+                                val isSelected = mode == selectedMode
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(filterMenuButtonHeight)
+                                        .clip(optionShape)
+                                        .background(optionColor)
+                                        .selectable(
+                                            selected = isSelected,
+                                            role = Role.Button,
+                                            onClick = {
+                                                expanded = false
+                                                onSelected(mode)
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = menuLabels[mode] ?: mode,
+                                        style = menuTextStyle,
+                                        color = optionContentColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -877,7 +1096,6 @@ fun SearchScreen(
                                                     )
                                                 }
 
-                                                var filterMenuExpanded by remember { mutableStateOf(false) }
                                                 val isSupporterAllowed = vm.isSupporter
                                                 val options = if (isSupporterAllowed) {
                                                     listOf("played", "recent", "favorite", "most_played", "top_play", "all")
@@ -916,106 +1134,57 @@ fun SearchScreen(
                                                     "top_play" to Color.White,
                                                     "all" to Color.White
                                                 )
-                                                val currentColor = optionColors[vm.filterMode] ?: MaterialTheme.colorScheme.primary
-                                                val currentContentColor = contentColors[vm.filterMode] ?: MaterialTheme.colorScheme.primary
-                                                val filterButtonTextStyle =
-                                                    MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                                val filterButtonTextMeasurer = rememberTextMeasurer()
-                                                val density = LocalDensity.current
-                                                val filterTextStartPadding =
-                                                    if (LocalConfiguration.current.locales[0].language == "zh") 2.dp else 0.dp
-                                                val filterButtonWidth = remember(
-                                                    optionButtonLabels,
-                                                    filterButtonTextStyle,
-                                                    filterButtonTextMeasurer,
-                                                    density,
-                                                    filterTextStartPadding
-                                                ) {
-                                                    val maxLabelWidthPx = optionButtonLabels.values.maxOf { label ->
-                                                        filterButtonTextMeasurer.measure(
-                                                            text = label,
-                                                            style = filterButtonTextStyle,
-                                                            maxLines = 1
-                                                        ).size.width
-                                                    }
-                                                    with(density) { maxLabelWidthPx.toDp() } +
-                                                        28.dp + filterTextStartPadding
-                                                }
-
-                                                OutlinedButton(
-                                                    onClick = { filterMenuExpanded = true },
-                                                    modifier = Modifier.width(filterButtonWidth).height(36.dp),
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = currentColor,
-                                                        contentColor = currentContentColor
-                                                    ),
-                                                    contentPadding = PaddingValues(horizontal = 4.dp)
-                                                ) {
-                                                    Text(
-                                                        text = optionButtonLabels[vm.filterMode]
-                                                            ?: optionMenuLabels[vm.filterMode]
-                                                            ?: "",
-                                                        style = filterButtonTextStyle,
-                                                        modifier = Modifier.padding(start = filterTextStartPadding),
-                                                        maxLines = 1
-                                                    )
-                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                }
-                                                DropdownMenu(
-                                                    expanded = filterMenuExpanded,
-                                                    onDismissRequest = { filterMenuExpanded = false }
-                                                ) {
-                                                    options.forEach { mode ->
-                                                        DropdownMenuItem(
-                                                            text = { Text(optionMenuLabels[mode] ?: mode) },
-                                                            onClick = {
-                                                                filterMenuExpanded = false
-                                                                vm.filterMode = mode
-                                                                scope.launch {
-                                                                    settingsManager.saveDefaultSearchView(mode)
-                                                                    vm.lastSyncedDefaultView = mode
-                                                                    vm.currentCursor = null
-                                                                    if (mode == "recent") {
-                                                                        val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(
-                                                                            accessToken,
-                                                                            vm.userId,
-                                                                            vm.searchQuery,
-                                                                            vm.selectedGenreIds,
-                                                                            vm.scoreModeFilter,
-                                                                            showPlayHistory = recentPlayHistoryEnabled
-                                                                        )
-                                                                        vm.mergeGroups = mergeGroupsResult
-                                                                        vm.recentGroupedResults = groupedItems
-                                                                        vm.searchResults = emptyList()
-                                                                        vm.searchResultsMetadata = emptyMap()
-                                                                        vm.searchScoreResults = emptyMap()
-                                                                        vm.recentTimestamps = timestamps
-                                                                    } else {
-                                                                        val result = vm.repository.getPlayedBeatmaps(
-                                                                            accessToken, vm.selectedGenreIds, null,
-                                                                            vm.searchQuery.trim().ifEmpty { null },
-                                                                            mode, playedFilterMode, vm.userId, vm.isSupporter, !onlyLeaderboardEnabled,
-                                                                            scoreMode = vm.scoreModeFilter
-                                                                        )
-                                                                        val deduped = vm.searchService.dedupeSearchResultsForMode(
-                                                                            list = result.beatmaps,
-                                                                            downloadedBeatmapSetIds = vm.downloadedBeatmapSetIds,
-                                                                            filterMode = vm.filterMode
-                                                                        )
-                                                                        vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
-                                                                        vm.searchResults = deduped
-                                                                        vm.currentCursor = result.cursor
-                                                                        vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
-                                                                        vm.searchScoreResults = result.scoreResults
-                                                                    }
-                                                                    // Update load key so initial LaunchedEffect doesn't duplicate
-                                                                    vm.lastInitialLoadKey = "$accessToken|${vm.filterMode}|${vm.scoreModeFilter}|${vm.userId}|$onlyLeaderboardEnabled|$playedFilterMode|${!onlyLeaderboardEnabled}|${vm.selectedGenreIds.sorted().joinToString(",")}|$recentPlayHistoryEnabled"
-                                                                }
+                                                SearchTypeFilter(
+                                                    selectedMode = vm.filterMode,
+                                                    options = options,
+                                                    menuLabels = optionMenuLabels,
+                                                    buttonLabels = optionButtonLabels,
+                                                    optionColors = optionColors,
+                                                    contentColors = contentColors,
+                                                    onSelected = { mode ->
+                                                        vm.filterMode = mode
+                                                        scope.launch {
+                                                            settingsManager.saveDefaultSearchView(mode)
+                                                            vm.lastSyncedDefaultView = mode
+                                                            vm.currentCursor = null
+                                                            if (mode == "recent") {
+                                                                val (groupedItems, mergeGroupsResult, timestamps) = vm.searchService.loadRecentFiltered(
+                                                                    accessToken,
+                                                                    vm.userId,
+                                                                    vm.searchQuery,
+                                                                    vm.selectedGenreIds,
+                                                                    vm.scoreModeFilter,
+                                                                    showPlayHistory = recentPlayHistoryEnabled
+                                                                )
+                                                                vm.mergeGroups = mergeGroupsResult
+                                                                vm.recentGroupedResults = groupedItems
+                                                                vm.searchResults = emptyList()
+                                                                vm.searchResultsMetadata = emptyMap()
+                                                                vm.searchScoreResults = emptyMap()
+                                                                vm.recentTimestamps = timestamps
+                                                            } else {
+                                                                val result = vm.repository.getPlayedBeatmaps(
+                                                                    accessToken, vm.selectedGenreIds, null,
+                                                                    vm.searchQuery.trim().ifEmpty { null },
+                                                                    mode, playedFilterMode, vm.userId, vm.isSupporter, !onlyLeaderboardEnabled,
+                                                                    scoreMode = vm.scoreModeFilter
+                                                                )
+                                                                val deduped = vm.searchService.dedupeSearchResultsForMode(
+                                                                    list = result.beatmaps,
+                                                                    downloadedBeatmapSetIds = vm.downloadedBeatmapSetIds,
+                                                                    filterMode = vm.filterMode
+                                                                )
+                                                                vm.mergeGroups = vm.searchService.buildMergeGroups(result.beatmaps)
+                                                                vm.searchResults = deduped
+                                                                vm.currentCursor = result.cursor
+                                                                vm.searchResultsMetadata = vm.searchService.filterMetadataFor(deduped, result.metadata)
+                                                                vm.searchScoreResults = result.scoreResults
                                                             }
-                                                        )
+                                                            // Update load key so initial LaunchedEffect doesn't duplicate
+                                                            vm.lastInitialLoadKey = "$accessToken|${vm.filterMode}|${vm.scoreModeFilter}|${vm.userId}|$onlyLeaderboardEnabled|$playedFilterMode|${!onlyLeaderboardEnabled}|${vm.selectedGenreIds.sorted().joinToString(",")}|$recentPlayHistoryEnabled"
+                                                        }
                                                     }
-                                                }
+                                                )
                                             }
                                             },
                                             singleLine = true,

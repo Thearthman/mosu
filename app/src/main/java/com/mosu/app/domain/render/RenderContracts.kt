@@ -2,6 +2,7 @@ package com.mosu.app.domain.render
 
 import android.content.Context
 import android.graphics.Canvas
+import java.io.File
 
 enum class RenderMode(val osuMode: Int, val displayName: String) {
     OSU(0, "osu!"),
@@ -47,6 +48,24 @@ data class RenderDifficulty(
 ) {
     val mode: RenderMode get() = key.mode
     val difficultyName: String get() = key.difficultyName
+}
+
+/**
+ * The visual/hitsound skin selected for one renderer instance.
+ *
+ * Bundled resources are always the fallback. [directory] points at an
+ * app-private, already validated imported skin root.
+ */
+data class RenderSkinSelection(
+    val id: String? = null,
+    val name: String? = null,
+    val directory: File? = null
+) {
+    val isBundled: Boolean get() = directory == null
+
+    companion object {
+        val Bundled = RenderSkinSelection()
+    }
 }
 
 data class RenderCatalog(
@@ -173,7 +192,8 @@ interface BeatmapRenderer {
 
     suspend fun prepare(
         context: Context,
-        difficulty: RenderDifficulty
+        difficulty: RenderDifficulty,
+        skinSelection: RenderSkinSelection = RenderSkinSelection.Bundled
     ): PreparedRender?
 }
 

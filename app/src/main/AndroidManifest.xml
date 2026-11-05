@@ -28,6 +28,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Mosu.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -42,6 +43,43 @@
                 <data
                     android:scheme="mosu"
                     android:host="callback" />
+            </intent-filter>
+
+            <!-- Import downloaded osu! skin archives through Android's Open with.
+                 .osk is not a registered MIME type, so providers commonly expose
+                 it as ZIP or generic binary data. Each MIME gets its own filter
+                 because Android combines data attributes within one filter. -->
+            <intent-filter android:label="@string/profile_skin_title">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/zip" />
+            </intent-filter>
+            <intent-filter android:label="@string/profile_skin_title">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
+            <intent-filter android:label="@string/profile_skin_title">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter android:label="@string/profile_skin_title">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="file"
+                    android:pathSuffix=".osk" />
             </intent-filter>
         </activity>
 

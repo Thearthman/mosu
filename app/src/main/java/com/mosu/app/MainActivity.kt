@@ -130,6 +130,8 @@ import com.mosu.app.data.api.TokenAuthenticator
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.data.repository.OsuRepository
 import com.mosu.app.data.work.RecentPlaysSyncWorker
+import com.mosu.app.domain.skin.CustomSkinImportResult
+import com.mosu.app.domain.skin.CustomSkinLibrary
 import com.mosu.app.player.MusicController
 import com.mosu.app.ui.components.MiniPlayer
 import com.mosu.app.ui.components.LandscapeMiniPlayer
@@ -147,6 +149,8 @@ import com.mosu.app.ui.score.ScoreScreen
 import com.mosu.app.ui.search.SearchScreen
 import com.mosu.app.ui.search.SearchViewModel
 import com.mosu.app.ui.search.SearchViewModelFactory
+import com.mosu.app.ui.skin.importSkinFromUri
+import com.mosu.app.ui.skin.skinImportMessage
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
@@ -155,6 +159,7 @@ import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
 import com.mosu.app.data.api.RetrofitClient
 import androidx.core.net.toUri
+import java.io.File
 
 private const val REGION_RECHECK_INTERVAL_MS = 30L * 24L * 60L * 60L * 1000L
 private const val LANDSCAPE_DOCK_WIDTH_DP = 80
@@ -174,6 +179,9 @@ private val CompactPlayerSnapSpec = spring<Float>(
 )
 
 class MainActivity : ComponentActivity() {
+    private val pendingAuthCode = mutableStateOf<String?>(null)
+    private val pendingSkinUri = mutableStateOf<Uri?>(null)
+
     private fun mediaRestorePermissions(): Array<String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
@@ -243,14 +251,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         applyImmersiveMode()
-
-        // Handle Deep Link
-        val data: Uri? = intent?.data
-        val code = data?.getQueryParameter("code")
+        handleIncomingIntent(intent)
 
         val db = AppDatabase.getDatabase(this)
         val repository = OsuRepository(db.searchCacheDao())
         val settingsManager = SettingsManager(this)
+        val customSkinLibrary = CustomSkinLibrary(
+            rootDirectory = File(filesDir, "custom_skins"),
+            catalog = settingsManager
+        )
         val downloadManager = com.mosu.app.domain.download.DownloadManager.getInstance(this, db)
         val redirectUri = "mosu://callback"
         val tokenManager = TokenManager(this)
@@ -261,14 +270,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             MosuTheme {
                 MainScreen(
-                    initialAuthCode = code,
+                    initialAuthCode = pendingAuthCode.value,
+                    onAuthCodeConsumed = { pendingAuthCode.value = null },
                     repository = repository,
                     db = db,
                     tokenManager = tokenManager,
                     accountManager = accountManager,
                     settingsManager = settingsManager,
+                    customSkinLibrary = customSkinLibrary,
                     downloadManager = downloadManager,
-                    redirectUri = redirectUri
+                    redirectUri = redirectUri,
+                    incomingSkinUri = pendingSkinUri.value,
+                    onIncomingSkinUriConsumed = { uri ->
+                        if (pendingSkinUri.value == uri) {
+                            pendingSkinUri.value = null
+                            clearHandledSkinIntent(uri)
+                        }
+                    }
                 )
             }
         }
@@ -278,6 +296,46 @@ class MainActivity : ComponentActivity() {
 
         // Schedule periodic cache cleanup
         scheduleCacheCleanup()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    /**
+     * Consumes only the URI shapes Mosu declares: the private OAuth callback
+     * and externally opened `.osk` documents. Content/file URIs are never
+     * interpreted as OAuth codes.
+     */
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val data = intent.data ?: return
+        when {
+            data.scheme == "mosu" && data.host == "callback" -> {
+                data.getQueryParameter("code")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { pendingAuthCode.value = it }
+            }
+
+            data.scheme == "content" || data.scheme == "file" -> {
+                pendingSkinUri.value = data
+            }
+        }
+    }
+
+    /**
+     * The VIEW intent remains attached to the Activity across recreation.
+     * Clear the consumed one-shot payload so a configuration change cannot
+     * replay an old skin import.
+     */
+    private fun clearHandledSkinIntent(uri: Uri) {
+        val currentIntent = intent ?: return
+        if (currentIntent.action == Intent.ACTION_VIEW && currentIntent.data == uri) {
+            currentIntent.action = null
+            currentIntent.data = null
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -556,13 +614,17 @@ private fun SpaceEvenlyNavigationItem(
 @Composable
 fun MainScreen(
     initialAuthCode: String?,
+    onAuthCodeConsumed: () -> Unit,
     repository: OsuRepository,
     db: AppDatabase,
     tokenManager: TokenManager,
     accountManager: AccountManager,
     settingsManager: SettingsManager,
+    customSkinLibrary: CustomSkinLibrary,
     downloadManager: com.mosu.app.domain.download.DownloadManager,
-    redirectUri: String
+    redirectUri: String,
+    incomingSkinUri: Uri?,
+    onIncomingSkinUriConsumed: (Uri) -> Unit
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -580,8 +642,29 @@ fun MainScreen(
         context = context,
         db = db,
         settingsManager = settingsManager,
+        customSkinLibrary = customSkinLibrary,
         musicController = musicController
     )
+
+    // Incoming `.osk` documents are app-level one-shot events. Importing here
+    // keeps the work independent of the currently visible destination, and it
+    // avoids navigating the user away from the screen they were using.
+    LaunchedEffect(incomingSkinUri) {
+        val uri = incomingSkinUri ?: return@LaunchedEffect
+        try {
+            val result = importSkinFromUri(context, uri, customSkinLibrary)
+            android.widget.Toast.makeText(
+                context,
+                skinImportMessage(context, result),
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            if (result is CustomSkinImportResult.Imported) {
+                renderPlaybackSession.refreshSkinSelection()
+            }
+        } finally {
+            onIncomingSkinUriConsumed(uri)
+        }
+    }
 
     // SearchViewModel stays alive at MainScreen level to survive navigation
     val searchViewModel: SearchViewModel = viewModel(
@@ -700,6 +783,7 @@ fun MainScreen(
                     android.util.Log.e("MainActivity", "Login failed", e)
                 }
             }
+            onAuthCodeConsumed()
         }
     }
     
@@ -1061,6 +1145,7 @@ fun MainScreen(
                             tokenManager = tokenManager,
                             accountManager = accountManager,
                             settingsManager = settingsManager,
+                            customSkinLibrary = customSkinLibrary,
                             downloadManager = downloadManager,
                             isLandscape = isLandscape,
                             onLoginClick = {

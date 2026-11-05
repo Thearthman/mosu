@@ -29,11 +29,12 @@ class RendererRegistry(renderers: List<BeatmapRenderer>) {
      */
     suspend fun prepare(
         context: Context,
-        difficulty: RenderDifficulty
+        difficulty: RenderDifficulty,
+        skinSelection: RenderSkinSelection = RenderSkinSelection.Bundled
     ): PreparedRender? = withContext(Dispatchers.IO) {
         val renderer = rendererFor(difficulty.mode) ?: return@withContext null
         val prepared = try {
-            renderer.prepare(context, difficulty)
+            renderer.prepare(context, difficulty, skinSelection)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

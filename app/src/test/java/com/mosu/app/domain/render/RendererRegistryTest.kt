@@ -82,7 +82,8 @@ class RendererRegistryTest {
 
         override suspend fun prepare(
             context: android.content.Context,
-            difficulty: RenderDifficulty
+            difficulty: RenderDifficulty,
+            skinSelection: RenderSkinSelection
         ): PreparedRender = FakePrepared(mode)
     }
 

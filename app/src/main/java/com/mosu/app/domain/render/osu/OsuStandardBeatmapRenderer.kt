@@ -15,6 +15,7 @@ import com.mosu.app.domain.render.RenderAudioSink
 import com.mosu.app.domain.render.RenderDifficulty
 import com.mosu.app.domain.render.RenderFrame
 import com.mosu.app.domain.render.RenderMode
+import com.mosu.app.domain.render.RenderSkinSelection
 import java.io.File
 
 /**
@@ -27,7 +28,8 @@ class OsuStandardBeatmapRenderer : BeatmapRenderer {
 
     override suspend fun prepare(
         context: Context,
-        difficulty: RenderDifficulty
+        difficulty: RenderDifficulty,
+        skinSelection: RenderSkinSelection
     ): PreparedRender? {
         if (difficulty.mode != mode) return null
 
@@ -42,18 +44,25 @@ class OsuStandardBeatmapRenderer : BeatmapRenderer {
             return null
         }
 
-        val skin = runCatching { OsuSkinLoader.load(context) }.getOrNull()
+        val skin = runCatching {
+            OsuSkinLoader.load(context, skinSelection)
+        }.getOrNull()
             ?: return null
-        return PreparedOsuStandardRender(timeline, OsuRenderer(skin))
+        return PreparedOsuStandardRender(
+            timeline = timeline,
+            renderer = OsuRenderer(skin),
+            layeredHitSounds = skin.layeredHitSounds
+        )
     }
 }
 
 private class PreparedOsuStandardRender(
     private val timeline: OsuRenderTimeline,
-    private val renderer: OsuRenderer
+    private val renderer: OsuRenderer,
+    layeredHitSounds: Boolean
 ) : PreparedRender {
     override val mode: RenderMode = RenderMode.OSU
-    private val hitsoundScheduler = OsuHitsoundScheduler(timeline)
+    private val hitsoundScheduler = OsuHitsoundScheduler(timeline, layeredHitSounds)
 
     override fun draw(canvas: Canvas, frame: RenderFrame) {
         renderer.draw(
@@ -84,5 +93,6 @@ private class PreparedOsuStandardRender(
 
     override fun close() {
         hitsoundScheduler.close()
+        renderer.close()
     }
 }

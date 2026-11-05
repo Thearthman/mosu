@@ -165,6 +165,103 @@ class OsuHitsoundSchedulerTest {
         assertEquals(listOf(sliderLoop.key, spinnerLoop.key), sink.loopStops)
     }
 
+    @Test
+    fun layeredHitSoundsDisabledSuppressesNormalWhenAnAdditionExists() {
+        val scheduler = OsuHitsoundScheduler(
+            timeline(
+                cues = listOf(
+                    OsuHitsoundCue(
+                        timeMs = 500.0,
+                        samples = listOf(
+                            sample("hitnormal"),
+                            sample("hitwhistle"),
+                            sample("hitclap")
+                        )
+                    )
+                )
+            ),
+            layeredHitSounds = false
+        )
+        val sink = FakeRenderAudioSink()
+
+        scheduler.update(frame(500.0), sink)
+
+        assertEquals(
+            listOf("hitwhistle", "hitclap"),
+            sink.oneShots.map { it.sampleName }
+        )
+    }
+
+    @Test
+    fun layeredHitSoundsDisabledKeepsNormalOnlyCues() {
+        val scheduler = OsuHitsoundScheduler(
+            timeline(cues = listOf(cue(500.0))),
+            layeredHitSounds = false
+        )
+        val sink = FakeRenderAudioSink()
+
+        scheduler.update(frame(500.0), sink)
+
+        assertEquals(listOf("hitnormal"), sink.oneShots.map { it.sampleName })
+    }
+
+    @Test
+    fun layeredHitSoundsEnabledLeavesAdditionCuesUnchanged() {
+        val scheduler = OsuHitsoundScheduler(
+            timeline(
+                cues = listOf(
+                    OsuHitsoundCue(
+                        timeMs = 500.0,
+                        samples = listOf(sample("hitnormal"), sample("hitfinish"))
+                    )
+                )
+            ),
+            layeredHitSounds = true
+        )
+        val sink = FakeRenderAudioSink()
+
+        scheduler.update(frame(500.0), sink)
+
+        assertEquals(
+            listOf("hitnormal", "hitfinish"),
+            sink.oneShots.map { it.sampleName }
+        )
+    }
+
+    @Test
+    fun layeredHitSoundsDisabledSuppressesSlideLoopWhenSliderWhistles() {
+        val slideLoop = OsuHitsoundLoop(
+            key = "slider:7:sliderslide",
+            startTimeMs = 500.0,
+            endTimeMs = 2_000.0,
+            sample = sample("sliderslide")
+        )
+        val whistleLoop = OsuHitsoundLoop(
+            key = "slider:7:sliderwhistle",
+            startTimeMs = 500.0,
+            endTimeMs = 2_000.0,
+            sample = sample("sliderwhistle")
+        )
+        val otherSlideLoop = OsuHitsoundLoop(
+            key = "slider:8:sliderslide",
+            startTimeMs = 500.0,
+            endTimeMs = 2_000.0,
+            sample = sample("sliderslide")
+        )
+        val scheduler = OsuHitsoundScheduler(
+            timeline(loops = listOf(slideLoop, whistleLoop, otherSlideLoop)),
+            layeredHitSounds = false
+        )
+        val sink = FakeRenderAudioSink()
+
+        scheduler.update(frame(600.0), sink)
+
+        assertEquals(
+            listOf(whistleLoop.key, otherSlideLoop.key),
+            sink.loopStarts.map { it.key }
+        )
+    }
+
     private fun frame(
         mapTimeMs: Double,
         clockEpoch: Long = 1L,

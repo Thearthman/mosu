@@ -10,13 +10,17 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.media3.common.Player
 import androidx.datastore.preferences.preferencesDataStore
+import com.mosu.app.domain.skin.CustomSkinCatalogStore
+import com.mosu.app.domain.skin.CustomSkinRecord
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class SettingsManager(private val context: Context) {
+class SettingsManager(private val context: Context) : CustomSkinCatalogStore {
     
     companion object {
         // Legacy OAuth credential keys. Credentials are now owned by
@@ -39,6 +43,7 @@ class SettingsManager(private val context: Context) {
         private val SHUFFLE_MODE_KEY = booleanPreferencesKey("shuffle_mode_enabled")
         private val REPEAT_MODE_KEY = intPreferencesKey("repeat_mode")
         private val SCORE_MODE_FILTER_KEY = stringPreferencesKey("score_mode_filter") // "osu", "taiko", "fruits", "mania", "all"
+        private val SEARCH_MODE_FILTER_KEY = stringPreferencesKey("search_mode_filter") // "osu", "taiko", "fruits", "mania", "all"
         private val PREFERRED_MIRROR_KEY = stringPreferencesKey("preferred_mirror") // "nerinyan", "sayobot", or "catboy"
         private val API_SOURCE_KEY_OLD = stringPreferencesKey("api_source") // Deprecated
         private val REGION_CHECKED_KEY = booleanPreferencesKey("region_checked")
@@ -46,6 +51,8 @@ class SettingsManager(private val context: Context) {
         private val DETECTED_REGION_SOURCE_KEY = stringPreferencesKey("detected_region_source")
         private val REGION_CHECKED_AT_KEY = longPreferencesKey("region_checked_at")
         private val MIRROR_MANUAL_OVERRIDE_KEY = booleanPreferencesKey("mirror_manual_override")
+        private val CUSTOM_SKINS_KEY = stringPreferencesKey("custom_skins")
+        private val ACTIVE_CUSTOM_SKIN_ID_KEY = stringPreferencesKey("active_custom_skin_id")
     }
 
     val detectedRegion: Flow<String?> = context.settingsDataStore.data
@@ -168,6 +175,16 @@ class SettingsManager(private val context: Context) {
             (preferences[HITSOUND_LATENCY_MS_KEY] ?: 0).coerceIn(-200, 200)
         }
 
+    val customSkins: Flow<List<CustomSkinRecord>> = context.settingsDataStore.data
+        .map { preferences ->
+            decodeCustomSkins(preferences[CUSTOM_SKINS_KEY])
+        }
+
+    val activeCustomSkinId: Flow<String?> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[ACTIVE_CUSTOM_SKIN_ID_KEY]?.takeIf { it.isNotBlank() }
+        }
+
     val shuffleModeEnabled: Flow<Boolean> = context.settingsDataStore.data
         .map { preferences ->
             preferences[SHUFFLE_MODE_KEY] ?: false
@@ -181,6 +198,11 @@ class SettingsManager(private val context: Context) {
     val scoreModeFilter: Flow<String> = context.settingsDataStore.data
         .map { preferences ->
             preferences[SCORE_MODE_FILTER_KEY] ?: "osu"
+        }
+
+    val searchModeFilter: Flow<String> = context.settingsDataStore.data
+        .map { preferences ->
+            preferences[SEARCH_MODE_FILTER_KEY] ?: "osu"
         }
 
     suspend fun savePlayedFilterMode(mode: String) {
@@ -249,6 +271,29 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    override suspend fun readCustomSkins(): List<CustomSkinRecord> =
+        decodeCustomSkins(context.settingsDataStore.data.first()[CUSTOM_SKINS_KEY])
+
+    override suspend fun writeCustomSkins(skins: List<CustomSkinRecord>) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[CUSTOM_SKINS_KEY] = encodeCustomSkins(skins)
+        }
+    }
+
+    override suspend fun readActiveCustomSkinId(): String? =
+        context.settingsDataStore.data.first()[ACTIVE_CUSTOM_SKIN_ID_KEY]
+            ?.takeIf { it.isNotBlank() }
+
+    override suspend fun writeActiveCustomSkinId(id: String?) {
+        context.settingsDataStore.edit { preferences ->
+            if (id.isNullOrBlank()) {
+                preferences.remove(ACTIVE_CUSTOM_SKIN_ID_KEY)
+            } else {
+                preferences[ACTIVE_CUSTOM_SKIN_ID_KEY] = id
+            }
+        }
+    }
+
     suspend fun getSelectedDifficulty(songKey: String): String? {
         if (songKey.isBlank()) return null
         return context.settingsDataStore.data.first()[
@@ -282,6 +327,12 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    suspend fun saveSearchModeFilter(mode: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[SEARCH_MODE_FILTER_KEY] = mode
+        }
+    }
+
     /**
      * One-time migration helper: returns the OAuth credentials that used to be
      * stored in Settings and removes them, so they can be re-homed in
@@ -303,5 +354,40 @@ class SettingsManager(private val context: Context) {
         } else {
             null
         }
+    }
+
+    private fun decodeCustomSkins(raw: String?): List<CustomSkinRecord> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val id = item.optString("id").trim()
+                    val name = item.optString("name").trim()
+                    if (id.isEmpty() || name.isEmpty()) continue
+                    add(
+                        CustomSkinRecord(
+                            id = id,
+                            name = name,
+                            author = item.optString("author").trim()
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun encodeCustomSkins(skins: List<CustomSkinRecord>): String {
+        val array = JSONArray()
+        skins.forEach { skin ->
+            array.put(
+                JSONObject()
+                    .put("id", skin.id)
+                    .put("name", skin.name)
+                    .put("author", skin.author)
+            )
+        }
+        return array.toString()
     }
 }

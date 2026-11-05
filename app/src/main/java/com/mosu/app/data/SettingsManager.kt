@@ -14,6 +14,7 @@ import com.mosu.app.domain.skin.CustomSkinCatalogStore
 import com.mosu.app.domain.skin.CustomSkinRecord
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
@@ -299,6 +300,19 @@ class SettingsManager(private val context: Context) : CustomSkinCatalogStore {
         return context.settingsDataStore.data.first()[
             stringPreferencesKey(RENDERER_DIFFICULTY_KEY_PREFIX + songKey)
         ]
+    }
+
+    /**
+     * Observes the selected renderer difficulty for one audio group. The
+     * service-side hitsound scheduler needs the same difficulty choice as the
+     * visual renderer while remaining independent of player UI composition.
+     */
+    fun selectedDifficulty(songKey: String): Flow<String?> {
+        if (songKey.isBlank()) return flowOf(null)
+        val preferenceKey = stringPreferencesKey(RENDERER_DIFFICULTY_KEY_PREFIX + songKey)
+        return context.settingsDataStore.data.map { preferences ->
+            preferences[preferenceKey]
+        }
     }
 
     suspend fun saveSelectedDifficulty(songKey: String, selection: String) {

@@ -13,31 +13,26 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import com.mosu.app.data.SettingsManager
 import com.mosu.app.data.db.AppDatabase
 import com.mosu.app.domain.rating.BeatmapStarRatingCatalog
 import com.mosu.app.domain.rating.BeatmapStarRatingService
 import com.mosu.app.domain.rating.DifficultyRatingQuery
 import com.mosu.app.domain.render.PreparedRender
-import com.mosu.app.domain.render.RenderAudioFrame
 import com.mosu.app.domain.render.RenderCatalog
 import com.mosu.app.domain.render.RenderCatalogLoader
 import com.mosu.app.domain.render.RenderDifficultyKey
 import com.mosu.app.domain.render.RenderSkinSelection
 import com.mosu.app.domain.render.RendererRegistry
-import com.mosu.app.domain.render.audio.BassRenderAudioSink
 import com.mosu.app.domain.skin.CustomSkinLibrary
 import com.mosu.app.domain.skin.CustomSkinRecord
 import com.mosu.app.player.MusicController
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,8 +48,9 @@ data class RenderPreviewData(
 )
 
 /**
- * Owns renderer preparation and hitsound scheduling independently of player
- * visibility. Both Full Player orientations consume this one session.
+ * Owns visual renderer preparation independently of player visibility. Both
+ * Full Player orientations consume this one session. Hitsound scheduling is
+ * owned by the media service so it survives backgrounding.
  */
 @Stable
 class RenderPlaybackSession internal constructor(
@@ -69,9 +65,7 @@ class RenderPlaybackSession internal constructor(
     private val registry = RendererRegistry.default()
     private val catalogLoader = RenderCatalogLoader(appContext, db, registry.supportedModes)
     private val ratingService = BeatmapStarRatingService(db)
-    private val audioSink = BassRenderAudioSink(appContext)
     private val lifecycleMutex = Mutex()
-    private val audioLock = Any()
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cleanupQueue = Channel<CleanupCommand>(Channel.UNLIMITED)
 
@@ -80,16 +74,11 @@ class RenderPlaybackSession internal constructor(
             for (command in cleanupQueue) {
                 when (command) {
                     is CleanupCommand.Close -> lifecycleMutex.withLock {
-                        synchronized(audioLock) {
-                            command.prepared.close()
-                        }
+                        command.prepared.close()
                     }
 
-                    CleanupCommand.ReleaseSink -> lifecycleMutex.withLock {
-                        audioSink.release()
-                    }
+                    CleanupCommand.Shutdown -> break
                 }
-                if (command === CleanupCommand.ReleaseSink) break
             }
             cleanupScope.cancel()
         }
@@ -116,15 +105,10 @@ class RenderPlaybackSession internal constructor(
     var preferencesLoaded by mutableStateOf(false)
         private set
 
-    private var hitsoundVolume = 100
-    private var hitsoundLatencyMs = 0
-    private var audioGeneration = 0L
-    @Volatile
-    private var audioReadyRender: PreparedRender? = null
     private var released = false
 
     val isFeatureEnabled: Boolean
-        get() = rendererEnabled || hitsoundEnabled
+        get() = rendererEnabled
 
     val previewUnavailable: Boolean
         get() {
@@ -152,32 +136,18 @@ class RenderPlaybackSession internal constructor(
     fun updatePreferences(
         loaded: Boolean,
         renderer: Boolean,
-        hitsound: Boolean,
-        volume: Int,
-        latencyMs: Int
+        hitsound: Boolean
     ) {
         if (released) return
         preferencesLoaded = loaded
-        val hitsoundChanged = this.hitsoundEnabled != hitsound
-        val latencyChanged = this.hitsoundLatencyMs != latencyMs.coerceIn(-200, 200)
         rendererEnabled = renderer
         hitsoundEnabled = hitsound
-        hitsoundVolume = volume.coerceIn(0, 100)
-        hitsoundLatencyMs = latencyMs.coerceIn(-200, 200)
-        audioSink.setMasterVolume(hitsoundVolume)
-        if (hitsoundChanged || latencyChanged) {
-            audioGeneration++
-            if (!hitsound) {
-                audioReadyRender = null
-                audioSink.stopAll()
-            }
-        }
     }
 
     /**
-     * Invalidates any renderer prepared with the previous skin and switches the
-     * native sample cache. Preparation and preload both re-check this value
-     * before publishing, so a slow old-skin load cannot become current.
+     * Invalidates any visual renderer prepared with the previous skin.
+     * Preparation re-checks this value before publishing, so a slow old-skin
+     * load cannot become current.
      */
     suspend fun updateSkinSelection(selection: RenderSkinSelection) {
         if (released) return
@@ -189,9 +159,6 @@ class RenderPlaybackSession internal constructor(
         if (skinSelection != selection) {
             skinSelection = selection
             skinSelectionReady = false
-            audioReadyRender = null
-            audioGeneration++
-            audioSink.stopAll()
 
             val current = previewData
             if (current != null) {
@@ -205,9 +172,6 @@ class RenderPlaybackSession internal constructor(
 
         lifecycleMutex.withLock {
             if (released || skinSelection != selection) return
-            withContext(Dispatchers.IO) {
-                audioSink.setSkinSelection(selection)
-            }
             if (!released && skinSelection == selection) {
                 skinSelectionReady = true
                 Log.d(SKIN_TRACE_TAG, "skinSelectionReady id=${selection.id}")
@@ -242,7 +206,6 @@ class RenderPlaybackSession internal constructor(
             return
         }
         prepareSelectedRenderer()
-        preloadSelectedRendererAudio()
     }
 
     suspend fun loadCatalog() {
@@ -345,45 +308,8 @@ class RenderPlaybackSession internal constructor(
                 }
             } finally {
                 if (!published) {
-                    synchronized(audioLock) {
-                        prepared?.close()
-                    }
+                    enqueuePreparedClose(prepared)
                 }
-            }
-        }
-    }
-
-    suspend fun preloadSelectedRendererAudio() {
-        lifecycleMutex.withLock {
-            if (released || !hitsoundEnabled || !skinSelectionReady) return
-            val data = previewData ?: return
-            val prepared = data.preparedRender ?: return
-            if (data.mediaId != currentMediaId || audioReadyRender === prepared) return
-            val selectedSkin = skinSelection
-
-            audioReadyRender = null
-            Log.d(
-                SKIN_TRACE_TAG,
-                "preloadSelectedRendererAudio begin skin=${selectedSkin.id}/${selectedSkin.name}"
-            )
-            withContext(Dispatchers.IO) {
-                if (!released && skinSelection == selectedSkin) {
-                    prepared.preloadAudio(audioSink)
-                }
-            }
-            if (
-                !released &&
-                hitsoundEnabled &&
-                skinSelectionReady &&
-                skinSelection == selectedSkin &&
-                previewData?.preparedRender === prepared &&
-                previewData?.mediaId == currentMediaId
-            ) {
-                audioReadyRender = prepared
-                Log.d(
-                    SKIN_TRACE_TAG,
-                    "preloadSelectedRendererAudio ready skin=${selectedSkin.id}/${selectedSkin.name}"
-                )
             }
         }
     }
@@ -397,11 +323,6 @@ class RenderPlaybackSession internal constructor(
     fun updateHitsoundEnabled(enabled: Boolean) {
         if (released || hitsoundEnabled == enabled) return
         hitsoundEnabled = enabled
-        audioGeneration++
-        if (!enabled) {
-            audioReadyRender = null
-            audioSink.stopAll()
-        }
         scope.launch { settingsManager.saveHitsoundEnabled(enabled) }
     }
 
@@ -423,47 +344,14 @@ class RenderPlaybackSession internal constructor(
         }
     }
 
-    fun updateAudio() {
-        synchronized(audioLock) {
-            if (released) return
-            val data = previewData ?: return
-            val prepared = data.preparedRender ?: return
-            if (
-                !hitsoundEnabled ||
-                data.mediaId != currentMediaId ||
-                audioReadyRender !== prepared
-            ) {
-                audioSink.stopAll()
-                return
-            }
-            audioSink.setMasterVolume(hitsoundVolume)
-            val combinedEpoch = musicController.playbackEpoch.value * 1_000_000L + audioGeneration
-            prepared.updateAudio(
-                frame = RenderAudioFrame(
-                    mapTimeMs = musicController.currentPositionMs().toDouble(),
-                    clockEpoch = combinedEpoch,
-                    isPlaying = musicController.isPlaying.value,
-                    latencyMs = hitsoundLatencyMs
-                ),
-                sink = audioSink
-            )
-        }
-    }
-
-    fun stopAudio() {
-        audioSink.stopAll()
-    }
-
     fun release() {
         if (released) return
         released = true
-        audioReadyRender = null
         val prepared = previewData?.preparedRender
         previewData = null
         catalogUnavailableMediaId = null
-        audioSink.stopAll()
         enqueuePreparedClose(prepared)
-        cleanupQueue.trySend(CleanupCommand.ReleaseSink)
+        cleanupQueue.trySend(CleanupCommand.Shutdown)
     }
 
     private fun clearPreview() {
@@ -476,19 +364,11 @@ class RenderPlaybackSession internal constructor(
     private fun replacePreparedLocked(prepared: PreparedRender?) {
         val previous = previewData?.preparedRender
         if (previous === prepared) return
-        audioReadyRender = null
-        audioSink.stopAll()
-        audioGeneration++
-        synchronized(audioLock) {
-            previous?.close()
-        }
+        enqueuePreparedClose(previous)
     }
 
     private fun detachAndDisposePrepared(prepared: PreparedRender?) {
         if (prepared == null) return
-        audioReadyRender = null
-        audioSink.stopAll()
-        audioGeneration++
         enqueuePreparedClose(prepared)
     }
 
@@ -500,7 +380,7 @@ class RenderPlaybackSession internal constructor(
 
     private sealed interface CleanupCommand {
         data class Close(val prepared: PreparedRender) : CleanupCommand
-        data object ReleaseSink : CleanupCommand
+        data object Shutdown : CleanupCommand
     }
 
     private companion object {
@@ -509,8 +389,8 @@ class RenderPlaybackSession internal constructor(
 }
 
 /**
- * Keeps catalog preparation and the hitsound scheduler alive above both Full
- * Player orientations. Only drawing remains conditional on visibility.
+ * Keeps visual catalog preparation alive above both Full Player orientations.
+ * Only drawing remains conditional on visibility.
  */
 @Composable
 fun rememberRenderPlaybackSession(
@@ -536,8 +416,6 @@ fun rememberRenderPlaybackSession(
     }
     val rendererPreference by settingsManager.rendererEnabled.collectAsState(initial = null)
     val hitsoundPreference by settingsManager.hitsoundEnabled.collectAsState(initial = null)
-    val hitsoundVolume by settingsManager.hitsoundVolume.collectAsState(initial = 100)
-    val hitsoundLatency by settingsManager.hitsoundLatencyMs.collectAsState(initial = 0)
     val currentMediaId by musicController.currentMediaId.collectAsState()
     val skinPreferences by produceState<CustomSkinPreferences?>(
         initialValue = null,
@@ -564,17 +442,13 @@ fun rememberRenderPlaybackSession(
     LaunchedEffect(
         preferencesLoaded,
         rendererPreference,
-        hitsoundPreference,
-        hitsoundVolume,
-        hitsoundLatency
+        hitsoundPreference
     ) {
         if (preferencesLoaded) {
             session.updatePreferences(
                 loaded = true,
                 renderer = rendererPreference == true,
-                hitsound = hitsoundPreference == true,
-                volume = hitsoundVolume,
-                latencyMs = hitsoundLatency
+                hitsound = hitsoundPreference == true
             )
         }
     }
@@ -583,9 +457,7 @@ fun rememberRenderPlaybackSession(
         session,
         preferencesLoaded,
         session.isFeatureEnabled,
-        currentMediaId,
-        hitsoundVolume,
-        hitsoundLatency
+        currentMediaId
     ) {
         if (!preferencesLoaded) return@LaunchedEffect
         session.loadCatalog()
@@ -605,37 +477,12 @@ fun rememberRenderPlaybackSession(
         session.prepareSelectedRenderer()
     }
 
-    LaunchedEffect(
-        session,
-        preferencesLoaded,
-        session.hitsoundEnabled,
-        session.previewData?.mediaId,
-        session.previewData?.selectedDifficultyKey,
-        session.previewData?.preparedRender,
-        session.skinSelection,
-        session.skinSelectionReady,
-        currentMediaId
-    ) {
-        if (!preferencesLoaded) return@LaunchedEffect
-        session.preloadSelectedRendererAudio()
-    }
-
     DisposableEffect(session, preferencesLoaded, session.isFeatureEnabled, currentMediaId) {
         if (preferencesLoaded && session.isFeatureEnabled && currentMediaId != null) {
             musicController.startPositionSampling()
         }
         onDispose {
             musicController.stopPositionSampling()
-        }
-    }
-
-    LaunchedEffect(session, preferencesLoaded, session.hitsoundEnabled, currentMediaId) {
-        if (!preferencesLoaded || !session.hitsoundEnabled || currentMediaId == null) {
-            session.stopAudio()
-            return@LaunchedEffect
-        }
-        while (isActive) {
-            withFrameNanos { session.updateAudio() }
         }
     }
 

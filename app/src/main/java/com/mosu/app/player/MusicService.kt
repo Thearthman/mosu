@@ -21,12 +21,51 @@ import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.mosu.app.data.SettingsManager
+import com.mosu.app.data.db.AppDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 class MusicService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
+    private var hitsoundCoordinator: HitsoundPlaybackCoordinator? = null
     private var noisyAudioReceiverRegistered = false
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var hitsoundLoopJob: Job? = null
+
+    private val playerListener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            hitsoundCoordinator?.onMediaItemChanged(mediaItem?.mediaId?.toLongOrNull())
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            hitsoundCoordinator?.onPlaybackStateChanged(
+                isPlaying = isPlaying,
+                positionMs = player?.currentPosition ?: 0L
+            )
+            if (isPlaying) {
+                startHitsoundLoop()
+            } else {
+                stopHitsoundLoop()
+            }
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            hitsoundCoordinator?.onPositionDiscontinuity(newPosition.positionMs)
+        }
+    }
 
     private val sessionCallback = object : MediaSession.Callback {
         @OptIn(UnstableApi::class)
@@ -98,6 +137,22 @@ class MusicService : MediaSessionService() {
                     .build(),
                 true
             )
+            addListener(playerListener)
+        }
+        val currentPlayer = player!!
+        hitsoundCoordinator = HitsoundPlaybackCoordinator(
+            context = this,
+            db = AppDatabase.getDatabase(this),
+            settingsManager = SettingsManager(this)
+        ).also { coordinator ->
+            coordinator.onMediaItemChanged(currentPlayer.currentMediaItem?.mediaId?.toLongOrNull())
+            coordinator.onPlaybackStateChanged(
+                isPlaying = currentPlayer.isPlaying,
+                positionMs = currentPlayer.currentPosition
+            )
+            if (currentPlayer.isPlaying) {
+                startHitsoundLoop()
+            }
         }
         registerNoisyAudioReceiver()
         
@@ -112,6 +167,10 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        stopHitsoundLoop()
+        serviceScope.cancel()
+        hitsoundCoordinator?.release()
+        hitsoundCoordinator = null
         unregisterNoisyAudioReceiver()
         mediaSession?.run {
             player.release()
@@ -143,6 +202,45 @@ class MusicService : MediaSessionService() {
         if (!noisyAudioReceiverRegistered) return
         unregisterReceiver(noisyAudioReceiver)
         noisyAudioReceiverRegistered = false
+    }
+
+    private fun startHitsoundLoop() {
+        if (hitsoundLoopJob?.isActive == true) return
+        hitsoundLoopJob = serviceScope.launch {
+            while (isActive) {
+                val currentPlayer = player ?: break
+                if (!currentPlayer.isPlaying) break
+                val audioReady = runCatching {
+                    hitsoundCoordinator?.updateAudio(currentPlayer.currentPosition) == true
+                }.getOrElse { error ->
+                    android.util.Log.w(
+                        "MusicService",
+                        "Hitsound frame update failed",
+                        error
+                    )
+                    false
+                }
+                delay(
+                    if (audioReady) {
+                        HITSOUND_FRAME_INTERVAL_MS
+                    } else {
+                        HITSOUND_IDLE_INTERVAL_MS
+                    }
+                )
+            }
+        }
+    }
+
+    private fun stopHitsoundLoop() {
+        hitsoundLoopJob?.cancel()
+        hitsoundLoopJob = null
+    }
+
+    private companion object {
+        // Finer than the old 60 Hz Compose frame loop, but far below the
+        // previously proposed 500 Hz. Tune this independently after profiling.
+        const val HITSOUND_FRAME_INTERVAL_MS = 10L
+        const val HITSOUND_IDLE_INTERVAL_MS = 100L
     }
 }
 

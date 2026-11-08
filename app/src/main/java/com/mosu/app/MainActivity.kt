@@ -8,11 +8,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -94,10 +96,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -138,9 +143,24 @@ import com.mosu.app.ui.components.LandscapeMiniPlayer
 import com.mosu.app.ui.components.LANDSCAPE_MINI_PLAYER_PROGRESS_SPACE_DP
 import com.mosu.app.ui.components.LandscapeLibrarySearchBar
 import com.mosu.app.ui.player.LandscapePlayerDragPosition
+import com.mosu.app.ui.player.LandscapePlayerDragState
 import com.mosu.app.ui.player.LandscapePlayerMorph
-import com.mosu.app.ui.player.advanceLandscapePlayerDrag
+import com.mosu.app.ui.player.PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+import com.mosu.app.ui.player.PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED
+import com.mosu.app.ui.player.PLAYER_FLICK_VELOCITY_PX_PER_SECOND
+import com.mosu.app.ui.player.PlayerCriticalPointHapticTracker
+import com.mosu.app.ui.player.PlayerGestureDirection
+import com.mosu.app.ui.player.advanceLandscapePlayerDragState
+import com.mosu.app.ui.player.advancePlayerDetentCatchUp
+import com.mosu.app.ui.player.advancePlayerDetent
+import com.mosu.app.ui.player.advancePlayerRawProgress
+import com.mosu.app.ui.player.landscapePlayerCatchUpTarget
 import com.mosu.app.ui.player.landscapePlayerMorphBounds
+import com.mosu.app.ui.player.playerGestureCriticalPoint
+import com.mosu.app.ui.player.playerGestureDirectionForStart
+import com.mosu.app.ui.player.playerProgressFromSheetOffset
+import com.mosu.app.ui.player.playerSheetOffsetFromProgress
+import com.mosu.app.ui.player.resolvePlayerExpandedOnRelease
 import com.mosu.app.ui.DeferredActionViewModel
 import com.mosu.app.ui.library.LibraryScreen
 import com.mosu.app.ui.playlist.PlaylistScreen
@@ -822,23 +842,176 @@ fun MainScreen(
         }
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
+        val view = LocalView.current
+        val portraitAnimationHapticTracker = remember {
+            PlayerCriticalPointHapticTracker()
+        }
+        val portraitDragHapticTracker = remember {
+            PlayerCriticalPointHapticTracker()
+        }
+        var portraitGestureDirection by remember {
+            mutableStateOf(PlayerGestureDirection.EXPANDING)
+        }
+        var portraitRawProgress by remember { mutableStateOf(0f) }
+        var portraitDragHapticSession by remember { mutableStateOf(0) }
+        var portraitDragHapticTriggered by remember { mutableStateOf(false) }
+        var portraitCatchUpActive by remember { mutableStateOf(false) }
 
-        val draggableState = rememberDraggableState { delta ->
-            scope.launch {
-                val newOffset = (sheetOffset.value + delta).coerceIn(0f, collapsedOffset)
-                sheetOffset.snapTo(newOffset)
+        fun performClockTickHaptic() {
+            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        }
+
+        LaunchedEffect(sheetOffset, collapsedOffset) {
+            snapshotFlow {
+                playerProgressFromSheetOffset(sheetOffset.value, collapsedOffset)
+            }.collect { progress ->
+                if (portraitAnimationHapticTracker.observe(progress)) {
+                    performClockTickHaptic()
+                }
             }
         }
 
-        fun snapToTarget(velocity: Float) {
-            scope.launch {
-                val target = if (velocity < -1000 || (velocity <= 1000 && sheetOffset.value < collapsedOffset / 2)) {
-                    0f // Expand
-                } else {
-                    collapsedOffset // Collapse
+        LaunchedEffect(
+            portraitCatchUpActive,
+            sheetOffset,
+            collapsedOffset
+        ) {
+            if (!portraitCatchUpActive) return@LaunchedEffect
+            var lastFrameNanos = withFrameNanos { it }
+            while (portraitCatchUpActive) {
+                val frameNanos = withFrameNanos { it }
+                val elapsedSeconds = (
+                    (frameNanos - lastFrameNanos) / 1_000_000_000f
+                    ).coerceIn(0f, 0.05f)
+                lastFrameNanos = frameNanos
+                val currentProgress = playerProgressFromSheetOffset(
+                    sheetOffset.value,
+                    collapsedOffset
+                )
+                val nextProgress = advancePlayerDetentCatchUp(
+                    progress = currentProgress,
+                    targetProgress = portraitRawProgress,
+                    elapsedSeconds = elapsedSeconds
+                )
+                if (nextProgress != currentProgress) {
+                    sheetOffset.snapTo(
+                        playerSheetOffsetFromProgress(
+                            nextProgress,
+                            collapsedOffset
+                        )
+                    )
                 }
-                isFullPlayerOpen = target == 0f
-                sheetOffset.animateTo(target, animationSpec = tween(300))
+            }
+        }
+
+        suspend fun animatePortraitSheetTo(
+            targetOffset: Float,
+            animationSpec: AnimationSpec<Float>,
+            direction: PlayerGestureDirection,
+            emitHaptic: Boolean = true
+        ) {
+            val startProgress = playerProgressFromSheetOffset(
+                sheetOffset.value,
+                collapsedOffset
+            )
+            val targetProgress = playerProgressFromSheetOffset(
+                targetOffset,
+                collapsedOffset
+            )
+            val session = if (emitHaptic) {
+                portraitAnimationHapticTracker.begin(
+                    progress = startProgress,
+                    criticalPoint = playerGestureCriticalPoint(direction)
+                )
+            } else {
+                null
+            }
+            isFullPlayerOpen = targetProgress >= 1f
+            try {
+                sheetOffset.animateTo(targetOffset, animationSpec = animationSpec)
+            } finally {
+                if (session != null) {
+                    portraitAnimationHapticTracker.end(session)
+                }
+            }
+        }
+
+        val draggableState = rememberDraggableState { delta ->
+            scope.launch {
+                val progress = playerProgressFromSheetOffset(
+                    sheetOffset.value,
+                    collapsedOffset
+                )
+                val rawProgressDelta = if (collapsedOffset > 0f) {
+                    -delta / collapsedOffset
+                } else {
+                    0f
+                }
+                val crossingProgress = if (portraitCatchUpActive) {
+                    portraitRawProgress = advancePlayerRawProgress(
+                        portraitRawProgress,
+                        rawProgressDelta
+                    )
+                    portraitRawProgress
+                } else {
+                    val next = advancePlayerDetent(
+                        progress = progress,
+                        rawDelta = rawProgressDelta,
+                        direction = portraitGestureDirection,
+                        rawProgress = portraitRawProgress
+                    )
+                    portraitRawProgress = next.rawProgress
+                    sheetOffset.snapTo(
+                        playerSheetOffsetFromProgress(
+                            next.progress,
+                            collapsedOffset
+                        )
+                    )
+                    next.rawProgress
+                }
+                if (portraitDragHapticTracker.observe(crossingProgress)) {
+                    portraitDragHapticTriggered = true
+                    portraitCatchUpActive = true
+                    performClockTickHaptic()
+                }
+            }
+        }
+
+        fun startPortraitDrag() {
+            val progress = playerProgressFromSheetOffset(
+                sheetOffset.value,
+                collapsedOffset
+            )
+            portraitGestureDirection = playerGestureDirectionForStart(progress)
+            portraitRawProgress = progress
+            portraitDragHapticTriggered = false
+            portraitCatchUpActive = false
+            portraitDragHapticSession = portraitDragHapticTracker.begin(
+                progress = progress,
+                criticalPoint = playerGestureCriticalPoint(portraitGestureDirection)
+            )
+        }
+
+        fun snapToTarget(velocity: Float) {
+            portraitDragHapticTracker.end(portraitDragHapticSession)
+            portraitCatchUpActive = false
+            scope.launch {
+                val expanded = resolvePlayerExpandedOnRelease(
+                    progress = portraitRawProgress,
+                    velocityPxPerSecond = velocity,
+                    direction = portraitGestureDirection
+                )
+                val target = if (expanded) {
+                    0f
+                } else {
+                    collapsedOffset
+                }
+                animatePortraitSheetTo(
+                    targetOffset = target,
+                    animationSpec = tween(300),
+                    direction = portraitGestureDirection,
+                    emitHaptic = !portraitDragHapticTriggered
+                )
             }
         }
         
@@ -894,6 +1067,8 @@ fun MainScreen(
         val landscapeCompactPlayerHeight = landscapePlayerHeight
         val landscapeCompactPlayerWidth =
             landscapeCompactPlayerHeight * LANDSCAPE_COMPACT_PLAYER_WIDTH_TO_HEIGHT
+        val landscapeMiniPlayerWidthPx =
+            with(density) { LANDSCAPE_MINI_PLAYER_WIDTH_DP.dp.toPx() }
         val landscapeFullscreenSize = DpSize(maxWidth, maxHeight)
         val landscapeActionSlotHeight =
             (maxHeight - landscapeMiniPlayerHeight) / 2f
@@ -925,21 +1100,248 @@ fun MainScreen(
         val landscapeExpansionProgress = remember(isLandscape) {
             Animatable(if (isLandscape && isFullPlayerOpen) 1f else 0f)
         }
+        val landscapeCompactAnimationHapticTracker = remember {
+            PlayerCriticalPointHapticTracker()
+        }
+        val landscapeExpansionAnimationHapticTracker = remember {
+            PlayerCriticalPointHapticTracker()
+        }
+        val landscapeCompactDragHapticTracker = remember {
+            PlayerCriticalPointHapticTracker()
+        }
+        val landscapeExpansionDragHapticTracker = remember {
+            PlayerCriticalPointHapticTracker()
+        }
+        var landscapeCompactGestureDirection by remember {
+            mutableStateOf(PlayerGestureDirection.EXPANDING)
+        }
+        var landscapeExpansionGestureDirection by remember {
+            mutableStateOf(PlayerGestureDirection.EXPANDING)
+        }
+        var landscapeDragState by remember {
+            mutableStateOf<LandscapePlayerDragState?>(null)
+        }
+        var landscapeCompactDragHapticSession by remember { mutableStateOf(0) }
+        var landscapeExpansionDragHapticSession by remember { mutableStateOf(0) }
+        var landscapeCompactDragHapticTriggered by remember { mutableStateOf(false) }
+        var landscapeExpansionDragHapticTriggered by remember { mutableStateOf(false) }
+        var landscapeCompactCatchUpActive by remember { mutableStateOf(false) }
+        var landscapeExpansionCatchUpActive by remember { mutableStateOf(false) }
+
+        LaunchedEffect(
+            landscapeSheetOffset,
+            landscapePlayerCollapsedOffset
+        ) {
+            snapshotFlow {
+                playerProgressFromSheetOffset(
+                    landscapeSheetOffset.value,
+                    landscapePlayerCollapsedOffset
+                )
+            }.collect { progress ->
+                if (landscapeCompactAnimationHapticTracker.observe(progress)) {
+                    performClockTickHaptic()
+                }
+            }
+        }
+        LaunchedEffect(landscapeExpansionProgress) {
+            snapshotFlow { landscapeExpansionProgress.value }
+                .collect { progress ->
+                    if (landscapeExpansionAnimationHapticTracker.observe(progress)) {
+                        performClockTickHaptic()
+                    }
+                }
+        }
+
+        LaunchedEffect(
+            landscapeCompactCatchUpActive,
+            landscapeExpansionCatchUpActive
+        ) {
+            if (
+                !landscapeCompactCatchUpActive &&
+                !landscapeExpansionCatchUpActive
+            ) {
+                return@LaunchedEffect
+            }
+            var lastFrameNanos = withFrameNanos { it }
+            while (
+                landscapeCompactCatchUpActive ||
+                landscapeExpansionCatchUpActive
+            ) {
+                val frameNanos = withFrameNanos { it }
+                val elapsedSeconds = (
+                    (frameNanos - lastFrameNanos) / 1_000_000_000f
+                    ).coerceIn(0f, 0.05f)
+                lastFrameNanos = frameNanos
+                val state = landscapeDragState ?: break
+                val compactProgress = playerProgressFromSheetOffset(
+                    landscapeSheetOffset.value,
+                    landscapePlayerCollapsedOffset
+                )
+                val expansionProgress = landscapeExpansionProgress.value
+                val nextCompactProgress = if (
+                    landscapeCompactCatchUpActive
+                ) {
+                    advancePlayerDetentCatchUp(
+                        progress = compactProgress,
+                        targetProgress = landscapePlayerCatchUpTarget(
+                            rawProgress = state.compactRawProgress,
+                            direction = landscapeCompactGestureDirection,
+                            stageDistancePx = landscapePlayerCollapsedOffset,
+                            miniPlayerWidthPx = landscapeMiniPlayerWidthPx
+                        ),
+                        elapsedSeconds = elapsedSeconds,
+                        catchUpSpeed = PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED
+                    )
+                } else {
+                    compactProgress
+                }
+                val nextExpansionProgress = if (
+                    landscapeExpansionCatchUpActive
+                ) {
+                    advancePlayerDetentCatchUp(
+                        progress = expansionProgress,
+                        targetProgress = landscapePlayerCatchUpTarget(
+                            rawProgress = state.expansionRawProgress,
+                            direction = landscapeExpansionGestureDirection,
+                            stageDistancePx = landscapeExpansionDistancePx,
+                            miniPlayerWidthPx = landscapeMiniPlayerWidthPx
+                        ),
+                        elapsedSeconds = elapsedSeconds,
+                        catchUpSpeed = PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED
+                    )
+                } else {
+                    expansionProgress
+                }
+                if (
+                    nextCompactProgress != compactProgress ||
+                    nextExpansionProgress != expansionProgress
+                ) {
+                    val nextPosition = LandscapePlayerDragPosition(
+                        sheetOffsetPx = playerSheetOffsetFromProgress(
+                            nextCompactProgress,
+                            landscapePlayerCollapsedOffset
+                        ),
+                        expansionProgress = nextExpansionProgress
+                    )
+                    landscapeDragState = state.copy(position = nextPosition)
+                    landscapeSheetOffset.snapTo(nextPosition.sheetOffsetPx)
+                    landscapeExpansionProgress.snapTo(
+                        nextPosition.expansionProgress
+                    )
+                }
+            }
+        }
+
+        suspend fun animateLandscapeSheetTo(
+            targetOffset: Float,
+            animationSpec: AnimationSpec<Float>,
+            direction: PlayerGestureDirection,
+            emitHaptic: Boolean = true
+        ) {
+            val startProgress = playerProgressFromSheetOffset(
+                landscapeSheetOffset.value,
+                landscapePlayerCollapsedOffset
+            )
+            val session = if (emitHaptic) {
+                landscapeCompactAnimationHapticTracker.begin(
+                    progress = startProgress,
+                    criticalPoint = playerGestureCriticalPoint(
+                        direction,
+                        PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+                    )
+                )
+            } else {
+                null
+            }
+            isFullPlayerOpen = false
+            try {
+                landscapeSheetOffset.animateTo(
+                    targetOffset,
+                    animationSpec = animationSpec
+                )
+            } finally {
+                if (session != null) {
+                    landscapeCompactAnimationHapticTracker.end(session)
+                }
+            }
+        }
+
+        suspend fun animateLandscapeExpansionTo(
+            targetProgress: Float,
+            animationSpec: AnimationSpec<Float>,
+            direction: PlayerGestureDirection,
+            emitHaptic: Boolean = true
+        ) {
+            val startProgress = landscapeExpansionProgress.value
+            val session = if (emitHaptic) {
+                landscapeExpansionAnimationHapticTracker.begin(
+                    progress = startProgress,
+                    criticalPoint = playerGestureCriticalPoint(
+                        direction,
+                        PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+                    )
+                )
+            } else {
+                null
+            }
+            isFullPlayerOpen = targetProgress >= 1f
+            try {
+                landscapeExpansionProgress.animateTo(
+                    targetProgress,
+                    animationSpec = animationSpec
+                )
+            } finally {
+                if (session != null) {
+                    landscapeExpansionAnimationHapticTracker.end(session)
+                }
+            }
+        }
 
         fun applyLandscapeDrag(delta: Float) {
             scope.launch {
-                val next = advanceLandscapePlayerDrag(
-                    position = LandscapePlayerDragPosition(
-                        sheetOffsetPx = landscapeSheetOffset.value,
-                        expansionProgress = landscapeExpansionProgress.value
+                val currentPosition = LandscapePlayerDragPosition(
+                    sheetOffsetPx = landscapeSheetOffset.value,
+                    expansionProgress = landscapeExpansionProgress.value
+                )
+                val next = advanceLandscapePlayerDragState(
+                    state = landscapeDragState ?: LandscapePlayerDragState.at(
+                        currentPosition,
+                        landscapePlayerCollapsedOffset
                     ),
                     deltaPx = delta,
                     collapsedOffsetPx = landscapePlayerCollapsedOffset,
                     expansionDistancePx = landscapeExpansionDistancePx,
-                    expansionGain = LANDSCAPE_EXPANSION_DRAG_GAIN
+                    expansionGain = LANDSCAPE_EXPANSION_DRAG_GAIN,
+                    criticalEdgeFraction =
+                        PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION,
+                    compactDirection = landscapeCompactGestureDirection,
+                    expansionDirection = landscapeExpansionGestureDirection,
+                    compactCatchUpActive =
+                        landscapeCompactCatchUpActive,
+                    expansionCatchUpActive =
+                        landscapeExpansionCatchUpActive
                 )
-                landscapeSheetOffset.snapTo(next.sheetOffsetPx)
-                landscapeExpansionProgress.snapTo(next.expansionProgress)
+                landscapeDragState = next
+                if (
+                    landscapeCompactDragHapticTracker.observe(
+                        next.compactRawProgress
+                    )
+                ) {
+                    landscapeCompactDragHapticTriggered = true
+                    landscapeCompactCatchUpActive = true
+                    performClockTickHaptic()
+                }
+                if (
+                    landscapeExpansionDragHapticTracker.observe(
+                        next.expansionRawProgress
+                    )
+                ) {
+                    landscapeExpansionDragHapticTriggered = true
+                    landscapeExpansionCatchUpActive = true
+                    performClockTickHaptic()
+                }
+                landscapeSheetOffset.snapTo(next.position.sheetOffsetPx)
+                landscapeExpansionProgress.snapTo(next.position.expansionProgress)
             }
         }
 
@@ -947,39 +1349,108 @@ fun MainScreen(
             applyLandscapeDrag(delta)
         }
 
+        fun startLandscapeDrag() {
+            val compactProgress = playerProgressFromSheetOffset(
+                landscapeSheetOffset.value,
+                landscapePlayerCollapsedOffset
+            )
+            val expansionProgress = landscapeExpansionProgress.value
+            landscapeDragState = LandscapePlayerDragState.at(
+                position = LandscapePlayerDragPosition(
+                    sheetOffsetPx = landscapeSheetOffset.value,
+                    expansionProgress = expansionProgress
+                ),
+                collapsedOffsetPx = landscapePlayerCollapsedOffset
+            )
+            landscapeCompactGestureDirection =
+                playerGestureDirectionForStart(compactProgress)
+            landscapeExpansionGestureDirection =
+                playerGestureDirectionForStart(expansionProgress)
+            landscapeCompactDragHapticTriggered = false
+            landscapeExpansionDragHapticTriggered = false
+            landscapeCompactCatchUpActive = false
+            landscapeExpansionCatchUpActive = false
+            landscapeCompactDragHapticSession =
+                landscapeCompactDragHapticTracker.begin(
+                progress = compactProgress,
+                criticalPoint = playerGestureCriticalPoint(
+                    landscapeCompactGestureDirection,
+                    PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+                )
+            )
+            landscapeExpansionDragHapticSession =
+                landscapeExpansionDragHapticTracker.begin(
+                progress = expansionProgress,
+                criticalPoint = playerGestureCriticalPoint(
+                    landscapeExpansionGestureDirection,
+                    PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+                )
+            )
+        }
+
         fun settleLandscapePlayer(velocity: Float) {
+            landscapeCompactCatchUpActive = false
+            landscapeExpansionCatchUpActive = false
+            landscapeCompactDragHapticTracker.end(
+                landscapeCompactDragHapticSession
+            )
+            landscapeExpansionDragHapticTracker.end(
+                landscapeExpansionDragHapticSession
+            )
             scope.launch {
-                val progress = landscapeExpansionProgress.value
+                val expansionProgress = landscapeExpansionProgress.value
                 val currentSheetOffset = landscapeSheetOffset.value
-                if (
-                    progress > 0f ||
-                    (currentSheetOffset <= 0f && velocity < -1000f)
-                ) {
-                    val target = if (
-                        velocity < -1000f ||
-                        (velocity <= 1000f && progress >= 0.5f)
-                    ) {
-                        1f
-                    } else {
-                        0f
-                    }
-                    isFullPlayerOpen = target == 1f
-                    landscapeExpansionProgress.animateTo(
-                        target,
-                        animationSpec = if (target == 0f) {
-                            CompactPlayerSnapSpec
-                        } else {
-                            tween(300)
-                        }
+                val rawCompactProgress = landscapeDragState
+                    ?.compactRawProgress
+                    ?: playerProgressFromSheetOffset(
+                        currentSheetOffset,
+                        landscapePlayerCollapsedOffset
+                    )
+                val rawExpansionProgress = landscapeDragState
+                    ?.expansionRawProgress
+                    ?: expansionProgress
+                val expansionEngaged =
+                    expansionProgress > 0f || rawExpansionProgress > 0f
+                val expandToFullscreen =
+                    expansionEngaged &&
+                        resolvePlayerExpandedOnRelease(
+                            progress = rawExpansionProgress,
+                            velocityPxPerSecond = velocity,
+                            direction = landscapeExpansionGestureDirection,
+                            criticalEdgeFraction =
+                                PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+                        )
+
+                if (expandToFullscreen) {
+                    animateLandscapeSheetTo(
+                        targetOffset = 0f,
+                        animationSpec = CompactPlayerSnapSpec,
+                        direction = landscapeCompactGestureDirection,
+                        emitHaptic = !landscapeCompactDragHapticTriggered
+                    )
+                    animateLandscapeExpansionTo(
+                        targetProgress = 1f,
+                        animationSpec = tween(300),
+                        direction = landscapeExpansionGestureDirection,
+                        emitHaptic = !landscapeExpansionDragHapticTriggered
                     )
                 } else {
-                    val target = if (
-                        velocity < -1000f ||
-                        (
-                            velocity <= 1000f &&
-                                currentSheetOffset < landscapePlayerCollapsedOffset / 2f
-                            )
-                    ) {
+                    if (expansionEngaged && expansionProgress > 0f) {
+                        animateLandscapeExpansionTo(
+                            targetProgress = 0f,
+                            animationSpec = CompactPlayerSnapSpec,
+                            direction = landscapeExpansionGestureDirection,
+                            emitHaptic = !landscapeExpansionDragHapticTriggered
+                        )
+                    }
+                    val compactExpanded = resolvePlayerExpandedOnRelease(
+                        progress = rawCompactProgress,
+                        velocityPxPerSecond = velocity,
+                        direction = landscapeCompactGestureDirection,
+                        criticalEdgeFraction =
+                            PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+                    )
+                    val target = if (compactExpanded) {
                         0f
                     } else {
                         landscapePlayerCollapsedOffset
@@ -987,13 +1458,15 @@ fun MainScreen(
                     // A compact landscape card has no portrait counterpart. Only the
                     // fully expanded landscape state maps to the portrait sheet.
                     isFullPlayerOpen = false
-                    landscapeSheetOffset.animateTo(
-                        target,
+                    animateLandscapeSheetTo(
+                        targetOffset = target,
                         animationSpec = if (target == 0f) {
                             CompactPlayerSnapSpec
                         } else {
                             tween(300)
-                        }
+                        },
+                        direction = landscapeCompactGestureDirection,
+                        emitHaptic = !landscapeCompactDragHapticTriggered
                     )
                 }
             }
@@ -1013,12 +1486,26 @@ fun MainScreen(
                 hasObservedPlayback = true
             } else if (hasObservedPlayback) {
                 isFullPlayerOpen = false
-                landscapeExpansionProgress.snapTo(0f)
-                landscapeSheetOffset.animateTo(
-                    landscapePlayerCollapsedOffset,
-                    animationSpec = tween(300)
+                if (landscapeExpansionProgress.value > 0f) {
+                    animateLandscapeExpansionTo(
+                        targetProgress = 0f,
+                        animationSpec = CompactPlayerSnapSpec,
+                        direction = PlayerGestureDirection.COLLAPSING,
+                        emitHaptic = isLandscape
+                    )
+                }
+                animateLandscapeSheetTo(
+                    targetOffset = landscapePlayerCollapsedOffset,
+                    animationSpec = tween(300),
+                    direction = PlayerGestureDirection.COLLAPSING,
+                    emitHaptic = isLandscape
                 )
-                sheetOffset.animateTo(collapsedOffset, animationSpec = tween(300))
+                animatePortraitSheetTo(
+                    targetOffset = collapsedOffset,
+                    animationSpec = tween(300),
+                    direction = PlayerGestureDirection.COLLAPSING,
+                    emitHaptic = !isLandscape
+                )
             }
         }
         BackHandler(
@@ -1028,14 +1515,16 @@ fun MainScreen(
             scope.launch {
                 isFullPlayerOpen = false
                 if (landscapeExpansionProgress.value > 0f) {
-                    landscapeExpansionProgress.animateTo(
-                        0f,
-                        animationSpec = CompactPlayerSnapSpec
+                    animateLandscapeExpansionTo(
+                        targetProgress = 0f,
+                        animationSpec = CompactPlayerSnapSpec,
+                        direction = PlayerGestureDirection.COLLAPSING
                     )
                 } else {
-                    landscapeSheetOffset.animateTo(
-                        landscapePlayerCollapsedOffset,
-                        animationSpec = tween(300)
+                    animateLandscapeSheetTo(
+                        targetOffset = landscapePlayerCollapsedOffset,
+                        animationSpec = tween(300),
+                        direction = PlayerGestureDirection.COLLAPSING
                     )
                 }
             }
@@ -1205,6 +1694,7 @@ fun MainScreen(
                     .draggable(
                         state = draggableState,
                         orientation = Orientation.Vertical,
+                        onDragStarted = { startPortraitDrag() },
                         onDragStopped = { velocity -> snapToTarget(velocity) }
                     )
             ) {
@@ -1213,8 +1703,13 @@ fun MainScreen(
                     renderPlaybackSession = renderPlaybackSession,
                     isExpanded = isSheetOpen,
                     onCollapse = {
-                        isFullPlayerOpen = false
-                        scope.launch { sheetOffset.animateTo(collapsedOffset, tween(300)) }
+                        scope.launch {
+                            animatePortraitSheetTo(
+                                targetOffset = collapsedOffset,
+                                animationSpec = tween(300),
+                                direction = PlayerGestureDirection.COLLAPSING
+                            )
+                        }
                     }
                 )
             }
@@ -1569,7 +2064,10 @@ fun MainScreen(
                             state = landscapeDraggableState,
                             orientation = Orientation.Horizontal,
                             enabled = nowPlaying != null,
-                            onDragStarted = { landscapeDragging = true },
+                            onDragStarted = {
+                                landscapeDragging = true
+                                startLandscapeDrag()
+                            },
                             onDragStopped = { velocity ->
                                 landscapeDragging = false
                                 settleLandscapePlayer(velocity)
@@ -1582,17 +2080,18 @@ fun MainScreen(
                         renderPlaybackSession = renderPlaybackSession,
                         isExpanded = isLandscapePlayerOpen,
                         onCollapse = {
-                            isFullPlayerOpen = false
                             scope.launch {
                                 if (landscapeExpansionProgress.value > 0f) {
-                                    landscapeExpansionProgress.animateTo(
-                                        0f,
-                                        animationSpec = CompactPlayerSnapSpec
+                                    animateLandscapeExpansionTo(
+                                        targetProgress = 0f,
+                                        animationSpec = CompactPlayerSnapSpec,
+                                        direction = PlayerGestureDirection.COLLAPSING
                                     )
                                 } else {
-                                    landscapeSheetOffset.animateTo(
-                                        landscapePlayerCollapsedOffset,
-                                        animationSpec = tween(300)
+                                    animateLandscapeSheetTo(
+                                        targetOffset = landscapePlayerCollapsedOffset,
+                                        animationSpec = tween(300),
+                                        direction = PlayerGestureDirection.COLLAPSING
                                     )
                                 }
                             }
@@ -1609,14 +2108,16 @@ fun MainScreen(
                             isFullPlayerOpen = true
                             scope.launch {
                                 if (landscapeSheetOffset.value > 0f) {
-                                    landscapeSheetOffset.animateTo(
-                                        0f,
-                                        animationSpec = tween(180)
+                                    animateLandscapeSheetTo(
+                                        targetOffset = 0f,
+                                        animationSpec = tween(180),
+                                        direction = PlayerGestureDirection.EXPANDING
                                     )
                                 }
-                                landscapeExpansionProgress.animateTo(
-                                    1f,
-                                    animationSpec = tween(300)
+                                animateLandscapeExpansionTo(
+                                    targetProgress = 1f,
+                                    animationSpec = tween(300),
+                                    direction = PlayerGestureDirection.EXPANDING
                                 )
                             }
                         },
@@ -1707,7 +2208,10 @@ fun MainScreen(
                                 state = landscapeDraggableState,
                                 orientation = Orientation.Horizontal,
                                 enabled = nowPlaying != null,
-                                onDragStarted = { landscapeDragging = true },
+                                onDragStarted = {
+                                    landscapeDragging = true
+                                    startLandscapeDrag()
+                                },
                                 onDragStopped = { velocity ->
                                     landscapeDragging = false
                                     settleLandscapePlayer(velocity)
@@ -1718,11 +2222,11 @@ fun MainScreen(
                             LandscapeMiniPlayer(
                                 musicController = musicController,
                                 onClick = {
-                                    isFullPlayerOpen = false
                                     scope.launch {
-                                        landscapeSheetOffset.animateTo(
-                                            0f,
-                                            animationSpec = CompactPlayerSnapSpec
+                                        animateLandscapeSheetTo(
+                                            targetOffset = 0f,
+                                            animationSpec = CompactPlayerSnapSpec,
+                                            direction = PlayerGestureDirection.EXPANDING
                                         )
                                     }
                                 },
@@ -1750,14 +2254,20 @@ fun MainScreen(
                     .draggable(
                         state = draggableState,
                         orientation = Orientation.Vertical,
+                        onDragStarted = { startPortraitDrag() },
                         onDragStopped = { velocity -> snapToTarget(velocity) }
                     )
             ) {
                 MiniPlayer(
                     musicController = musicController,
                     onClick = {
-                        isFullPlayerOpen = true
-                        scope.launch { sheetOffset.animateTo(0f, tween(300)) }
+                        scope.launch {
+                            animatePortraitSheetTo(
+                                targetOffset = 0f,
+                                animationSpec = tween(300),
+                                direction = PlayerGestureDirection.EXPANDING
+                            )
+                        }
                     }
                 )
             }

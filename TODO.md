@@ -18,6 +18,7 @@
 - [ ] redesign how scores are presented on search page. Right now cover art takes up too much space and titles are clipped aggressively especially in topplay and recent play mode.
 - [x] Make genre bar a generic pill shaped slide out menu composable just like the osu mode switcher.
 - [x] Find a good placement for the genre filter on both the Library and Search screens.
+- [x] Add a non-linear animation to player full screen swipe out gesture. I.e, for the slide out gesture that turns miniplayer/compact player into full/compact player, define a critical point where sliding past that point would result in full screen upon releasing, and vice versa. The non-linear part goes like (harder to slide it up when it goes closer to the critical point and significantly easier immediately upon going pass the critical point) We want a distinct click haptic feedback the isntant it goes past the critical point.
 
 ### Features
 

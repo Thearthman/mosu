@@ -7,12 +7,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LandscapePlayerMorphTest {
+    private val landscapeCriticalPointNear = playerGestureCriticalPoint(
+        PlayerGestureDirection.EXPANDING,
+        PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+    )
+
     @Test
-    fun leftDragContinuesFromCompactIntoFullscreenUsingGain() {
-        val result = advanceLandscapePlayerDrag(
-            position = LandscapePlayerDragPosition(
-                sheetOffsetPx = 120f,
-                expansionProgress = 0f
+    fun leftDragContinuesFromCompactIntoFullscreenUsingPhysicalProgress() {
+        val state = advanceLandscapePlayerDragState(
+            state = LandscapePlayerDragState.at(
+                position = LandscapePlayerDragPosition(
+                    sheetOffsetPx = 120f,
+                    expansionProgress = 0f
+                ),
+                collapsedOffsetPx = 120f
             ),
             deltaPx = -220f,
             collapsedOffsetPx = 120f,
@@ -20,69 +28,274 @@ class LandscapePlayerMorphTest {
             expansionGain = 1.2f
         )
 
-        assertEquals(0f, result.sheetOffsetPx, 0.001f)
-        assertEquals(0.12f, result.expansionProgress, 0.0001f)
+        assertEquals(1f, state.compactRawProgress, 0.0001f)
+        assertEquals(0.12f, state.expansionRawProgress, 0.0001f)
+        assertTrue(state.position.sheetOffsetPx > 0f)
+        assertTrue(state.position.expansionProgress < 0.12f)
+
+        val caughtUp = state.withCaughtUpVisuals(
+            collapsedOffsetPx = 120f,
+            compactDirection = PlayerGestureDirection.EXPANDING,
+            expansionDirection = PlayerGestureDirection.EXPANDING
+        )
+        assertEquals(0f, caughtUp.position.sheetOffsetPx, 0.001f)
+        assertEquals(
+            0.12f + (72f * 0.5f / 1_000f),
+            caughtUp.position.expansionProgress,
+            0.001f
+        )
     }
 
     @Test
     fun rightDragReversesFullscreenBeforeReturningToMiniPlayer() {
-        val backToCompact = advanceLandscapePlayerDrag(
+        var state = LandscapePlayerDragState.at(
             position = LandscapePlayerDragPosition(
                 sheetOffsetPx = 0f,
-                expansionProgress = 0.2f
+                expansionProgress = 1f
             ),
+            collapsedOffsetPx = 120f
+        )
+        state = advanceLandscapePlayerDragState(
+            state = state,
+            deltaPx = 300f,
+            collapsedOffsetPx = 120f,
+            expansionDistancePx = 1_000f,
+            expansionGain = 1.2f,
+            compactDirection = PlayerGestureDirection.COLLAPSING,
+            expansionDirection = PlayerGestureDirection.COLLAPSING
+        )
+        state = advanceLandscapePlayerDragState(
+            state = state,
             deltaPx = 100f,
             collapsedOffsetPx = 120f,
             expansionDistancePx = 1_000f,
-            expansionGain = 1.2f
+            expansionGain = 1.2f,
+            compactDirection = PlayerGestureDirection.COLLAPSING,
+            expansionDirection = PlayerGestureDirection.COLLAPSING,
+            expansionCatchUpActive = true
         )
-        assertEquals(0f, backToCompact.sheetOffsetPx, 0.001f)
-        assertEquals(0.08f, backToCompact.expansionProgress, 0.0001f)
+        assertEquals(1f, state.compactRawProgress, 0.0001f)
+        assertEquals(0.52f, state.expansionRawProgress, 0.0001f)
 
-        val continueToMini = advanceLandscapePlayerDrag(
-            position = backToCompact,
-            deltaPx = 100f,
+        state = advanceLandscapePlayerDragState(
+            state = state,
+            deltaPx = 1_000f,
             collapsedOffsetPx = 120f,
             expansionDistancePx = 1_000f,
-            expansionGain = 1.2f
+            expansionGain = 1.2f,
+            compactDirection = PlayerGestureDirection.COLLAPSING,
+            expansionDirection = PlayerGestureDirection.COLLAPSING,
+            expansionCatchUpActive = true
         )
-        assertEquals(33.3333f, continueToMini.sheetOffsetPx, 0.001f)
-        assertEquals(0f, continueToMini.expansionProgress, 0.0001f)
+        assertEquals(0f, state.expansionRawProgress, 0.0001f)
+        assertEquals(0f, state.compactRawProgress, 0.0001f)
+
+        val caughtUp = state.withCaughtUpVisuals(
+            collapsedOffsetPx = 120f,
+            compactDirection = PlayerGestureDirection.COLLAPSING,
+            expansionDirection = PlayerGestureDirection.COLLAPSING
+        )
+        assertEquals(120f, caughtUp.position.sheetOffsetPx, 0.001f)
+        assertEquals(0f, caughtUp.position.expansionProgress, 0.0001f)
+    }
+
+    @Test
+    fun continuousLeftDragPassesBothCriticalPoints() {
+        var state = advanceLandscapePlayerDragState(
+            state = LandscapePlayerDragState.at(
+                position = LandscapePlayerDragPosition(120f, 0f),
+                collapsedOffsetPx = 120f
+            ),
+            deltaPx = -150f,
+            collapsedOffsetPx = 120f,
+            expansionDistancePx = 1_000f,
+            expansionGain = 1.2f,
+            compactDirection = PlayerGestureDirection.EXPANDING,
+            expansionDirection = PlayerGestureDirection.EXPANDING
+        )
+        assertEquals(1f, state.compactRawProgress, 0.0001f)
+        assertTrue(
+            state.expansionRawProgress in 0f..landscapeCriticalPointNear
+        )
+
+        state = advanceLandscapePlayerDragState(
+            state = state,
+            deltaPx = -500f,
+            collapsedOffsetPx = 120f,
+            expansionDistancePx = 1_000f,
+            expansionGain = 1.2f,
+            compactDirection = PlayerGestureDirection.EXPANDING,
+            expansionDirection = PlayerGestureDirection.EXPANDING
+        )
+        assertEquals(1f, state.compactRawProgress, 0.0001f)
+        assertTrue(
+            state.expansionRawProgress > landscapeCriticalPointNear
+        )
+        assertTrue(state.position.expansionProgress < state.expansionRawProgress)
+    }
+
+    @Test
+    fun compactDetentResistsMovementNearItsCriticalPoint() {
+        val detented = advanceLandscapePlayerDrag(
+            position = LandscapePlayerDragPosition(120f, 0f),
+            deltaPx = -30f,
+            collapsedOffsetPx = 120f,
+            expansionDistancePx = 1_000f,
+            expansionGain = 1.2f,
+            compactDirection = PlayerGestureDirection.EXPANDING,
+            expansionDirection = PlayerGestureDirection.EXPANDING
+        )
+
+        assertTrue(detented.sheetOffsetPx > 0f)
+    }
+
+    @Test
+    fun statefulCompactDragCrossesPhysicalCriticalPointThenCatchesUp() {
+        var state = LandscapePlayerDragState.at(
+            position = LandscapePlayerDragPosition(120f, 0f),
+            collapsedOffsetPx = 120f
+        )
+        var previousRawProgress = 0f
+        var crossed = false
+        var visualAtCrossing = 1f
+        var gapAtCrossing = 0f
+
+        repeat(15) {
+            state = advanceLandscapePlayerDragState(
+                state = state,
+                deltaPx = -5f,
+                collapsedOffsetPx = 120f,
+                expansionDistancePx = 1_000f,
+                expansionGain = 1.2f,
+                compactDirection = PlayerGestureDirection.EXPANDING,
+                expansionDirection = PlayerGestureDirection.EXPANDING,
+                compactCatchUpActive = crossed
+            )
+            val progress = 1f - state.position.sheetOffsetPx / 120f
+            val rawProgress = state.compactRawProgress
+            if (
+                previousRawProgress < landscapeCriticalPointNear &&
+                rawProgress >= landscapeCriticalPointNear
+            ) {
+                crossed = true
+                visualAtCrossing = progress
+                gapAtCrossing = rawProgress - progress
+                assertTrue(progress < landscapeCriticalPointNear)
+                assertEquals(
+                    landscapeCriticalPointNear,
+                    rawProgress,
+                    0.05f
+                )
+            }
+            if (crossed) {
+                assertEquals(
+                    visualAtCrossing,
+                    progress,
+                    0.0001f
+                )
+            }
+            assertTrue(progress <= rawProgress + 0.0001f)
+            previousRawProgress = rawProgress
+        }
+
+        assertTrue(crossed)
+        assertTrue(visualAtCrossing < landscapeCriticalPointNear)
+        assertTrue(gapAtCrossing > 0.03f)
+        var caughtUpProgress = visualAtCrossing
+        repeat(40) {
+            caughtUpProgress = advancePlayerDetentCatchUp(
+                progress = caughtUpProgress,
+                targetProgress = landscapePlayerCatchUpTarget(
+                    rawProgress = state.compactRawProgress,
+                    direction = PlayerGestureDirection.EXPANDING,
+                    stageDistancePx = 120f,
+                    miniPlayerWidthPx = 72f
+                ),
+                elapsedSeconds = 1f / 60f,
+                catchUpSpeed = PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED
+            )
+        }
+        assertTrue(caughtUpProgress > state.compactRawProgress)
     }
 
     @Test
     fun bothDragDirectionsClampToTheirEndpoints() {
-        val expanded = advanceLandscapePlayerDrag(
-            position = LandscapePlayerDragPosition(120f, 0f),
+        val expanded = advanceLandscapePlayerDragState(
+            state = LandscapePlayerDragState.at(
+                position = LandscapePlayerDragPosition(120f, 0f),
+                collapsedOffsetPx = 120f
+            ),
             deltaPx = -10_000f,
             collapsedOffsetPx = 120f,
             expansionDistancePx = 1_000f,
             expansionGain = 1.2f
         )
-        assertEquals(0f, expanded.sheetOffsetPx, 0.001f)
-        assertEquals(1f, expanded.expansionProgress, 0.0001f)
+        assertEquals(1f, expanded.compactRawProgress, 0.0001f)
+        assertEquals(1f, expanded.expansionRawProgress, 0.0001f)
+        val caughtUpExpanded = expanded.withCaughtUpVisuals(
+            collapsedOffsetPx = 120f,
+            compactDirection = PlayerGestureDirection.EXPANDING,
+            expansionDirection = PlayerGestureDirection.EXPANDING
+        )
+        assertEquals(0f, caughtUpExpanded.position.sheetOffsetPx, 0.001f)
+        assertEquals(
+            1f,
+            caughtUpExpanded.position.expansionProgress,
+            0.0001f
+        )
 
-        val collapsed = advanceLandscapePlayerDrag(
-            position = LandscapePlayerDragPosition(0f, 1f),
+        val collapsed = advanceLandscapePlayerDragState(
+            state = LandscapePlayerDragState.at(
+                position = LandscapePlayerDragPosition(0f, 1f),
+                collapsedOffsetPx = 120f
+            ),
             deltaPx = 10_000f,
             collapsedOffsetPx = 120f,
             expansionDistancePx = 1_000f,
             expansionGain = 1.2f
         )
-        assertEquals(120f, collapsed.sheetOffsetPx, 0.001f)
-        assertEquals(0f, collapsed.expansionProgress, 0.0001f)
+        assertEquals(0f, collapsed.compactRawProgress, 0.0001f)
+        assertEquals(0f, collapsed.expansionRawProgress, 0.0001f)
+        val caughtUpCollapsed = collapsed.withCaughtUpVisuals(
+            collapsedOffsetPx = 120f,
+            compactDirection = PlayerGestureDirection.COLLAPSING,
+            expansionDirection = PlayerGestureDirection.COLLAPSING
+        )
+        assertEquals(
+            120f,
+            caughtUpCollapsed.position.sheetOffsetPx,
+            0.001f
+        )
+        assertEquals(
+            0f,
+            caughtUpCollapsed.position.expansionProgress,
+            0.0001f
+        )
     }
 
     @Test
     fun nonFiniteOrZeroExpansionDistanceIsHandledWithoutBreakingProgress() {
-        val zeroDistance = advanceLandscapePlayerDrag(
-            position = LandscapePlayerDragPosition(0f, 0f),
+        val zeroDistance = advanceLandscapePlayerDragState(
+            state = LandscapePlayerDragState.at(
+                position = LandscapePlayerDragPosition(0f, 0f),
+                collapsedOffsetPx = 120f
+            ),
             deltaPx = -100f,
             collapsedOffsetPx = 120f,
             expansionDistancePx = 0f,
             expansionGain = 1.2f
         )
-        assertEquals(1f, zeroDistance.expansionProgress, 0.0001f)
+        assertEquals(1f, zeroDistance.expansionRawProgress, 0.0001f)
+        assertEquals(
+            1f,
+            zeroDistance.withCaughtUpVisuals(
+                collapsedOffsetPx = 120f,
+                compactDirection = PlayerGestureDirection.EXPANDING,
+                expansionDirection = PlayerGestureDirection.EXPANDING
+            )
+                .position.expansionProgress,
+            0.0001f
+        )
 
         val nonFiniteDelta = advanceLandscapePlayerDrag(
             position = LandscapePlayerDragPosition(80f, 0.4f),
@@ -168,6 +381,53 @@ class LandscapePlayerMorphTest {
         assertTrue(
             rects.difficulty.left + rects.difficulty.width <=
                 rects.rendererToggle.left
+        )
+    }
+
+    private fun LandscapePlayerDragState.withCaughtUpVisuals(
+        collapsedOffsetPx: Float,
+        compactDirection: PlayerGestureDirection,
+        expansionDirection: PlayerGestureDirection,
+        expansionDistancePx: Float = 1_000f,
+        miniPlayerWidthPx: Float = 72f
+    ): LandscapePlayerDragState {
+        var compactProgress = playerProgressFromSheetOffset(
+            position.sheetOffsetPx,
+            collapsedOffsetPx
+        )
+        var expansionProgress = position.expansionProgress
+        repeat(40) {
+            compactProgress = advancePlayerDetentCatchUp(
+                progress = compactProgress,
+                targetProgress = landscapePlayerCatchUpTarget(
+                    rawProgress = compactRawProgress,
+                    direction = compactDirection,
+                    stageDistancePx = collapsedOffsetPx,
+                    miniPlayerWidthPx = miniPlayerWidthPx
+                ),
+                elapsedSeconds = 1f / 60f,
+                catchUpSpeed = PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED
+            )
+            expansionProgress = advancePlayerDetentCatchUp(
+                progress = expansionProgress,
+                targetProgress = landscapePlayerCatchUpTarget(
+                    rawProgress = expansionRawProgress,
+                    direction = expansionDirection,
+                    stageDistancePx = expansionDistancePx,
+                    miniPlayerWidthPx = miniPlayerWidthPx
+                ),
+                elapsedSeconds = 1f / 60f,
+                catchUpSpeed = PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED
+            )
+        }
+        return copy(
+            position = LandscapePlayerDragPosition(
+                sheetOffsetPx = playerSheetOffsetFromProgress(
+                    compactProgress,
+                    collapsedOffsetPx
+                ),
+                expansionProgress = expansionProgress
+            )
         )
     }
 }

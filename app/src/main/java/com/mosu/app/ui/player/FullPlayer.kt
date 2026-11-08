@@ -154,6 +154,33 @@ internal data class LandscapePlayerDragPosition(
     val expansionProgress: Float
 )
 
+internal data class LandscapePlayerDragState(
+    val position: LandscapePlayerDragPosition,
+    val compactRawProgress: Float,
+    val expansionRawProgress: Float
+) {
+    companion object {
+        fun at(
+            position: LandscapePlayerDragPosition,
+            collapsedOffsetPx: Float
+        ): LandscapePlayerDragState {
+            val expansionProgress = if (position.expansionProgress.isFinite()) {
+                position.expansionProgress.coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            return LandscapePlayerDragState(
+                position = position,
+                compactRawProgress = playerProgressFromSheetOffset(
+                    position.sheetOffsetPx,
+                    collapsedOffsetPx
+                ),
+                expansionRawProgress = expansionProgress
+            )
+        }
+    }
+}
+
 internal data class LandscapePlayerMorphBounds(
     val width: Dp,
     val height: Dp,
@@ -174,45 +201,219 @@ internal fun advanceLandscapePlayerDrag(
     deltaPx: Float,
     collapsedOffsetPx: Float,
     expansionDistancePx: Float,
-    expansionGain: Float
-): LandscapePlayerDragPosition {
-    val collapsedOffset = collapsedOffsetPx.coerceAtLeast(0f)
-    var sheetOffset = position.sheetOffsetPx.coerceIn(0f, collapsedOffset)
-    var progress = position.expansionProgress.coerceIn(0f, 1f)
+    expansionGain: Float,
+    criticalEdgeFraction: Float =
+        PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION,
+    compactDirection: PlayerGestureDirection = playerGestureDirectionForStart(
+        playerProgressFromSheetOffset(
+            position.sheetOffsetPx,
+            collapsedOffsetPx
+        )
+    ),
+    expansionDirection: PlayerGestureDirection = playerGestureDirectionForStart(
+        position.expansionProgress
+    ),
+    compactCatchUpActive: Boolean = false,
+    expansionCatchUpActive: Boolean = false
+): LandscapePlayerDragPosition = advanceLandscapePlayerDragState(
+    state = LandscapePlayerDragState.at(position, collapsedOffsetPx),
+    deltaPx = deltaPx,
+    collapsedOffsetPx = collapsedOffsetPx,
+    expansionDistancePx = expansionDistancePx,
+    expansionGain = expansionGain,
+    criticalEdgeFraction = criticalEdgeFraction,
+    compactDirection = compactDirection,
+    expansionDirection = expansionDirection,
+    compactCatchUpActive = compactCatchUpActive,
+    expansionCatchUpActive = expansionCatchUpActive
+).position
+
+/**
+ * Stateful variant of [advanceLandscapePlayerDrag] that keeps the raw finger progress for
+ * both stages. The raw progress is required to recover the distance lost while approaching
+ * a critical point.
+ */
+internal fun advanceLandscapePlayerDragState(
+    state: LandscapePlayerDragState,
+    deltaPx: Float,
+    collapsedOffsetPx: Float,
+    expansionDistancePx: Float,
+    expansionGain: Float,
+    criticalEdgeFraction: Float =
+        PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION,
+    compactDirection: PlayerGestureDirection = playerGestureDirectionForStart(
+        playerProgressFromSheetOffset(
+            state.position.sheetOffsetPx,
+            collapsedOffsetPx
+        )
+    ),
+    expansionDirection: PlayerGestureDirection = playerGestureDirectionForStart(
+        state.position.expansionProgress
+    ),
+    compactCatchUpActive: Boolean = false,
+    expansionCatchUpActive: Boolean = false
+): LandscapePlayerDragState {
+    val position = state.position
+    val collapsedOffset = if (collapsedOffsetPx.isFinite()) {
+        collapsedOffsetPx.coerceAtLeast(0f)
+    } else {
+        0f
+    }
+    var compactProgress = playerProgressFromSheetOffset(
+        position.sheetOffsetPx,
+        collapsedOffset
+    )
+    var progress = if (position.expansionProgress.isFinite()) {
+        position.expansionProgress.coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    var compactRawProgress = if (state.compactRawProgress.isFinite()) {
+        state.compactRawProgress.coerceIn(0f, 1f)
+    } else {
+        compactProgress
+    }
+    var expansionRawProgress = if (state.expansionRawProgress.isFinite()) {
+        state.expansionRawProgress.coerceIn(0f, 1f)
+    } else {
+        progress
+    }
     if (!deltaPx.isFinite() || deltaPx == 0f) {
-        return LandscapePlayerDragPosition(sheetOffset, progress)
+        return LandscapePlayerDragState(
+            position = LandscapePlayerDragPosition(
+                sheetOffsetPx = playerSheetOffsetFromProgress(
+                    compactProgress,
+                    collapsedOffset
+                ),
+                expansionProgress = progress
+            ),
+            compactRawProgress = compactRawProgress,
+            expansionRawProgress = expansionRawProgress
+        )
     }
 
-    val distance = expansionDistancePx.coerceAtLeast(1f)
+    val distance = if (expansionDistancePx.isFinite()) {
+        expansionDistancePx.coerceAtLeast(1f)
+    } else {
+        1f
+    }
     val gain = expansionGain.takeIf { it.isFinite() && it > 0f } ?: 1f
     var remaining = deltaPx
 
     if (remaining < 0f) {
-        if (sheetOffset > 0f) {
-            val consumed = remaining.coerceAtLeast(-sheetOffset)
-            sheetOffset += consumed
-            remaining -= consumed
+        if (compactRawProgress < 1f && collapsedOffset > 0f) {
+            val rawDistancePx =
+                (1f - compactRawProgress) * collapsedOffset
+            val consumedDeltaPx = remaining.coerceAtLeast(-rawDistancePx)
+            val rawDelta = -consumedDeltaPx / collapsedOffset
+            if (compactCatchUpActive) {
+                compactRawProgress = advancePlayerRawProgress(
+                    compactRawProgress,
+                    rawDelta
+                )
+                remaining -= consumedDeltaPx
+            } else {
+                val advance = advancePlayerDetent(
+                    progress = compactProgress,
+                    rawDelta = rawDelta,
+                    direction = compactDirection,
+                    rawProgress = compactRawProgress,
+                    criticalEdgeFraction = criticalEdgeFraction
+                )
+                compactProgress = advance.progress
+                compactRawProgress = advance.rawProgress
+                remaining += advance.consumedRawDelta * collapsedOffset
+            }
         }
-        if (remaining < 0f) {
-            progress = (
-                progress - remaining * gain / distance
-                ).coerceIn(0f, 1f)
+        if (remaining < 0f && expansionRawProgress < 1f) {
+            val rawDistancePx =
+                (1f - expansionRawProgress) * distance / gain
+            val consumedDeltaPx = remaining.coerceAtLeast(-rawDistancePx)
+            val rawDelta = -consumedDeltaPx * gain / distance
+            if (expansionCatchUpActive) {
+                expansionRawProgress = advancePlayerRawProgress(
+                    expansionRawProgress,
+                    rawDelta
+                )
+                remaining -= consumedDeltaPx
+            } else {
+                val advance = advancePlayerDetent(
+                    progress = progress,
+                    rawDelta = rawDelta,
+                    direction = expansionDirection,
+                    rawProgress = expansionRawProgress,
+                    criticalEdgeFraction = criticalEdgeFraction
+                )
+                progress = advance.progress
+                expansionRawProgress = advance.rawProgress
+                remaining += advance.consumedRawDelta * distance / gain
+            }
         }
     } else {
-        if (progress > 0f) {
-            val dragDistanceForProgress = progress * distance / gain
-            val consumed = remaining.coerceAtMost(dragDistanceForProgress)
-            progress = (
-                progress - consumed * gain / distance
-                ).coerceIn(0f, 1f)
-            remaining -= consumed
+        if (expansionRawProgress > 0f) {
+            val rawDistancePx =
+                expansionRawProgress * distance / gain
+            val consumedDeltaPx = remaining.coerceAtMost(rawDistancePx)
+            val rawDelta = -consumedDeltaPx * gain / distance
+            if (expansionCatchUpActive) {
+                expansionRawProgress = advancePlayerRawProgress(
+                    expansionRawProgress,
+                    rawDelta
+                )
+                remaining -= consumedDeltaPx
+            } else {
+                val advance = advancePlayerDetent(
+                    progress = progress,
+                    rawDelta = rawDelta,
+                    direction = expansionDirection,
+                    rawProgress = expansionRawProgress,
+                    criticalEdgeFraction = criticalEdgeFraction
+                )
+                progress = advance.progress
+                expansionRawProgress = advance.rawProgress
+                remaining += advance.consumedRawDelta * distance / gain
+            }
         }
-        if (remaining > 0f) {
-            sheetOffset = (sheetOffset + remaining).coerceIn(0f, collapsedOffset)
+        if (
+            remaining > 0f &&
+            compactRawProgress > 0f &&
+            collapsedOffset > 0f
+        ) {
+            val rawDistancePx = compactRawProgress * collapsedOffset
+            val consumedDeltaPx = remaining.coerceAtMost(rawDistancePx)
+            val rawDelta = -consumedDeltaPx / collapsedOffset
+            if (compactCatchUpActive) {
+                compactRawProgress = advancePlayerRawProgress(
+                    compactRawProgress,
+                    rawDelta
+                )
+                remaining -= consumedDeltaPx
+            } else {
+                val advance = advancePlayerDetent(
+                    progress = compactProgress,
+                    rawDelta = rawDelta,
+                    direction = compactDirection,
+                    rawProgress = compactRawProgress,
+                    criticalEdgeFraction = criticalEdgeFraction
+                )
+                compactProgress = advance.progress
+                compactRawProgress = advance.rawProgress
+                remaining += advance.consumedRawDelta * collapsedOffset
+            }
         }
     }
 
-    return LandscapePlayerDragPosition(sheetOffset, progress)
+    return LandscapePlayerDragState(
+        position = LandscapePlayerDragPosition(
+            sheetOffsetPx = playerSheetOffsetFromProgress(
+                compactProgress,
+                collapsedOffset
+            ),
+            expansionProgress = progress
+        ),
+        compactRawProgress = compactRawProgress,
+        expansionRawProgress = expansionRawProgress
+    )
 }
 
 /**

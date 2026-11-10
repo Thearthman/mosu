@@ -482,7 +482,7 @@ fun PlaylistScreen(
 
     fun playAlbum(tracks: List<BeatmapEntity>) {
         if (tracks.isEmpty()) return
-        musicController.playSong(tracks.first(), tracks)
+        musicController.playSong(tracks.random(), tracks)
     }
 
     fun openPlaylistDialog(track: BeatmapEntity) {

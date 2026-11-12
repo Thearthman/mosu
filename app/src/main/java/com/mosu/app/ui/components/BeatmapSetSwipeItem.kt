@@ -83,8 +83,20 @@ fun BeatmapSetSwipeItem(
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current.density
+    val haptics = rememberHaptics()
+    val hapticTracker = remember { SwipeHapticTracker() }
     var offsetPx by remember { mutableStateOf(0f) }
     var rowWidthPx by remember { mutableStateOf(0f) }
+
+    fun performSwipeHaptic(event: SwipeHapticEvent) {
+        when (event) {
+            SwipeHapticEvent.GESTURE_START -> haptics.gestureStart()
+            SwipeHapticEvent.THRESHOLD_ACTIVATE -> haptics.gestureThreshold(true)
+            SwipeHapticEvent.THRESHOLD_DEACTIVATE -> haptics.gestureThreshold(false)
+            SwipeHapticEvent.COMMIT -> haptics.confirm()
+            SwipeHapticEvent.REJECT -> haptics.reject()
+        }
+    }
 
     fun semanticDirectionForOffset(offsetPx: Float): BeatmapSwipeDirection {
         val swipedRight = offsetPx > 0f
@@ -223,6 +235,7 @@ fun BeatmapSetSwipeItem(
                         var releaseResult: SwipeReleaseResult? = null
                         awaitPointerEventScope {
                             val down = awaitFirstDown(requireUnconsumed = false)
+                            hapticTracker.onGestureStarted()
                             val startPosition = down.position
                             var lockedDirection: BeatmapSwipeDirection? = null
                             val allowPositiveOffset = isDirectionEnabled(semanticDirectionForOffset(1f))
@@ -254,6 +267,12 @@ fun BeatmapSetSwipeItem(
                                     allowNegative = allowNegativeOffset,
                                     allowPositive = allowPositiveOffset
                                 )
+                                hapticTracker.onDirectionLocked()?.let(::performSwipeHaptic)
+                                hapticTracker.onOffsetChanged(
+                                    offsetPx = offsetPx,
+                                    thresholdPx = SwipeThresholds.commitThresholdPx(rowWidthPx, density),
+                                    meaningfulThresholdPx = touchSlop
+                                )?.let(::performSwipeHaptic)
                             }
 
                             while (true) {
@@ -280,6 +299,13 @@ fun BeatmapSetSwipeItem(
                                         committed = committed,
                                         targetOffset = targetOffset
                                     )
+                                    hapticTracker.onRelease(
+                                        committed = committed,
+                                        meaningfulThresholdPx = touchSlop
+                                    )?.let {
+                                        performSwipeHaptic(it)
+                                        haptics.gestureEnd()
+                                    }
                                     return@awaitPointerEventScope
                                 }
 
@@ -290,8 +316,13 @@ fun BeatmapSetSwipeItem(
                                             widthPx = rowWidthPx,
                                             allowNegative = allowNegativeOffset,
                                             allowPositive = allowPositiveOffset
-                                        )
+                                    )
                                     offsetPx = nextOffset
+                                    hapticTracker.onOffsetChanged(
+                                        offsetPx = offsetPx,
+                                        thresholdPx = SwipeThresholds.commitThresholdPx(rowWidthPx, density),
+                                        meaningfulThresholdPx = touchSlop
+                                    )?.let(::performSwipeHaptic)
                                 }
                                 change.consume()
                             }

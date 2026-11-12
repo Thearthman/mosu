@@ -82,7 +82,7 @@ data class BeatmapTrackData(
  */
 data class BeatmapSetActions(
     val onClick: (BeatmapSetData) -> Unit = {},
-    val onLongClick: (BeatmapSetData) -> Unit = {},
+    val onLongClick: ((BeatmapSetData) -> Unit)? = null,
     val onSecondaryAction: ((BeatmapSetData) -> Unit)? = null, // e.g. Download, Add
     val onTrackPlay: ((BeatmapTrackData) -> Unit)? = null,
     val onTrackSwipeLeft: ((BeatmapTrackData) -> Unit)? = null,

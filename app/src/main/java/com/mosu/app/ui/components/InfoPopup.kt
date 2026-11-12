@@ -2,6 +2,8 @@ package com.mosu.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,17 +26,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -89,6 +99,7 @@ fun InfoPopup(
     if (!visible || target == null) return
 
     val uriHandler = LocalUriHandler.current
+    val haptics = rememberHaptics()
 
     Dialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -145,7 +156,7 @@ fun InfoPopup(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                InfoPopupLoadingIndicator()
                             }
                         }
                     } else if (error != null) {
@@ -406,6 +417,7 @@ fun InfoPopup(
                                 } else if (!isDownloaded && config.onDownloadClick != null) {
                                     IconButton(
                                         onClick = {
+                                            haptics.button()
                                             config.onDownloadClick.invoke(beatmapset)
                                             onDismiss()
                                         },
@@ -423,6 +435,45 @@ fun InfoPopup(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Matches the Material spinner visually, but uses the frame clock directly so it keeps
+ * rotating even when the system animator duration scale is zero.
+ */
+@Composable
+private fun InfoPopupLoadingIndicator() {
+    val color = MaterialTheme.colorScheme.primary
+    var rotation by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        var lastFrameNanos = 0L
+        while (true) {
+            withFrameNanos { frameNanos ->
+                if (lastFrameNanos != 0L) {
+                    val elapsedMs = (frameNanos - lastFrameNanos) / 1_000_000f
+                    rotation = (rotation + elapsedMs * 0.36f) % 360f
+                }
+                lastFrameNanos = frameNanos
+            }
+        }
+    }
+
+    Canvas(
+        modifier = Modifier
+            .size(32.dp)
+            .progressSemantics()
+    ) {
+        rotate(rotation) {
+            drawArc(
+                color = color,
+                startAngle = -90f,
+                sweepAngle = 270f,
+                useCenter = false,
+                style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+            )
         }
     }
 }

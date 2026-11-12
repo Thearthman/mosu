@@ -122,6 +122,8 @@ fun DraggableScrollbar(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val haptics = rememberHaptics()
+    val hapticTracker = remember { ScrollbarHapticTracker() }
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
@@ -193,8 +195,22 @@ fun DraggableScrollbar(
                 .width(10.dp)
                 .draggable(
                     orientation = Orientation.Vertical,
-                    onDragStarted = { isDragging = true },
-                    onDragStopped = { isDragging = false },
+                    onDragStarted = {
+                        isDragging = true
+                        val initialProgress = if (info.maxScrollbarOffset > 0f) {
+                            (info.scrollbarOffset / info.maxScrollbarOffset).coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                        val initialIndex = (initialProgress * info.totalItemsCount)
+                            .toInt()
+                            .coerceIn(0, info.totalItemsCount - 1)
+                        hapticTracker.onDragStarted(initialIndex)
+                    },
+                    onDragStopped = {
+                        isDragging = false
+                        hapticTracker.onDragStopped()
+                    },
                     state = rememberDraggableState { delta ->
                         if (info.maxScrollbarOffset > 0) {
                             dragOffset = (dragOffset + delta).coerceIn(0f, info.maxScrollbarOffset)
@@ -205,6 +221,10 @@ fun DraggableScrollbar(
                             val targetIndex = targetDecimalIndex.toInt().coerceIn(0, info.totalItemsCount - 1)
                             val fractionalPart = targetDecimalIndex - targetIndex
                             val targetItemOffset = (fractionalPart * info.itemSizePx).roundToInt()
+
+                            if (hapticTracker.onItemIndexChanged(targetIndex)) {
+                                haptics.segmentTick()
+                            }
                             
                             scrollChannel.trySend(targetIndex to targetItemOffset)
                         }

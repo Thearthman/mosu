@@ -125,7 +125,7 @@ fun LibraryScreen(
     var expandedBeatmapSets by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var highlightTrackId by remember { mutableStateOf<Long?>(null) }
     val nowPlaying by musicController.nowPlaying.collectAsState()
-    val playingTitle = nowPlaying?.title?.toString()?.trim()?.lowercase()
+    val currentMediaId by musicController.currentMediaId.collectAsState()
 
     // Info Popup State
     var infoDialogVisible by remember { mutableStateOf(false) }
@@ -367,11 +367,14 @@ fun LibraryScreen(
     }
 
     fun findCurrentlyPlaying() {
-        val match = filteredMaps.firstOrNull {
-            // Try matching by title first (for standalone songs)
-            it.title.trim().lowercase() == playingTitle ||
-                // Then try matching by difficulty name (for songs in beatmapsets)
-                it.difficultyName.trim().lowercase() == playingTitle
+        val playingSetId = downloadedMaps
+            .firstOrNull { it.uid == currentMediaId }
+            ?.beatmapSetId
+        val match = playingSetId?.let { setId ->
+            // Prefer the exact playing row so albums highlight the correct difficulty.
+            filteredMaps.firstOrNull { it.uid == currentMediaId }
+                // Fall back to the set if the playing row is outside the current filter.
+                ?: filteredMaps.firstOrNull { it.beatmapSetId == setId }
         }
         if (match != null) {
             scope.launch {

@@ -310,6 +310,9 @@ mania parsing, compilation, cue generation, rendering, and runtime registration.
 - Fabricate osu! facts or field meanings — verify against a real archive or the API.
 - Destructive DB migrations or deleting migration history.
 - Re-introduce a reverted change without explicit approval.
+- Change device-wide/global Android settings via `adb` during debugging or testing
+  (for example, `adb shell settings put ...`). Read-only inspection is allowed; ask
+  the user before changing any global device setting.
 
 ## Codebase State
 

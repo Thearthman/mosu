@@ -31,6 +31,7 @@ fun TaskView(
     onResume: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberHaptics()
     val hasActiveTasks = tasks.values.any { it.status.isActive }
     val hasPausedTasks = tasks.values.any { it.status == DownloadStatus.Paused }
 
@@ -52,7 +53,10 @@ fun TaskView(
             )
             if (hasActiveTasks || hasPausedTasks) {
                 IconButton(
-                    onClick = if (hasPausedTasks) onResumeAll else onPauseAll,
+                    onClick = {
+                        haptics.button()
+                        if (hasPausedTasks) onResumeAll() else onPauseAll()
+                    },
                     modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
@@ -115,6 +119,7 @@ private fun TaskItem(
     onRetry: () -> Unit,
     onResume: () -> Unit
 ) {
+    val haptics = rememberHaptics()
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -178,7 +183,10 @@ private fun TaskItem(
             when (task.status) {
                 DownloadStatus.Queued, DownloadStatus.Downloading, DownloadStatus.Extracting -> {
                     IconButton(
-                        onClick = onCancel,
+                        onClick = {
+                            haptics.button()
+                            onCancel()
+                        },
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
@@ -191,7 +199,10 @@ private fun TaskItem(
                 }
                 DownloadStatus.Error -> {
                     IconButton(
-                        onClick = onRetry,
+                        onClick = {
+                            haptics.button()
+                            onRetry()
+                        },
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
@@ -204,7 +215,10 @@ private fun TaskItem(
                 }
                 DownloadStatus.Paused -> {
                     IconButton(
-                        onClick = onResume,
+                        onClick = {
+                            haptics.button()
+                            onResume()
+                        },
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(

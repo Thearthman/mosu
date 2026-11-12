@@ -70,6 +70,7 @@ fun ScoreModeFilterIcons(
     modifier: Modifier = Modifier,
     minimised: Boolean = false
 ) {
+    val haptics = rememberHaptics()
     if (!minimised) {
         ScoreModeFilterRow(
             selectedMode = selectedMode,
@@ -156,6 +157,9 @@ fun ScoreModeFilterIcons(
                                     option = option,
                                     selected = option.value == selectedMode,
                                     onClick = {
+                                        if (option.value != selectedMode) {
+                                            haptics.toggle(true)
+                                        }
                                         onModeSelected(option.value)
                                         expanded = false
                                     }
@@ -175,6 +179,7 @@ private fun ScoreModeFilterRow(
     onModeSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberHaptics()
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -184,7 +189,12 @@ private fun ScoreModeFilterRow(
             ScoreModeOptionButton(
                 option = option,
                 selected = option.value == selectedMode,
-                onClick = { onModeSelected(option.value) }
+                onClick = {
+                    if (option.value != selectedMode) {
+                        haptics.toggle(true)
+                    }
+                    onModeSelected(option.value)
+                }
             )
         }
     }

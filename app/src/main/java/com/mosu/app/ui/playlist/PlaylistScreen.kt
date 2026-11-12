@@ -77,7 +77,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -86,7 +85,6 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -116,9 +114,11 @@ import com.mosu.app.ui.components.InfoPopup
 import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
+import com.mosu.app.ui.components.PlaylistReorderHapticTracker
 import com.mosu.app.ui.components.SelectableBeatmapData
 import com.mosu.app.ui.components.SelectableBeatmapList
 import com.mosu.app.ui.components.beatmapSetList
+import com.mosu.app.ui.components.rememberHaptics
 import com.mosu.app.utils.MediaPathUtils
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mosu.app.ui.DeferredActionViewModel
@@ -141,6 +141,8 @@ fun PlaylistScreen(
     landscapeImportRequest: Int = 0,
     onLandscapeImportRequestConsumed: () -> Unit = {}
 ) {
+    val haptics = rememberHaptics()
+    val reorderHapticTracker = remember { PlaylistReorderHapticTracker() }
     val playlists by db.playlistDao().getPlaylists().collectAsState(initial = emptyList())
     val playlistCounts by db.playlistDao().getPlaylistCounts().collectAsState(initial = emptyList())
     val downloadedTracks by db.beatmapDao().getAllBeatmaps().collectAsState(initial = emptyList())
@@ -258,6 +260,7 @@ fun PlaylistScreen(
         orderedPlaylists = orderedPlaylists.toMutableList().apply {
             add(toIndex, removeAt(fromIndex))
         }
+        reorderHapticTracker.onTargetMoved()
     }
 
     fun startPlaylistDrag(
@@ -269,13 +272,19 @@ fun PlaylistScreen(
         draggedPlaylistId = playlistId
         dragPointerWindowPosition = pointerWindowPosition
         dragGrabOffset = grabOffset
+        reorderHapticTracker.onDragStarted()
+        haptics.gestureStart()
     }
 
-    fun finishPlaylistDrag() {
+    fun finishPlaylistDrag(cancelled: Boolean = false) {
         val orderedIds = orderedPlaylists.map { it.id }
         draggedPlaylistId = null
         dragPointerWindowPosition = Offset.Zero
         dragGrabOffset = Offset.Zero
+        val moved = reorderHapticTracker.onDragFinished()
+        if (!cancelled && moved) {
+            haptics.gestureEnd()
+        }
         if (orderedIds.isEmpty()) return
 
         scope.launch {
@@ -692,6 +701,7 @@ fun PlaylistScreen(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = {
+                            haptics.button()
                             importText = ""
                             showImportDialog = true
                         }) {
@@ -700,7 +710,10 @@ fun PlaylistScreen(
                                 contentDescription = stringResource(id = R.string.playlist_cd_import_playlist)
                             )
                         }
-                        IconButton(onClick = { showCreateDialog = true }) {
+                        IconButton(onClick = {
+                            haptics.button()
+                            showCreateDialog = true
+                        }) {
                             Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_create_playlist))
                         }
                     }
@@ -796,10 +809,13 @@ fun PlaylistScreen(
                                 },
                                 onDragCancel = {
                                     if (draggedPlaylistId == playlist.id) {
-                                        finishPlaylistDrag()
+                                        finishPlaylistDrag(cancelled = true)
                                     }
                                 },
-                                onClick = { selectedPlaylistId = playlist.id },
+                                onClick = {
+                                    haptics.button()
+                                    selectedPlaylistId = playlist.id
+                                },
                                 onDelete = {
                                     scope.launch {
                                         // Delete all tracks from this playlist first
@@ -850,6 +866,7 @@ fun PlaylistScreen(
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 IconButton(onClick = {
+                    haptics.button()
                     val playlistId = selectedPlaylistId ?: return@IconButton
                     scope.launch {
                         try {
@@ -876,12 +893,19 @@ fun PlaylistScreen(
                     )
                 }
                 IconButton(onClick = {
+                    haptics.button()
                     addSelection = emptySet()
                     showAddDialog = true
                 }) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.playlist_cd_add_songs))
                 }
-                IconButton(onClick = { playAlbum(playlistTracks) }, enabled = playlistTracks.isNotEmpty()) {
+                IconButton(
+                    onClick = {
+                        haptics.button()
+                        playAlbum(playlistTracks)
+                    },
+                    enabled = playlistTracks.isNotEmpty()
+                ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = stringResource(id = R.string.playlist_cd_play_playlist))
                 }
             }
@@ -951,6 +975,7 @@ fun PlaylistScreen(
                     confirmButton = {
                         TextButton(
                             onClick = {
+                                haptics.button()
                                 val playlistId = selectedPlaylistId ?: return@TextButton
                                 scope.launch {
                                     addSelection.forEach { uid ->
@@ -990,6 +1015,7 @@ fun PlaylistScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.button()
                         val name = newPlaylistName.trim()
                         if (name.isNotEmpty()) {
                             scope.launch {
@@ -1028,6 +1054,7 @@ fun PlaylistScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.button()
                         val name = renamePlaylistName.trim()
                         val id = renamePlaylistId
                         if (name.isNotEmpty() && id != null) {
@@ -1099,10 +1126,14 @@ fun PlaylistScreen(
                         placeholder = { Text(stringResource(id = R.string.playlist_import_placeholder)) }
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { importText = pasteFromClipboard() }) {
+                        TextButton(onClick = {
+                            haptics.button()
+                            importText = pasteFromClipboard()
+                        }) {
                             Text(stringResource(id = R.string.playlist_paste))
                         }
                         TextButton(onClick = {
+                            haptics.button()
                             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
                                 type = "*/*"
@@ -1120,7 +1151,10 @@ fun PlaylistScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = { performImport(importText) },
+                    onClick = {
+                        haptics.button()
+                        performImport(importText)
+                    },
                     enabled = importText.isNotBlank()
                 ) {
                     Text(stringResource(id = R.string.playlist_import))
@@ -1158,12 +1192,14 @@ fun PlaylistScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = {
+                            haptics.button()
                             copyToClipboard(exportText)
                             Toast.makeText(context, R.string.playlist_copied, Toast.LENGTH_SHORT).show()
                         }) {
                             Text(stringResource(id = R.string.playlist_copy))
                         }
                         TextButton(onClick = {
+                            haptics.button()
                             pendingExportText = exportText
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -1266,7 +1302,7 @@ private fun PlaylistCard(
 ) {
     var showEditIcons by remember { mutableStateOf(false) }
     var cardCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val hapticFeedback = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
 
     Card(
         modifier = modifier
@@ -1288,14 +1324,16 @@ private fun PlaylistCard(
                     onTap = {
                         if (showEditIcons) {
                             // If edit icons are showing, hide them instead of opening playlist
+                            haptics.toggle(false)
                             showEditIcons = false
                         } else {
+                            haptics.button()
                             onClick()
                         }
                     },
                     onLongPress = {
                         showEditIcons = true
-                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptics.longPress()
                     },
                     onDragStart = { pointerLocalPosition, grabOffset ->
                         showEditIcons = false
@@ -1346,6 +1384,7 @@ private fun PlaylistCard(
                                 .padding(6.dp)
                                 .clickable(
                                     onClick = {
+                                        haptics.button()
                                         onRename()
                                         showEditIcons = false
                                     }
@@ -1365,6 +1404,7 @@ private fun PlaylistCard(
                                 .padding(6.dp)
                                 .clickable(
                                     onClick = {
+                                        haptics.confirm()
                                         onDelete()
                                         showEditIcons = false
                                     }

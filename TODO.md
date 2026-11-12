@@ -58,6 +58,7 @@
 - [x] [v1.2] Add custom skin hit-sound support
 - [ ] [v1.2] Add beatmap hit-sound support
 - [ ] [v1.3] Add per beatmapid local hit-sound offset for individual diffs. Require persistent storage, maybe in a new table
+- [ ] [v1.3] Add "add to playlist" button for both mini(for only the lanscape view)/compact/full player
 
 #### Search
 - [ ] Trigger vibration when the long-press menu opens.

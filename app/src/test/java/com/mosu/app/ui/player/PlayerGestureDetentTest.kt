@@ -10,6 +10,21 @@ class PlayerGestureDetentTest {
     @Test
     fun criticalPointIsDirectional() {
         assertEquals(
+            0.28f,
+            PLAYER_VERTICAL_CRITICAL_EDGE_FRACTION,
+            0.0001f
+        )
+        assertEquals(
+            0.28f,
+            playerGestureCriticalPoint(PlayerGestureDirection.EXPANDING),
+            0.0001f
+        )
+        assertEquals(
+            0.72f,
+            playerGestureCriticalPoint(PlayerGestureDirection.COLLAPSING),
+            0.0001f
+        )
+        assertEquals(
             PLAYER_CRITICAL_POINT_NEAR,
             playerGestureCriticalPoint(PlayerGestureDirection.EXPANDING),
             0.0001f

@@ -118,6 +118,7 @@ import com.mosu.app.ui.components.PlaylistOption
 import com.mosu.app.ui.components.PlaylistSelectorDialog
 import com.mosu.app.ui.components.ScoreModeFilterIcons
 import com.mosu.app.ui.components.beatmapSetList
+import com.mosu.app.ui.components.rememberHaptics
 import com.mosu.app.ui.components.toBeatmapSetData
 import com.mosu.app.ui.components.toBeatmapSetScoreData
 import com.mosu.app.data.db.BeatmapEntity
@@ -154,6 +155,7 @@ private fun SearchTypeFilter(
     modifier: Modifier = Modifier,
     onSelected: (String) -> Unit
 ) {
+    val haptics = rememberHaptics()
     val filterButtonTextStyle =
         MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
     val menuTextStyle =
@@ -324,6 +326,9 @@ private fun SearchTypeFilter(
                                             role = Role.Button,
                                             onClick = {
                                                 expanded = false
+                                                if (mode != selectedMode) {
+                                                    haptics.toggle(true)
+                                                }
                                                 onSelected(mode)
                                             }
                                         ),

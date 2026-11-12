@@ -55,6 +55,7 @@ fun BeatmapSetItem(
     highlight: Boolean = false,
     contentPadding: PaddingValues? = null
 ) {
+    val haptics = rememberHaptics()
     val flickerColor = if (isSystemInDarkTheme()) Color(0xFF300063) else Color.LightGray
     val baseBackgroundColor = if (highlight && backgroundBrush == null) flickerColor else backgroundColor
     val finalBackgroundModifier = Modifier
@@ -73,8 +74,16 @@ fun BeatmapSetItem(
             .heightIn(min = if (score != null) 48.dp else 60.dp)
             .then(finalBackgroundModifier)
             .combinedClickable(
-                onClick = { actions.onClick(set) },
-                onLongClick = { actions.onLongClick(set) }
+                onClick = {
+                    haptics.button()
+                    actions.onClick(set)
+                },
+                onLongClick = actions.onLongClick?.let { onLongClick ->
+                    {
+                        haptics.longPress()
+                        onLongClick(set)
+                    }
+                }
             )
             .padding(resolvedContentPadding)
             .padding(vertical = if (score != null) 5.dp else 0.dp),
@@ -255,7 +264,10 @@ fun BeatmapSetItem(
         // Secondary Action (Download / Status)
         if (actions.onSecondaryAction != null) {
             IconButton(
-                onClick = { actions.onSecondaryAction.invoke(set) },
+                onClick = {
+                    haptics.button()
+                    actions.onSecondaryAction.invoke(set)
+                },
                 enabled = !set.isDownloaded && set.downloadProgress == null,
                 modifier = Modifier.size(40.dp)
             ) {

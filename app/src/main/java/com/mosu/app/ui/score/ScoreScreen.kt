@@ -78,6 +78,7 @@ import com.mosu.app.ui.components.InfoPopupConfig
 import com.mosu.app.ui.components.ScoreModeFilterIcons
 import com.mosu.app.ui.components.displayGrade
 import com.mosu.app.ui.components.formatLength
+import com.mosu.app.ui.components.rememberHaptics
 import com.mosu.app.ui.components.toBeatmapSetData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -99,6 +100,7 @@ fun ScoreScreen(
     landscapeRefreshRequest: Int = 0,
     onLandscapeRefreshRequestConsumed: () -> Unit = {}
 ) {
+    val haptics = rememberHaptics()
     var scores by remember { mutableStateOf<List<RecentPlayEntity>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -218,6 +220,7 @@ fun ScoreScreen(
                         } else {
                             IconButton(
                                 onClick = {
+                                    haptics.button()
                                     refreshRequest++
                                 },
                                 enabled = accessToken != null

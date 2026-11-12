@@ -1,9 +1,6 @@
 package com.mosu.app.ui.components
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -62,12 +61,9 @@ data class SelectableBeatmapConfig(
  * A reusable component for displaying a simple beatmap item
  * Used internally by SelectableBeatmapItem
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SimpleBeatmapItem(
     beatmap: SelectableBeatmapData,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     showDifficulty: Boolean = false,
@@ -83,10 +79,6 @@ private fun SimpleBeatmapItem(
             .fillMaxWidth()
             .height(itemHeight)
             .background(backgroundColor)
-            .combinedClickable(
-                onClick = { onClick() },
-                onLongClick = onLongClick
-            )
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -135,11 +127,17 @@ fun SelectableBeatmapItem(
     onSelectionChanged: (Boolean) -> Unit,
     config: SelectableBeatmapConfig = SelectableBeatmapConfig()
 ) {
+    val haptics = rememberHaptics()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(config.backgroundColor ?: MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(enabled = !isDisabled) {
+            .selectable(
+                selected = isSelected,
+                enabled = !isDisabled,
+                role = Role.Checkbox
+            ) {
+                haptics.toggle(!isSelected)
                 onSelectionChanged(!isSelected)
             }
             .padding(vertical = config.verticalPadding),
@@ -147,14 +145,13 @@ fun SelectableBeatmapItem(
     ) {
         Checkbox(
             checked = isSelected || isDisabled,
-            onCheckedChange = if (isDisabled) null else { checked -> onSelectionChanged(checked) },
+            onCheckedChange = null,
             enabled = !isDisabled,
             modifier = Modifier.size(18.dp)
         )
         Spacer(modifier = Modifier.width(config.checkboxMarginEnd))
         SimpleBeatmapItem(
             beatmap = beatmap,
-            onClick = { onSelectionChanged(!isSelected) },
             backgroundColor = Color.Transparent,
             coverStartPadding = config.coverStartPadding,
             textEndPadding = config.textEndPadding,

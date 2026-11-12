@@ -56,6 +56,7 @@ import com.mosu.app.domain.repair.MissingOsuBackfillUiState
 import com.mosu.app.domain.restore.RestoreDownloadsService
 import com.mosu.app.domain.skin.CustomSkinLibrary
 import com.mosu.app.domain.skin.CustomSkinRecord
+import com.mosu.app.ui.components.rememberHaptics
 import com.mosu.app.ui.skin.importSkinFromUri
 import com.mosu.app.ui.skin.skinImportMessage
 import com.mosu.app.utils.RegionUtils
@@ -249,6 +250,7 @@ fun ProfileScreen(
     onLoginClick: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val haptics = rememberHaptics()
     var userInfo by remember { mutableStateOf<OsuUserCompact?>(null) }
     var totalDownloaded by remember { mutableStateOf(0) }
     var preservedCount by remember { mutableStateOf(0) }
@@ -521,12 +523,14 @@ fun ProfileScreen(
                     .padding(bottom = 16.dp)
                     .combinedClickable(
                         onClick = {
+                            haptics.button()
                             scope.launch {
                                 currentToken = tokenManager.getAccessToken()
                                 showTokenDialog = true
                             }
                         },
                         onLongClick = {
+                            haptics.longPress()
                             showSettingsDialog = true
                         }
                     )
@@ -553,7 +557,10 @@ fun ProfileScreen(
                             Text(text = stringResource(R.string.profile_id_prefix, userInfo?.id?.toString() ?: "0"), style = MaterialTheme.typography.bodyMedium)
                         }
                         IconButton(
-                            onClick = onLogout,
+                            onClick = {
+                                haptics.button()
+                                onLogout()
+                            },
                             modifier = Modifier.padding(end = 12.dp)
                         ) {
                             Icon(
@@ -581,6 +588,7 @@ fun ProfileScreen(
                     .padding(bottom = 16.dp)
                     .combinedClickable(
                         onClick = {
+                            haptics.button()
                             if (hasCredentials) {
                                 onLoginClick()
                             } else {
@@ -588,6 +596,7 @@ fun ProfileScreen(
                             }
                         },
                         onLongClick = {
+                            haptics.longPress()
                             showSettingsDialog = true
                         }
                     )
@@ -781,6 +790,7 @@ fun ProfileScreen(
                     Switch(
                         checked = onlyLeaderboardEnabled,
                         onCheckedChange = { enabled ->
+                            haptics.toggle(enabled)
                             scope.launch { settingsManager.saveOnlyLeaderboardEnabled(enabled) }
                         }
                     )
@@ -821,6 +831,7 @@ fun ProfileScreen(
                     Switch(
                         checked = recentPlayHistoryEnabled,
                         onCheckedChange = { enabled ->
+                            haptics.toggle(enabled)
                             scope.launch { settingsManager.saveRecentPlayHistoryEnabled(enabled) }
                         }
                     )
@@ -891,6 +902,7 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Button(
                             onClick = {
+                                haptics.button()
                                 if (!isRestoring) {
                                     scope.launch {
                                         try {
@@ -982,6 +994,7 @@ fun ProfileScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = {
+                                haptics.button()
                                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                     addCategory(Intent.CATEGORY_OPENABLE)
                                     type = "*/*"
@@ -997,6 +1010,7 @@ fun ProfileScreen(
                         }
                         Button(
                             onClick = {
+                                haptics.button()
                                 scope.launch {
                                     try {
                                         pendingExportJson = MosuBackupService.createManifestJson(
@@ -1066,6 +1080,7 @@ fun ProfileScreen(
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.profile_debug_fix_metadata)) },
                                 onClick = {
+                                    haptics.button()
                                     debugMenuExpanded = false
                                     if (!isRepairingMetadata) {
                                         isRepairingMetadata = true
@@ -1118,6 +1133,7 @@ fun ProfileScreen(
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.profile_debug_fix_missing_osu)) },
                                 onClick = {
+                                    haptics.button()
                                     debugMenuExpanded = false
                                     if (!isRepairingMetadata && !isRepairingOsu) {
                                         missingOsuBackfillManager.start()
@@ -1174,6 +1190,7 @@ fun ProfileScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        haptics.button()
                         scope.launch {
                             tokenManager.saveCredentials(inputClientId, inputClientSecret)
                             showSettingsDialog = false
@@ -1237,6 +1254,7 @@ fun ProfileScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        haptics.confirm()
                         skinDeleteCandidate = null
                         scope.launch {
                             val deleted = customSkinLibrary.delete(skin.id)
@@ -1261,7 +1279,10 @@ fun ProfileScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { skinDeleteCandidate = null }) {
+                TextButton(onClick = {
+                    haptics.reject()
+                    skinDeleteCandidate = null
+                }) {
                     Text(stringResource(R.string.profile_skin_delete_cancel))
                 }
             }
@@ -1358,6 +1379,7 @@ private fun InfoCoverToggleCard(
     infoCoverEnabled: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
+    val haptics = rememberHaptics()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1384,7 +1406,10 @@ private fun InfoCoverToggleCard(
             Spacer(modifier = Modifier.width(16.dp))
             Switch(
                 checked = infoCoverEnabled,
-                onCheckedChange = onToggle
+                onCheckedChange = { enabled ->
+                    haptics.toggle(enabled)
+                    onToggle(enabled)
+                }
             )
         }
     }
@@ -1395,6 +1420,7 @@ private fun GenreBarToggleCard(
     genreBarEnabled: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
+    val haptics = rememberHaptics()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1424,7 +1450,10 @@ private fun GenreBarToggleCard(
             Spacer(modifier = Modifier.width(16.dp))
             Switch(
                 checked = genreBarEnabled,
-                onCheckedChange = onToggle
+                onCheckedChange = { enabled ->
+                    haptics.toggle(enabled)
+                    onToggle(enabled)
+                }
             )
         }
     }
@@ -1445,6 +1474,7 @@ private fun HitsoundSettingsCard(
     onSelectSkin: (String?) -> Unit,
     onDeleteSkin: (CustomSkinRecord) -> Unit
 ) {
+    val haptics = rememberHaptics()
     var volumeValue by remember(volume) { mutableStateOf(volume) }
     var latencyValue by remember(latencyMs) { mutableStateOf(latencyMs) }
     var skinMenuExpanded by remember { mutableStateOf(false) }
@@ -1479,7 +1509,10 @@ private fun HitsoundSettingsCard(
                 Spacer(modifier = Modifier.width(16.dp))
                 Switch(
                     checked = enabled,
-                    onCheckedChange = onEnabledChange
+                    onCheckedChange = { checked ->
+                        haptics.toggle(checked)
+                        onEnabledChange(checked)
+                    }
                 )
             }
 
@@ -1591,6 +1624,9 @@ private fun HitsoundSettingsCard(
                             },
                             onClick = {
                                 skinMenuExpanded = false
+                                if (activeCustomSkinId != null) {
+                                    haptics.toggle(false)
+                                }
                                 onSelectSkin(null)
                             }
                         )
@@ -1624,6 +1660,9 @@ private fun HitsoundSettingsCard(
                                 },
                                 onClick = {
                                     skinMenuExpanded = false
+                                    if (skin.id != activeCustomSkinId) {
+                                        haptics.toggle(true)
+                                    }
                                     onSelectSkin(skin.id)
                                 }
                             )
@@ -1631,7 +1670,10 @@ private fun HitsoundSettingsCard(
                     }
                 }
                 OutlinedButton(
-                    onClick = onImportSkin,
+                    onClick = {
+                        haptics.button()
+                        onImportSkin()
+                    },
                     enabled = !isImportingSkin
                 ) {
                     if (isImportingSkin) {
@@ -1684,6 +1726,7 @@ private fun MirrorSourceToggle(
     currentSource: String,
     onSourceSelected: (String) -> Unit
 ) {
+    val haptics = rememberHaptics()
     val options = listOf("nerinyan", "sayobot", "catboy")
     val isLightTheme = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     val outerPillColor = if (isLightTheme) {
@@ -1719,7 +1762,12 @@ private fun MirrorSourceToggle(
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(20.dp))
                         .background(backgroundColor)
-                        .clickable { onSourceSelected(option) }
+                        .clickable {
+                            if (option != currentSource) {
+                                haptics.toggle(true)
+                            }
+                            onSourceSelected(option)
+                        }
                         .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {

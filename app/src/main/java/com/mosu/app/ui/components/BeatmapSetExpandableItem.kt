@@ -58,6 +58,7 @@ fun BeatmapSetHeaderItem(
     snackbarHostState: SnackbarHostState? = actions.snackbarHostState,
     externalScope: CoroutineScope? = actions.coroutineScope
 ) {
+    val haptics = rememberHaptics()
     BeatmapSetSwipeItem(
         swipeActions = BeatmapSetSwipeActions(
             onDelete = { actions.onSwipeLeft?.invoke(album) },
@@ -83,8 +84,16 @@ fun BeatmapSetHeaderItem(
             .fillMaxWidth()
             .height(60.dp) // Unified height
             .combinedClickable(
-                onClick = onExpandClick,
-                onLongClick = { actions.onLongClick(album) }
+                onClick = {
+                    haptics.button()
+                    onExpandClick()
+                },
+                onLongClick = actions.onLongClick?.let { onLongClick ->
+                    {
+                        haptics.longPress()
+                        onLongClick(album)
+                    }
+                }
             )
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -135,6 +144,7 @@ fun BeatmapSetTrackItem(
     snackbarHostState: SnackbarHostState? = null,
     externalScope: CoroutineScope? = null
 ) {
+    val haptics = rememberHaptics()
     BeatmapSetSwipeItem(
         swipeActions = BeatmapSetSwipeActions(
             onDelete = onDelete,
@@ -160,7 +170,10 @@ fun BeatmapSetTrackItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(60.dp) // Unified height
-                .clickable { onPlay() }
+                .clickable {
+                    haptics.button()
+                    onPlay()
+                }
                 .padding(horizontal = 16.dp), // Match header padding
             verticalAlignment = Alignment.CenterVertically
         ) {

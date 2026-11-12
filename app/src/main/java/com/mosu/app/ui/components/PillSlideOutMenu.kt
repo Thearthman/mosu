@@ -282,6 +282,7 @@ internal fun <T> PillMenuRow(
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberHaptics()
     val scrollState = rememberScrollState()
     BoxWithConstraints(
         modifier = modifier
@@ -303,7 +304,12 @@ internal fun <T> PillMenuRow(
             if (showClearAction && expandsFromStart) {
                 PillMenuControl(
                     selected = false,
-                    onClick = onClear,
+                    onClick = {
+                        if (selectedValues.isNotEmpty()) {
+                            haptics.toggle(false)
+                        }
+                        onClear()
+                    },
                     contentDescription = stringResource(R.string.pill_menu_clear),
                     width = height,
                     height = height
@@ -341,13 +347,15 @@ internal fun <T> PillMenuRow(
                     PillMenuControl(
                         selected = item.value in selectedValues,
                         onClick = {
-                            onSelectionChanged(
-                                nextSelection(
-                                    item = item.value,
-                                    selectedValues = selectedValues,
-                                    multiSelect = multiSelect
-                                )
+                            val next = nextSelection(
+                                item = item.value,
+                                selectedValues = selectedValues,
+                                multiSelect = multiSelect
                             )
+                            if (next != selectedValues) {
+                                haptics.toggle(item.value in next)
+                            }
+                            onSelectionChanged(next)
                         },
                         contentDescription = item.contentDescription,
                         width = itemWidth,
@@ -361,7 +369,12 @@ internal fun <T> PillMenuRow(
             if (showClearAction && !expandsFromStart) {
                 PillMenuControl(
                     selected = false,
-                    onClick = onClear,
+                    onClick = {
+                        if (selectedValues.isNotEmpty()) {
+                            haptics.toggle(false)
+                        }
+                        onClear()
+                    },
                     contentDescription = stringResource(R.string.pill_menu_clear),
                     width = height,
                     height = height

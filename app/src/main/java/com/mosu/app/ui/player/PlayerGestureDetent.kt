@@ -3,7 +3,7 @@ package com.mosu.app.ui.player
 import kotlin.math.abs
 import kotlin.math.exp
 
-internal const val PLAYER_VERTICAL_CRITICAL_EDGE_FRACTION = 0.35f
+internal const val PLAYER_VERTICAL_CRITICAL_EDGE_FRACTION = 0.28f
 internal const val PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION = 0.40f
 internal const val PLAYER_CRITICAL_POINT_NEAR =
     PLAYER_VERTICAL_CRITICAL_EDGE_FRACTION
@@ -13,7 +13,11 @@ internal const val PLAYER_DETENT_TOWARD_GAIN = 0.12f
 internal const val PLAYER_DETENT_CATCH_UP_SPEED = 2.4f
 internal const val PLAYER_LANDSCAPE_DETENT_CATCH_UP_SPEED = 3.6f
 internal const val PLAYER_LANDSCAPE_CATCH_UP_OVERSHOOT_MINI_WIDTH_FRACTION = 0.5f
-internal const val PLAYER_FLICK_VELOCITY_PX_PER_SECOND = 1_000f
+internal const val PLAYER_COMPACT_FLICK_VELOCITY_PX_PER_SECOND = 1_000f
+internal const val PLAYER_FULL_FLICK_VELOCITY_PX_PER_SECOND = 4_000f
+internal const val PLAYER_FLICK_VELOCITY_PX_PER_SECOND =
+    PLAYER_COMPACT_FLICK_VELOCITY_PX_PER_SECOND
+internal const val PLAYER_DRAG_VELOCITY_WINDOW_NANOS = 100_000_000L
 
 private const val DETENT_FALLOFF_SIGMA = 0.22f
 private const val DETENT_EDGE_FADE = 0.01f
@@ -24,6 +28,22 @@ internal enum class PlayerGestureDirection {
     EXPANDING,
     COLLAPSING
 }
+
+internal enum class LandscapePlayerStage {
+    MINI,
+    COMPACT,
+    FULL
+}
+
+internal enum class LandscapeDetentBoundary {
+    COMPACT,
+    EXPANSION
+}
+
+internal data class LandscapePlayerRelease(
+    val target: LandscapePlayerStage,
+    val spansBothStages: Boolean
+)
 
 internal data class PlayerDetentAdvance(
     val progress: Float,
@@ -355,6 +375,258 @@ internal fun resolvePlayerExpandedOnRelease(
     }
 }
 
+/**
+ * Resolves one landscape release into the stage it should settle on.
+ *
+ * A medium flick advances one stage from either end, while a fast flick can traverse
+ * both stages directly. Compact releases otherwise retain the positional 40% rule from
+ * the old two-stage release path.
+ */
+internal fun resolveLandscapePlayerRelease(
+    startStage: LandscapePlayerStage,
+    compactRawProgress: Float,
+    expansionRawProgress: Float,
+    velocityPxPerSecond: Float
+): LandscapePlayerRelease {
+    val compactProgress = playerProgressOrZero(compactRawProgress)
+    val expansionProgress = playerProgressOrZero(expansionRawProgress)
+    val velocity = if (velocityPxPerSecond.isFinite()) {
+        velocityPxPerSecond
+    } else {
+        0f
+    }
+    val speed = abs(velocity)
+    val expansionFlick = velocity < 0f
+    val collapseFlick = velocity > 0f
+
+    val flickTarget = when (startStage) {
+        LandscapePlayerStage.MINI -> when {
+            expansionFlick &&
+                speed >= PLAYER_FULL_FLICK_VELOCITY_PX_PER_SECOND ->
+                LandscapePlayerStage.FULL
+            expansionFlick &&
+                speed >= PLAYER_COMPACT_FLICK_VELOCITY_PX_PER_SECOND ->
+                LandscapePlayerStage.COMPACT
+            else -> null
+        }
+        LandscapePlayerStage.COMPACT -> when {
+            expansionFlick &&
+                speed >= PLAYER_FULL_FLICK_VELOCITY_PX_PER_SECOND ->
+                LandscapePlayerStage.FULL
+            collapseFlick &&
+                speed >= PLAYER_COMPACT_FLICK_VELOCITY_PX_PER_SECOND ->
+                LandscapePlayerStage.MINI
+            else -> null
+        }
+        LandscapePlayerStage.FULL -> when {
+            collapseFlick &&
+                speed >= PLAYER_FULL_FLICK_VELOCITY_PX_PER_SECOND ->
+                LandscapePlayerStage.MINI
+            collapseFlick &&
+                speed >= PLAYER_COMPACT_FLICK_VELOCITY_PX_PER_SECOND ->
+                LandscapePlayerStage.COMPACT
+            else -> null
+        }
+    }
+    if (flickTarget != null) {
+        return landscapePlayerRelease(startStage, flickTarget)
+    }
+
+    val expansionDirection = when (startStage) {
+        LandscapePlayerStage.FULL -> PlayerGestureDirection.COLLAPSING
+        LandscapePlayerStage.MINI,
+        LandscapePlayerStage.COMPACT -> PlayerGestureDirection.EXPANDING
+    }
+    val compactDirection = when (startStage) {
+        LandscapePlayerStage.MINI -> PlayerGestureDirection.EXPANDING
+        LandscapePlayerStage.COMPACT,
+        LandscapePlayerStage.FULL -> PlayerGestureDirection.COLLAPSING
+    }
+    val expandToFullscreen =
+        expansionProgress > 0f &&
+            resolvePlayerExpandedOnRelease(
+                progress = expansionProgress,
+                velocityPxPerSecond = 0f,
+                direction = expansionDirection,
+                criticalEdgeFraction =
+                    PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+            )
+    val target = when {
+        expandToFullscreen -> LandscapePlayerStage.FULL
+        resolvePlayerExpandedOnRelease(
+            progress = compactProgress,
+            velocityPxPerSecond = 0f,
+            direction = compactDirection,
+            criticalEdgeFraction = PLAYER_LANDSCAPE_CRITICAL_EDGE_FRACTION
+        ) -> LandscapePlayerStage.COMPACT
+        else -> LandscapePlayerStage.MINI
+    }
+    return landscapePlayerRelease(startStage, target)
+}
+
+/**
+ * Samples signed horizontal drag velocity over a rolling window.
+ *
+ * Only pointer deltas and their timestamps participate. Once the newest sample is older
+ * than the window the tracker reports zero, preventing a stale flick from deciding a new
+ * gesture.
+ */
+internal class LandscapeDragVelocityTracker(
+    private val windowNanos: Long = PLAYER_DRAG_VELOCITY_WINDOW_NANOS
+) {
+    private data class Sample(
+        val timestampNanos: Long,
+        val deltaPx: Float
+    )
+
+    private val samples = ArrayDeque<Sample>()
+    private val window = windowNanos.coerceAtLeast(1L)
+
+    fun begin(timestampNanos: Long = System.nanoTime()) {
+        samples.clear()
+        if (timestampNanos >= 0L) {
+            samples.addLast(Sample(timestampNanos, 0f))
+        }
+    }
+
+    fun recordDelta(
+        deltaPx: Float,
+        timestampNanos: Long = System.nanoTime()
+    ) {
+        if (
+            !deltaPx.isFinite() ||
+            timestampNanos < 0L ||
+            samples.lastOrNull()?.timestampNanos?.let {
+                timestampNanos < it
+            } == true
+        ) {
+            return
+        }
+        prune(timestampNanos)
+        samples.addLast(Sample(timestampNanos, deltaPx))
+    }
+
+    fun velocityPxPerSecond(
+        timestampNanos: Long = System.nanoTime()
+    ): Float {
+        prune(timestampNanos)
+        val first = samples.firstOrNull() ?: return 0f
+        val last = samples.lastOrNull() ?: return 0f
+        val elapsedNanos = last.timestampNanos - first.timestampNanos
+        if (elapsedNanos <= 0L) return 0f
+        val deltaPx = samples.sumOf { it.deltaPx.toDouble() }.toFloat()
+        return deltaPx * 1_000_000_000f / elapsedNanos.toFloat()
+    }
+
+    fun end() {
+        samples.clear()
+    }
+
+    private fun prune(timestampNanos: Long) {
+        val cutoff = timestampNanos - window
+        while (
+            samples.isNotEmpty() &&
+            samples.first().timestampNanos < cutoff
+        ) {
+            samples.removeFirst()
+        }
+    }
+}
+
+/**
+ * Coordinates detent haptics for a complete landscape gesture, including its settle
+ * animations. Boundaries already crossed live are handled once; a fast second boundary
+ * suppresses itself and every later tick. A direct two-stage settle gets at most one
+ * animation tick when no boundary was crossed live.
+ */
+internal class LandscapePlayerGestureHapticArbiter {
+    private var nextSession = 0
+    private var activeSession: Int? = null
+    private var liveCrossings = 0
+    private var emittedTicks = 0
+    private var suppressed = false
+    private var animationEmissionBudget: Int? = null
+    private val handledBoundaries = mutableSetOf<LandscapeDetentBoundary>()
+
+    fun begin(): Int {
+        nextSession += 1
+        activeSession = nextSession
+        liveCrossings = 0
+        emittedTicks = 0
+        suppressed = false
+        animationEmissionBudget = null
+        handledBoundaries.clear()
+        return nextSession
+    }
+
+    fun onLiveBoundaryCrossed(
+        gestureSession: Int,
+        boundary: LandscapeDetentBoundary,
+        velocityPxPerSecond: Float
+    ): Boolean {
+        if (activeSession != gestureSession) return false
+        handledBoundaries += boundary
+        liveCrossings += 1
+        if (suppressed) return false
+        if (
+            liveCrossings >= 2 &&
+            velocityPxPerSecond.isFinite() &&
+            abs(velocityPxPerSecond) >=
+                PLAYER_FULL_FLICK_VELOCITY_PX_PER_SECOND
+        ) {
+            suppressed = true
+            return false
+        }
+        emittedTicks += 1
+        return true
+    }
+
+    fun prepareForSettle(
+        gestureSession: Int,
+        limitDirectTransitionToSingleTick: Boolean
+    ) {
+        if (activeSession != gestureSession) return
+        animationEmissionBudget = if (limitDirectTransitionToSingleTick) {
+            if (emittedTicks == 0) 1 else 0
+        } else {
+            null
+        }
+        if (animationEmissionBudget == 0) {
+            suppressed = true
+        }
+    }
+
+    fun onAnimationBoundaryCrossed(
+        gestureSession: Int,
+        boundary: LandscapeDetentBoundary
+    ): Boolean {
+        if (activeSession != gestureSession) return false
+        if (!handledBoundaries.add(boundary)) return false
+        if (suppressed) return false
+
+        val remainingBudget = animationEmissionBudget
+        if (remainingBudget != null && remainingBudget <= 0) {
+            suppressed = true
+            return false
+        }
+        emittedTicks += 1
+        if (remainingBudget != null) {
+            animationEmissionBudget = remainingBudget - 1
+            if (animationEmissionBudget == 0) {
+                suppressed = true
+            }
+        }
+        return true
+    }
+
+    fun end(gestureSession: Int) {
+        if (activeSession != gestureSession) return
+        activeSession = null
+        animationEmissionBudget = null
+        handledBoundaries.clear()
+    }
+}
+
 internal fun playerProgressFromSheetOffset(
     sheetOffsetPx: Float,
     collapsedOffsetPx: Float
@@ -382,11 +654,17 @@ internal class PlayerCriticalPointHapticTracker {
     private var session = 0
     private var criticalPoint: Float? = null
     private var previousProgress: Float? = null
+    private var hapticArbiterSession: Int? = null
 
-    fun begin(progress: Float, criticalPoint: Float): Int {
+    fun begin(
+        progress: Float,
+        criticalPoint: Float,
+        hapticArbiterSession: Int? = null
+    ): Int {
         session += 1
         this.criticalPoint = criticalPoint
         previousProgress = progress
+        this.hapticArbiterSession = hapticArbiterSession
         return session
     }
 
@@ -394,16 +672,36 @@ internal class PlayerCriticalPointHapticTracker {
         if (activeSession != session) return
         criticalPoint = null
         previousProgress = null
+        hapticArbiterSession = null
     }
 
-    fun observe(progress: Float): Boolean {
-        val threshold = criticalPoint ?: return false
+    fun observe(
+        progress: Float,
+        expectedSession: Int? = null
+    ): Boolean {
+        return observeCrossing(progress, expectedSession) != null
+    }
+
+    fun observeCrossing(
+        progress: Float,
+        expectedSession: Int? = null
+    ): PlayerCriticalPointHapticCrossing? {
+        if (expectedSession != null && expectedSession != session) return null
+        val threshold = criticalPoint ?: return null
         val previous = previousProgress
         previousProgress = progress
-        if (previous == null) return false
-        return didCrossPlayerCriticalPoint(previous, progress, threshold)
+        if (previous == null) return null
+        return if (didCrossPlayerCriticalPoint(previous, progress, threshold)) {
+            PlayerCriticalPointHapticCrossing(hapticArbiterSession)
+        } else {
+            null
+        }
     }
 }
+
+internal data class PlayerCriticalPointHapticCrossing(
+    val hapticArbiterSession: Int?
+)
 
 private fun playerProgressOrZero(progress: Float): Float {
     return if (progress.isFinite()) progress.coerceIn(0f, 1f) else 0f
@@ -418,4 +716,19 @@ private fun playerCriticalEdgeFractionOr(
     } else {
         fallback
     }
+}
+
+private fun landscapePlayerRelease(
+    startStage: LandscapePlayerStage,
+    target: LandscapePlayerStage
+): LandscapePlayerRelease {
+    val spansBothStages =
+        (startStage == LandscapePlayerStage.MINI &&
+            target == LandscapePlayerStage.FULL) ||
+            (startStage == LandscapePlayerStage.FULL &&
+                target == LandscapePlayerStage.MINI)
+    return LandscapePlayerRelease(
+        target = target,
+        spansBothStages = spansBothStages
+    )
 }

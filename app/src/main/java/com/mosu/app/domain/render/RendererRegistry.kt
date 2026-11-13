@@ -1,6 +1,7 @@
 package com.mosu.app.domain.render
 
 import android.content.Context
+import com.mosu.app.domain.render.mania.ManiaBeatmapRenderer
 import com.mosu.app.domain.render.osu.OsuStandardBeatmapRenderer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +55,10 @@ class RendererRegistry(renderers: List<BeatmapRenderer>) {
 
     companion object {
         fun default(): RendererRegistry = RendererRegistry(
-            listOf(OsuStandardBeatmapRenderer())
+            listOf(
+                OsuStandardBeatmapRenderer(),
+                ManiaBeatmapRenderer()
+            )
         )
     }
 }

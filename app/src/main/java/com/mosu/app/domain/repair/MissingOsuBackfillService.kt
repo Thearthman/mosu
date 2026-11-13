@@ -11,6 +11,7 @@ import com.mosu.app.domain.render.OsuFileHeaderCache
 import com.mosu.app.domain.render.OsuFileHeaderReader
 import com.mosu.app.domain.render.OsuMapHeader
 import com.mosu.app.domain.render.OsuRenderCache
+import com.mosu.app.domain.render.mania.ManiaRenderCache
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -394,6 +395,7 @@ class MissingOsuBackfillService(
                     if (result.addedDifficulties.isNotEmpty()) {
                         repaired++
                         OsuRenderCache.invalidateSet(context, beatmapSetId)
+                        ManiaRenderCache.invalidateSet(context, beatmapSetId)
                     } else {
                         recordFailure(
                             failures,

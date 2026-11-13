@@ -7,8 +7,11 @@ import org.junit.Test
 
 class RendererRegistryTest {
     @Test
-    fun defaultRegistryRegistersOnlyTheStandardRenderer() {
-        assertEquals(setOf(RenderMode.OSU), RendererRegistry.default().supportedModes)
+    fun defaultRegistryRegistersStandardAndManiaRenderers() {
+        assertEquals(
+            setOf(RenderMode.OSU, RenderMode.MANIA),
+            RendererRegistry.default().supportedModes
+        )
     }
 
     @Test
